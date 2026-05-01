@@ -33,43 +33,43 @@ export default function PieceReader() {
     navigate(`/worlds/${piece.world_id}`)
   }
 
-  if (loading) return <div className="p-6 text-zinc-400">Loading...</div>
+  if (loading) return <div className="p-6 text-ink-3">Loading...</div>
   if (!piece) return null
 
   return (
     <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <div className="mb-6">
-        <Link to={`/worlds/${piece.world_id}/prompts/${piece.prompt_id}`} className="text-violet-400 hover:text-violet-300 text-sm">
+        <Link to={`/worlds/${piece.world_id}/prompts/${piece.prompt_id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to prompt
         </Link>
       </div>
 
-      <p className="text-zinc-500 text-sm mb-8 italic">"{piece.prompt}"</p>
+      <p className="font-serif-zh text-ink-2 text-sm mb-8 italic">"{piece.prompt}"</p>
 
       <div className="mb-12">
-        <p className="text-zinc-100 text-[17px] leading-[1.75] whitespace-pre-wrap">{piece.body}</p>
+        <p className="prose whitespace-pre-wrap">{piece.body}</p>
       </div>
 
-      <div className="border-t border-zinc-800 pt-6 flex items-center justify-between">
-        <span className="text-zinc-600 text-xs">{relativeTime(piece.created_at)}</span>
+      <div className="border-t border-paper-3 pt-6 flex items-center justify-between">
+        <span className="text-ink-3 text-xs">{relativeTime(piece.created_at)}</span>
         {!confirmDelete ? (
           <button
-            className="text-zinc-600 hover:text-rose-400 text-sm transition-colors"
+            className="text-ink-3 hover:text-rose-deep text-sm transition-colors"
             onClick={() => setConfirmDelete(true)}
           >
             Delete
           </button>
         ) : (
           <div className="flex items-center gap-3">
-            <span className="text-zinc-500 text-sm">Delete this piece?</span>
+            <span className="text-ink-3 text-sm">Delete this piece?</span>
             <button
-              className="bg-rose-700 hover:bg-rose-600 text-white rounded px-3 py-1 text-sm transition-colors"
+              className="bg-rose-deep hover:bg-rose text-white rounded-sm px-3 py-1 text-sm transition-colors"
               onClick={deletePiece}
             >
               Yes, delete
             </button>
             <button
-              className="text-zinc-500 hover:text-zinc-300 text-sm"
+              className="text-ink-3 hover:text-ink text-sm"
               onClick={() => setConfirmDelete(false)}
             >
               Cancel

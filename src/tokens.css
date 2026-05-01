@@ -1,0 +1,100 @@
+:root {
+  --color-ink: #1a1210;
+  --color-ink-2: #3d2c26;
+  --color-ink-3: #6b4c44;
+  --color-ink-4: #c4a89e;
+
+  --color-paper: #faf7f4;
+  --color-paper-2: #f2ece6;
+  --color-paper-3: #e6dbd3;
+
+  --color-rose: oklch(62% 0.14 12);
+  --color-rose-deep: oklch(50% 0.16 12);
+  --color-rose-pale: oklch(93% 0.05 12);
+
+  --font-serif: Georgia, 'Noto Serif SC', serif;
+  --font-serif-zh: 'Noto Serif SC', Georgia, serif;
+  --font-sans: 'Noto Sans SC', system-ui, sans-serif;
+  --font-serif-zh-weight: 400;
+
+  --text-display: 3rem;
+  --text-h1: 2.125rem;
+  --text-h2: 1.5rem;
+  --text-h3: 1.125rem;
+  --text-body-lg: 1.0625rem;
+  --text-body: 0.9375rem;
+  --text-ui: 0.875rem;
+  --text-label: 0.6875rem;
+  --text-caption: 0.75rem;
+
+  --leading-display: 1.05;
+  --leading-heading: 1.2;
+  --leading-body: 1.85;
+  --leading-ui: 1.4;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+}
+
+@theme {
+  --color-ink: #1a1210;
+  --color-ink-2: #3d2c26;
+  --color-ink-3: #6b4c44;
+  --color-ink-4: #c4a89e;
+  --color-paper: #faf7f4;
+  --color-paper-2: #f2ece6;
+  --color-paper-3: #e6dbd3;
+  --color-rose: oklch(62% 0.14 12);
+  --color-rose-deep: oklch(50% 0.16 12);
+  --color-rose-pale: oklch(93% 0.05 12);
+
+  --color-accent: oklch(62% 0.14 12);
+  --color-accent-hover: oklch(50% 0.16 12);
+
+  --font-serif: Georgia, 'Noto Serif SC', serif;
+  --font-serif-zh: 'Noto Serif SC', Georgia, serif;
+  --font-sans: 'Noto Sans SC', system-ui, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+.prose {
+  color: var(--color-ink);
+  font-family: var(--font-serif-zh);
+  font-size: var(--text-body-lg);
+  font-weight: var(--font-serif-zh-weight);
+  line-height: var(--leading-body);
+}
+
+.font-serif-zh {
+  font-family: var(--font-serif-zh);
+  font-weight: var(--font-serif-zh-weight);
+}
+
+.ui-text {
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+}

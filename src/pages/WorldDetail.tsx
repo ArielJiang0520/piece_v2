@@ -47,20 +47,20 @@ export default function WorldDetail() {
     navigate('/')
   }
 
-  if (loading) return <div className="p-6 text-zinc-400">Loading...</div>
+  if (loading) return <div className="p-6 text-ink-3">Loading...</div>
 
   return (
     <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <div className="mb-6">
-        <Link to={`/worlds/${id}`} className="text-violet-400 hover:text-violet-300 text-sm">
-          ← Pieces
+        <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
+          Back to pieces
         </Link>
       </div>
 
       <div className="mb-6">
-        <label className="block text-xs text-zinc-500 mb-1 uppercase tracking-wide">World name</label>
+        <label className="block text-xs text-ink-3 mb-1 uppercase tracking-wide">World name</label>
         <input
-          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 focus:outline-none focus:border-violet-500"
+          className="w-full bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink focus:outline-none focus:border-rose"
           value={name}
           onChange={e => setName(e.target.value)}
           onBlur={saveName}
@@ -68,9 +68,9 @@ export default function WorldDetail() {
       </div>
 
       <div className="mb-6">
-        <label className="block text-xs text-zinc-500 mb-1 uppercase tracking-wide">Summary</label>
+        <label className="block text-xs text-ink-3 mb-1 uppercase tracking-wide">Summary</label>
         <textarea
-          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-violet-500 resize-y"
+          className="w-full bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink text-sm focus:outline-none focus:border-rose resize-y placeholder-ink-3"
           rows={3}
           value={summary}
           onChange={e => setSummary(e.target.value)}
@@ -79,9 +79,9 @@ export default function WorldDetail() {
       </div>
 
       <div className="mb-4">
-        <label className="block text-xs text-zinc-500 mb-1 uppercase tracking-wide">System instruction (world body)</label>
+        <label className="block text-xs text-ink-3 mb-1 uppercase tracking-wide">System instruction (world body)</label>
         <textarea
-          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-violet-500 resize-y"
+          className="w-full bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink font-mono text-sm focus:outline-none focus:border-rose resize-y placeholder-ink-3"
           rows={24}
           value={body}
           onChange={e => setBody(e.target.value)}
@@ -91,7 +91,7 @@ export default function WorldDetail() {
 
       <div className="flex items-center gap-3 mb-12">
         <button
-          className="bg-violet-600 hover:bg-violet-500 text-white rounded px-4 py-2 font-medium transition-colors disabled:opacity-50"
+          className="bg-rose hover:bg-rose-deep text-white rounded-sm px-4 py-2 font-medium transition-colors disabled:opacity-50"
           onClick={saveBody}
           disabled={saving}
         >
@@ -99,25 +99,25 @@ export default function WorldDetail() {
         </button>
       </div>
 
-      <div className="border-t border-zinc-800 pt-6">
+      <div className="border-t border-paper-3 pt-6">
         {!confirmDelete ? (
           <button
-            className="text-rose-400 hover:text-rose-300 text-sm border border-rose-900 hover:border-rose-700 rounded px-4 py-2 transition-colors"
+            className="text-rose-deep hover:text-rose text-sm border border-rose hover:border-rose-deep rounded-sm px-4 py-2 transition-colors"
             onClick={() => setConfirmDelete(true)}
           >
             Delete world
           </button>
         ) : (
           <div className="flex items-center gap-3">
-            <span className="text-zinc-400 text-sm">Delete this world and all its pieces?</span>
+            <span className="text-ink-3 text-sm">Delete this world and all its pieces?</span>
             <button
-              className="bg-rose-700 hover:bg-rose-600 text-white rounded px-4 py-2 text-sm font-medium transition-colors"
+              className="bg-rose-deep hover:bg-rose text-white rounded-sm px-4 py-2 text-sm font-medium transition-colors"
               onClick={deleteWorld}
             >
               Yes, delete
             </button>
             <button
-              className="text-zinc-400 text-sm hover:text-zinc-200"
+              className="text-ink-3 text-sm hover:text-ink"
               onClick={() => setConfirmDelete(false)}
             >
               Cancel

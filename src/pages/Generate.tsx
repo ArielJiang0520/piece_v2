@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom'
 import { apiFetch } from '../api'
 import { MODELS, DEFAULT_MODEL_ID } from '../config'
 
@@ -12,9 +12,14 @@ interface PromptResponse {
 
 type GenerationPhase = 'idle' | 'waiting_provider' | 'thinking' | 'writing'
 
+interface GenerateLocationState {
+  promptDraft?: unknown
+}
+
 export default function Generate() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const queryPromptId = searchParams.get('promptId')
   const [worldName, setWorldName] = useState('')
@@ -43,6 +48,24 @@ export default function Generate() {
       .then(w => setWorldName(w.name))
       .catch(() => navigate('/'))
   }, [id, navigate])
+
+  useEffect(() => {
+    if (queryPromptId) return
+
+    const state = location.state as GenerateLocationState | null
+    const promptDraft = state?.promptDraft
+    if (typeof promptDraft !== 'string') return
+
+    const trimmedDraft = promptDraft.trim()
+    if (!trimmedDraft) return
+
+    setPrompt(trimmedDraft)
+    setLoadedPromptId(null)
+    navigate(
+      { pathname: location.pathname, search: location.search },
+      { replace: true, state: null },
+    )
+  }, [location.pathname, location.search, location.state, navigate, queryPromptId])
 
   useEffect(() => {
     if (!queryPromptId) {
@@ -152,16 +175,16 @@ export default function Generate() {
   return (
     <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <div className="mb-4">
-        <Link to={`/worlds/${id}`} className="text-violet-400 hover:text-violet-300 text-sm">
-          ← {worldName || 'Pieces'}
+        <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
+          Back to {worldName || 'Pieces'}
         </Link>
       </div>
 
-      <h2 className="text-lg font-semibold text-zinc-100 mb-6">{worldName}</h2>
+      <h2 className="font-serif-zh text-2xl font-normal text-ink mb-6">{worldName}</h2>
 
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
         <select
-          className="w-full sm:flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+          className="w-full sm:flex-1 bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink focus:outline-none focus:border-rose disabled:opacity-50"
           value={model}
           onChange={e => setModel(e.target.value)}
           disabled={streaming}
@@ -170,18 +193,18 @@ export default function Generate() {
             <option key={m.id} value={m.id}>{m.label}</option>
           ))}
         </select>
-        <div className="w-full sm:w-56 bg-zinc-800 border border-zinc-700 rounded px-3 py-2">
+        <div className="w-full sm:w-56 bg-paper-2 border border-paper-3 rounded-sm px-3 py-2">
           <div className="flex items-center justify-between gap-3">
-            <label htmlFor="temperature" className="text-xs font-medium text-zinc-300">
+            <label htmlFor="temperature" className="text-xs font-medium text-ink-3">
               Temp
             </label>
-            <span className="min-w-8 text-right text-sm tabular-nums text-zinc-100">
+            <span className="min-w-8 text-right text-sm tabular-nums text-ink">
               {temperature.toFixed(1)}
             </span>
           </div>
           <input
             id="temperature"
-            className="mt-2 w-full accent-violet-500 disabled:opacity-50"
+            className="mt-2 w-full accent-rose disabled:opacity-50"
             type="range"
             min="0"
             max="2"
@@ -196,7 +219,7 @@ export default function Generate() {
 
       <div className="mb-4">
         <textarea
-          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500 resize-y"
+          className="w-full bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink placeholder-ink-3 focus:outline-none focus:border-rose resize-y"
           rows={4}
           placeholder={loadingPrompt ? 'Loading prompt...' : 'Enter your prompt...'}
           value={prompt}
@@ -207,7 +230,7 @@ export default function Generate() {
 
       <div className="flex items-center gap-3 mb-6">
         <button
-          className="bg-violet-600 hover:bg-violet-500 text-white rounded px-5 py-2 font-medium transition-colors disabled:opacity-50"
+          className="bg-rose hover:bg-rose-deep text-white rounded-sm px-5 py-2 font-medium transition-colors disabled:opacity-50"
           onClick={generate}
           disabled={streaming || loadingPrompt || !prompt.trim()}
         >
@@ -215,7 +238,7 @@ export default function Generate() {
         </button>
         {pieceId && (
           <button
-            className="border border-violet-500 text-violet-400 hover:text-violet-300 hover:border-violet-400 rounded px-5 py-2 font-medium transition-colors"
+            className="border border-rose text-rose hover:text-rose-deep hover:border-rose-deep rounded-sm px-5 py-2 font-medium transition-colors"
             onClick={() => navigate(`/pieces/${pieceId}`)}
           >
             Read
@@ -223,12 +246,12 @@ export default function Generate() {
         )}
       </div>
 
-      {error && <p className="text-rose-400 text-sm mb-4">{error}</p>}
+      {error && <p className="text-rose-deep text-sm mb-4">{error}</p>}
 
       {pendingStatus && (
-        <div className="bg-zinc-800 border border-zinc-700 rounded px-4 py-4">
-          <div className="flex items-center gap-3 text-zinc-300">
-            <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse" aria-hidden="true" />
+        <div className="bg-paper border border-paper-3 rounded-md px-4 py-4">
+          <div className="flex items-center gap-3 text-ink-2">
+            <span className="h-2 w-2 rounded-full bg-rose animate-pulse" aria-hidden="true" />
             <p className="text-sm">{pendingStatus}</p>
           </div>
         </div>
@@ -236,20 +259,20 @@ export default function Generate() {
 
       {thinkingOutput && (
         <details
-          className="mb-4 bg-zinc-900 border border-zinc-700 rounded px-4 py-3"
+          className="mb-4 bg-paper-2 border border-paper-3 rounded-md px-4 py-3"
           open={thinkingExpanded}
           onToggle={e => setThinkingExpanded(e.currentTarget.open)}
         >
-          <summary className="cursor-pointer text-sm text-zinc-300 select-none">
+          <summary className="cursor-pointer text-sm text-ink-2 select-none">
             Thinking
           </summary>
-          <p className="mt-3 text-zinc-400 text-sm leading-relaxed whitespace-pre-wrap">{thinkingOutput}</p>
+          <p className="mt-3 text-ink-3 text-sm leading-relaxed whitespace-pre-wrap">{thinkingOutput}</p>
         </details>
       )}
 
       {output && (
-        <div className="bg-zinc-800 border border-zinc-700 rounded px-4 py-4">
-          <p className="text-zinc-100 text-[17px] leading-relaxed whitespace-pre-wrap">{output}</p>
+        <div className="bg-paper border border-paper-3 rounded-md px-4 py-4">
+          <p className="prose whitespace-pre-wrap">{output}</p>
         </div>
       )}
     </div>

@@ -58,52 +58,52 @@ export default function ClusterPieces() {
       .finally(() => setLoading(false))
   }, [id, clusterId, navigate])
 
-  if (loading) return <div className="p-6 text-zinc-400">Loading...</div>
+  if (loading) return <div className="p-6 text-ink-3">Loading...</div>
   if (!cluster) return null
 
   return (
     <div className="min-h-screen px-4 py-6 max-w-3xl mx-auto">
       <div className="mb-6">
-        <Link to={`/worlds/${id}`} className="text-violet-400 hover:text-violet-300 text-sm">
+        <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to {worldName || 'Pieces'}
         </Link>
       </div>
 
       <header className="mb-6">
-        <p className="text-zinc-500 text-xs mb-2">
+        <p className="text-ink-3 text-xs mb-2">
           Cluster {cluster.id} - {cluster.prompt_count} {cluster.prompt_count === 1 ? 'prompt' : 'prompts'} - {cluster.piece_count} {cluster.piece_count === 1 ? 'piece' : 'pieces'} - latest {relativeTime(cluster.updated_at)}
         </p>
-        <h1 className="text-zinc-100 text-lg font-semibold leading-7">{cluster.title}</h1>
+        <h1 className="font-serif-zh text-2xl font-normal text-ink leading-tight">{cluster.title}</h1>
       </header>
 
       <div className="flex flex-col gap-4">
         {prompts.map(prompt => (
-          <section key={prompt.id} className="bg-zinc-800 border border-zinc-700 rounded">
+          <section key={prompt.id} className="bg-paper border border-paper-3 rounded-md">
             <Link
               to={`/worlds/${id}/prompts/${prompt.id}`}
-              className="block px-4 py-3 hover:bg-zinc-700 transition-colors rounded-t"
+              className="block px-4 py-3 hover:bg-paper-2 transition-colors rounded-t-md"
             >
               <div className="flex items-start justify-between gap-4">
-                <h2 className="text-zinc-100 text-sm font-medium leading-6">{prompt.text}</h2>
-                <span className="shrink-0 text-zinc-500 text-xs mt-1">
+                <h2 className="font-serif-zh text-ink text-sm font-normal leading-6">{prompt.text}</h2>
+                <span className="shrink-0 text-ink-3 text-xs mt-1">
                   {prompt.piece_count} {prompt.piece_count === 1 ? 'piece' : 'pieces'}
                 </span>
               </div>
-              <div className="text-zinc-600 text-xs mt-2">Prompt {prompt.id} - Latest {relativeTime(prompt.updated_at)}</div>
+              <div className="text-ink-3 text-xs mt-2">Prompt {prompt.id} - Latest {relativeTime(prompt.updated_at)}</div>
             </Link>
 
-            <div className="border-t border-zinc-700">
+            <div className="border-t border-paper-3">
               {prompt.pieces.length === 0 ? (
-                <p className="px-4 py-3 text-zinc-500 text-sm">No pieces yet.</p>
+                <p className="px-4 py-3 text-ink-3 text-sm">No pieces yet.</p>
               ) : (
                 prompt.pieces.map(piece => (
                   <Link
                     key={piece.id}
                     to={`/pieces/${piece.id}`}
-                    className="grid grid-cols-[92px_1fr] gap-3 px-4 py-2 text-sm hover:bg-zinc-700 transition-colors"
+                    className="grid grid-cols-[92px_1fr] gap-3 px-4 py-2 text-sm hover:bg-paper-2 transition-colors"
                   >
-                    <span className="text-zinc-500 text-xs whitespace-nowrap">{relativeTime(piece.created_at)}</span>
-                    <span className="text-zinc-300 truncate">{preview(piece.preview)}</span>
+                    <span className="text-ink-3 text-xs whitespace-nowrap">{relativeTime(piece.created_at)}</span>
+                    <span className="text-ink-2 truncate">{preview(piece.preview)}</span>
                   </Link>
                 ))
               )}

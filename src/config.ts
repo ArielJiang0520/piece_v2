@@ -14,3 +14,4 @@ export const MODELS: ModelOption[] = [
 ]
 
 export const DEFAULT_MODEL_ID = MODELS[0]!.id
+export const PROMPT_SUGGESTION_MODEL_ID = DEFAULT_MODEL_ID

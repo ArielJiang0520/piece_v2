@@ -47,11 +47,11 @@ export default function Worlds() {
   return (
     <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-xl font-semibold text-zinc-100">Piece</h1>
+        <h1 className="font-serif-zh text-2xl font-normal text-ink">Piece</h1>
         <div className="flex items-center gap-3">
-          <span className="text-zinc-400 text-sm">{user?.username}</span>
+          <span className="text-ink-3 text-sm">{user?.username}</span>
           <button
-            className="text-zinc-400 hover:text-zinc-200 text-sm border border-zinc-700 hover:border-zinc-500 rounded px-3 py-1 transition-colors"
+            className="text-ink-3 hover:text-ink text-sm border border-paper-3 hover:border-ink-4 rounded-sm px-3 py-1 transition-colors"
             onClick={handleLogout}
           >
             Log out
@@ -62,7 +62,7 @@ export default function Worlds() {
       <div className="mb-4">
         {!showNew ? (
           <button
-            className="bg-violet-600 hover:bg-violet-500 text-white rounded px-4 py-2 font-medium transition-colors"
+            className="bg-rose hover:bg-rose-deep text-white rounded-sm px-4 py-2 font-medium transition-colors"
             onClick={() => setShowNew(true)}
           >
             New World
@@ -70,7 +70,7 @@ export default function Worlds() {
         ) : (
           <div className="flex gap-2">
             <input
-              className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500"
+              className="flex-1 bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink placeholder-ink-3 focus:outline-none focus:border-rose"
               placeholder="World name"
               value={newName}
               onChange={e => setNewName(e.target.value)}
@@ -78,14 +78,14 @@ export default function Worlds() {
               autoFocus
             />
             <button
-              className="bg-violet-600 hover:bg-violet-500 text-white rounded px-4 py-2 font-medium transition-colors disabled:opacity-50"
+              className="bg-rose hover:bg-rose-deep text-white rounded-sm px-4 py-2 font-medium transition-colors disabled:opacity-50"
               onClick={createWorld}
               disabled={creating}
             >
               Create
             </button>
             <button
-              className="border border-zinc-700 text-zinc-400 rounded px-4 py-2 transition-colors hover:border-zinc-500"
+              className="border border-paper-3 text-ink-3 rounded-sm px-4 py-2 transition-colors hover:border-ink-4 hover:text-ink"
               onClick={() => { setShowNew(false); setNewName('') }}
             >
               Cancel
@@ -95,18 +95,18 @@ export default function Worlds() {
       </div>
 
       {worlds.length === 0 ? (
-        <p className="text-zinc-500 text-sm mt-8">No worlds yet. Create one to get started.</p>
+        <p className="text-ink-3 text-sm mt-8">No worlds yet. Create one to get started.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {worlds.map(w => (
             <button
               key={w.id}
-              className="text-left bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded px-4 py-3 transition-colors"
+              className="text-left bg-paper hover:bg-paper-2 border border-paper-3 rounded-md px-4 py-3 transition-colors"
               onClick={() => navigate(`/worlds/${w.id}`)}
             >
-              <div className="text-zinc-100 font-medium">{w.name}</div>
-              {w.summary && <div className="text-zinc-400 text-sm mt-1">{w.summary}</div>}
-              <div className="text-zinc-500 text-xs mt-1">{relativeTime(w.updated_at)}</div>
+              <div className="font-serif-zh text-ink font-normal">{w.name}</div>
+              {w.summary && <div className="text-ink-2 text-sm mt-1">{w.summary}</div>}
+              <div className="text-ink-3 text-xs mt-1">{relativeTime(w.updated_at)}</div>
             </button>
           ))}
         </div>

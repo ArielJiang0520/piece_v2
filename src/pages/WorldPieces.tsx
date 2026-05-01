@@ -60,28 +60,28 @@ export default function WorldPieces() {
       .finally(() => setLoading(false))
   }, [id, page, navigate])
 
-  if (loading) return <div className="p-6 text-zinc-400">Loading...</div>
+  if (loading) return <div className="p-6 text-ink-3">Loading...</div>
 
   return (
     <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => navigate('/')} className="text-zinc-400 hover:text-zinc-200 text-sm">Back</button>
-          <h1 className="text-lg font-semibold text-zinc-100 truncate">{worldName}</h1>
-          <Link to={`/worlds/${id}/details`} className="text-zinc-500 hover:text-zinc-300 text-sm" title="Edit world">
+          <button onClick={() => navigate('/')} className="text-ink-3 hover:text-ink text-sm">Back</button>
+          <h1 className="font-serif-zh text-2xl font-normal text-ink truncate">{worldName}</h1>
+          <Link to={`/worlds/${id}/details`} className="text-ink-3 hover:text-ink-2 text-sm" title="Edit world">
             Edit
           </Link>
         </div>
         <div className="flex items-center gap-2">
           <Link
             to={`/worlds/${id}/prompts/new`}
-            className="border border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:border-zinc-500 rounded px-4 py-2 font-medium transition-colors text-sm"
+            className="border border-paper-3 text-ink hover:border-ink-4 rounded-sm px-4 py-2 font-medium transition-colors text-sm"
           >
             Create a prompt
           </Link>
           <Link
             to={`/worlds/${id}/generate`}
-            className="bg-violet-600 hover:bg-violet-500 text-white rounded px-4 py-2 font-medium transition-colors text-sm"
+            className="bg-rose hover:bg-rose-deep text-white rounded-sm px-4 py-2 font-medium transition-colors text-sm"
           >
             Generate
           </Link>
@@ -90,10 +90,10 @@ export default function WorldPieces() {
 
       {groups.length === 0 ? (
         <div className="text-center mt-16">
-          <p className="text-zinc-500 mb-4">No prompts yet.</p>
+          <p className="text-ink-3 mb-4">No prompts yet.</p>
           <Link
             to={`/worlds/${id}/prompts/new`}
-            className="text-violet-400 hover:text-violet-300"
+            className="text-rose hover:text-rose-deep"
           >
             Create your first prompt
           </Link>
@@ -102,35 +102,35 @@ export default function WorldPieces() {
         <>
           <div className="flex flex-col gap-3">
             {groups.map(group => (
-              <section key={group.id} className="bg-zinc-800 border border-zinc-700 rounded">
+              <section key={group.id} className="bg-paper border border-paper-3 rounded-md">
                 <Link
                   to={`/worlds/${id}/clusters/${group.id}`}
-                  className="block px-4 py-3 hover:bg-zinc-700 transition-colors rounded-t"
+                  className="block px-4 py-3 hover:bg-paper-2 transition-colors rounded-t-md"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-zinc-100 text-sm font-medium leading-6">{group.title}</h2>
-                    <div className="shrink-0 text-right text-zinc-500 text-xs mt-1">
+                    <h2 className="font-serif-zh text-ink text-sm font-normal leading-6">{group.title}</h2>
+                    <div className="shrink-0 text-right text-ink-3 text-xs mt-1">
                       <div>{group.prompt_count} {group.prompt_count === 1 ? 'prompt' : 'prompts'}</div>
                       <div>{group.piece_count} {group.piece_count === 1 ? 'piece' : 'pieces'}</div>
                     </div>
                   </div>
-                  <div className="text-zinc-600 text-xs mt-2">
+                  <div className="text-ink-3 text-xs mt-2">
                     Cluster {group.id} - Latest {relativeTime(group.updated_at)}
                   </div>
                 </Link>
 
-                <div className="border-t border-zinc-700">
+                <div className="border-t border-paper-3">
                   {group.pieces.length === 0 ? (
-                    <p className="px-4 py-3 text-zinc-500 text-sm">No pieces yet.</p>
+                    <p className="px-4 py-3 text-ink-3 text-sm">No pieces yet.</p>
                   ) : (
                     group.pieces.map(piece => (
                       <Link
                         key={piece.id}
                         to={`/pieces/${piece.id}`}
-                        className="grid grid-cols-[92px_1fr] gap-3 px-4 py-2 text-sm hover:bg-zinc-700 transition-colors"
+                        className="grid grid-cols-[92px_1fr] gap-3 px-4 py-2 text-sm hover:bg-paper-2 transition-colors"
                       >
-                        <span className="text-zinc-500 text-xs whitespace-nowrap">{relativeTime(piece.created_at)}</span>
-                        <span className="text-zinc-300 truncate">{shortPreview(piece.preview || piece.prompt)}</span>
+                        <span className="text-ink-3 text-xs whitespace-nowrap">{relativeTime(piece.created_at)}</span>
+                        <span className="text-ink-2 truncate">{shortPreview(piece.preview || piece.prompt)}</span>
                       </Link>
                     ))
                   )}
@@ -141,15 +141,15 @@ export default function WorldPieces() {
 
           <div className="flex items-center justify-between mt-6">
             <button
-              className="border border-zinc-700 text-zinc-400 rounded px-3 py-1.5 text-sm transition-colors hover:border-zinc-500 disabled:opacity-40 disabled:hover:border-zinc-700"
+              className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
               onClick={() => setPage(prev => Math.max(1, prev - 1))}
               disabled={page === 1}
             >
               Previous
             </button>
-            <span className="text-zinc-600 text-xs">Page {page}</span>
+            <span className="text-ink-3 text-xs">Page {page}</span>
             <button
-              className="border border-zinc-700 text-zinc-400 rounded px-3 py-1.5 text-sm transition-colors hover:border-zinc-500 disabled:opacity-40 disabled:hover:border-zinc-700"
+              className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
               onClick={() => setPage(prev => prev + 1)}
               disabled={!hasMore}
             >
