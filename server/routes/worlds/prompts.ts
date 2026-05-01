@@ -144,14 +144,9 @@ promptRoutes.delete('/:promptId', authMiddleware, (c: any) => {
     .get()
   if (!prompt) return c.json({ error: 'Prompt not found' }, 404)
 
-  db.transaction((tx) => {
-    tx.delete(pieces)
-      .where(and(eq(pieces.prompt_id, promptId), eq(pieces.world_id, worldId), eq(pieces.user_id, userId)))
-      .run()
-    tx.delete(prompts)
-      .where(and(eq(prompts.id, promptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-      .run()
-  })
+  db.delete(prompts)
+    .where(and(eq(prompts.id, promptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+    .run()
 
   return c.json({ ok: true })
 })

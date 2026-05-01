@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { apiFetch } from '../api'
+import { relativeTime } from '../utils/time'
 
 interface PromptPiece {
   id: number
@@ -21,15 +22,6 @@ interface PromptResponse {
   page: number
   limit: number
   hasMore: boolean
-}
-
-function relativeTime(ts: number) {
-  const diff = (Date.now() - ts) / 1000
-  const fmt = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-  if (diff < 60) return fmt.format(-Math.round(diff), 'second')
-  if (diff < 3600) return fmt.format(-Math.round(diff / 60), 'minute')
-  if (diff < 86400) return fmt.format(-Math.round(diff / 3600), 'hour')
-  return fmt.format(-Math.round(diff / 86400), 'day')
 }
 
 function shortPreview(text: string) {

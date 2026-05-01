@@ -2,21 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { apiFetch } from '../api'
+import { relativeTime } from '../utils/time'
 
 interface World {
   id: number
   name: string
   summary: string
   updated_at: number
-}
-
-function relativeTime(ts: number) {
-  const diff = (Date.now() - ts) / 1000
-  const fmt = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-  if (diff < 60) return fmt.format(-Math.round(diff), 'second')
-  if (diff < 3600) return fmt.format(-Math.round(diff / 60), 'minute')
-  if (diff < 86400) return fmt.format(-Math.round(diff / 3600), 'hour')
-  return fmt.format(-Math.round(diff / 86400), 'day')
 }
 
 export default function Worlds() {

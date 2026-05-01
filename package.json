@@ -27,7 +27,6 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.1",
     "@node-rs/argon2": "^2.0.2",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.16"

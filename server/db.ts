@@ -6,8 +6,6 @@ const dbPath = process.env.DB_PATH || './piece.db';
 const sqlite = new Database(dbPath);
 sqlite.run('PRAGMA foreign_keys = ON;')
 
-try { sqlite.run(`ALTER TABLE worlds ADD COLUMN summary TEXT NOT NULL DEFAULT ''`) } catch { }
-
 sqlite.run(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,47 +51,7 @@ sqlite.run(`
   );
 `)
 
-function hasColumn(table: string, column: string) {
-  const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
-  return rows.some(row => row.name === column)
-}
-
-if (!hasColumn('pieces', 'prompt_id')) {
-  sqlite.run(`
-    PRAGMA foreign_keys = OFF;
-
-    INSERT INTO prompts (user_id, world_id, text, piece_count, created_at, updated_at)
-    SELECT user_id, world_id, prompt, COUNT(*), MIN(created_at), MAX(created_at)
-    FROM pieces
-    GROUP BY user_id, world_id, prompt;
-
-    CREATE TABLE pieces_new (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-      prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
-      body TEXT NOT NULL,
-      model TEXT,
-      created_at INTEGER NOT NULL
-    );
-
-    INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, model, created_at)
-    SELECT p.id, p.user_id, p.world_id, pr.id, p.body, p.model, p.created_at
-    FROM pieces p
-    JOIN prompts pr
-      ON pr.user_id = p.user_id
-      AND pr.world_id = p.world_id
-      AND pr.text = p.prompt;
-
-    DROP TABLE pieces;
-    ALTER TABLE pieces_new RENAME TO pieces;
-
-    PRAGMA foreign_keys = ON;
-  `)
-}
-
 sqlite.run(`
-
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_pieces_prompt_created ON pieces(prompt_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_world_updated ON prompts(user_id, world_id, updated_at DESC);

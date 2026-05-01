@@ -19,8 +19,7 @@ export default function Generate() {
   const queryPromptId = searchParams.get('promptId')
   const [worldName, setWorldName] = useState('')
   const [prompt, setPrompt] = useState('')
-  const [loadedPromptId, setLoadedPromptId] = useState<string | null>(null)
-  const [loadedPromptText, setLoadedPromptText] = useState('')
+  const [loadedPromptId, setLoadedPromptId] = useState<number | null>(null)
   const [loadingPrompt, setLoadingPrompt] = useState(false)
   const [model, setModel] = useState(DEFAULT_MODEL_ID)
   const [temperature, setTemperature] = useState(1)
@@ -46,7 +45,6 @@ export default function Generate() {
   useEffect(() => {
     if (!queryPromptId) {
       setLoadedPromptId(null)
-      setLoadedPromptText('')
       return
     }
 
@@ -58,13 +56,11 @@ export default function Generate() {
       .then((response: PromptResponse) => {
         if (cancelled) return
         setPrompt(response.prompt.text)
-        setLoadedPromptId(String(response.prompt.id))
-        setLoadedPromptText(response.prompt.text)
+        setLoadedPromptId(response.prompt.id)
       })
       .catch(() => {
         if (cancelled) return
         setLoadedPromptId(null)
-        setLoadedPromptText('')
         setError('Could not load prompt')
       })
       .finally(() => {
@@ -90,7 +86,7 @@ export default function Generate() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt,
-          promptId: loadedPromptId && prompt === loadedPromptText ? loadedPromptId : undefined,
+          promptId: loadedPromptId ?? undefined,
           model,
           temperature,
         }),

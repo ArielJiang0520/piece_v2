@@ -3,8 +3,10 @@ import { streamSSE } from 'hono/streaming'
 import { eq, and, sql } from 'drizzle-orm'
 import { db, worlds, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
+import { MODELS } from '../../../src/config'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
+const modelIds = new Set(MODELS.map(model => model.id))
 
 generateRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = c.get('userId') as number
@@ -14,25 +16,34 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
   const { prompt, promptId, model: requestedModel, temperature: requestedTemperature } = await c.req.json()
 
-  let promptText = typeof prompt === 'string' ? prompt.trim() : ''
-  let existingPrompt: typeof prompts.$inferSelect | undefined
+  const promptText = typeof prompt === 'string' ? prompt.trim() : ''
+  if (!promptText) return c.json({ error: 'Prompt required' }, 400)
+
+  let existingPromptId: number | undefined
   if (promptId !== undefined && promptId !== null) {
-    const id = parseInt(String(promptId))
-    existingPrompt = db
-      .select()
+    const id = Number(promptId)
+    if (!Number.isInteger(id) || id < 1) return c.json({ error: 'Invalid prompt id' }, 400)
+
+    const existingPrompt = db
+      .select({ id: prompts.id, text: prompts.text })
       .from(prompts)
       .where(and(eq(prompts.id, id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
       .get()
     if (!existingPrompt) return c.json({ error: 'Prompt not found' }, 404)
-    promptText = existingPrompt.text
-  }
 
-  if (!promptText) return c.json({ error: 'Prompt required' }, 400)
+    if (existingPrompt.text === promptText) {
+      existingPromptId = existingPrompt.id
+    }
+  }
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
 
-  const model = requestedModel || 'deepseek/deepseek-v4-flash'
+  if (typeof requestedModel !== 'string' || !modelIds.has(requestedModel)) {
+    return c.json({ error: 'Invalid model requested' }, 400)
+  }
+  const model = requestedModel
+
   const parsedTemperature = Number(requestedTemperature)
   const temperature = Number.isFinite(parsedTemperature)
     ? Math.min(2, Math.max(0, parsedTemperature))
@@ -91,14 +102,16 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           const data = line.slice(6)
           if (data === '[DONE]') {
             const now = Date.now()
-            const promptRow = existingPrompt ?? db.insert(prompts).values({
-              user_id: userId,
-              world_id: worldId,
-              text: promptText,
-              piece_count: 1,
-              created_at: now,
-              updated_at: now,
-            }).returning().get()
+            const promptRow = existingPromptId === undefined
+              ? db.insert(prompts).values({
+                user_id: userId,
+                world_id: worldId,
+                text: promptText,
+                piece_count: 1,
+                created_at: now,
+                updated_at: now,
+              }).returning({ id: prompts.id }).get()
+              : { id: existingPromptId }
 
             const result = db.insert(pieces).values({
               user_id: userId,
@@ -109,13 +122,13 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
               created_at: now,
             }).returning().get()
 
-            if (existingPrompt) {
+            if (existingPromptId !== undefined) {
               db.update(prompts)
                 .set({
                   updated_at: now,
                   piece_count: sql`${prompts.piece_count} + 1`,
                 })
-                .where(eq(prompts.id, existingPrompt.id))
+                .where(and(eq(prompts.id, existingPromptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
                 .run()
             }
 
