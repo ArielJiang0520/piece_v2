@@ -12,9 +12,10 @@
   --color-rose-deep: oklch(50% 0.16 12);
   --color-rose-pale: oklch(93% 0.05 12);
 
-  --font-serif: Georgia, 'Noto Serif SC', serif;
-  --font-serif-zh: 'Noto Serif SC', Georgia, serif;
+  --font-serif: 'Domine', 'Noto Serif SC', Georgia, serif;
+  --font-serif-zh: 'Domine', 'Noto Serif SC', Georgia, serif;
   --font-sans: 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'Montserrat', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-serif-zh-weight: 400;
 
   --text-display: 3rem;
@@ -61,9 +62,10 @@
   --color-accent: oklch(62% 0.14 12);
   --color-accent-hover: oklch(50% 0.16 12);
 
-  --font-serif: Georgia, 'Noto Serif SC', serif;
-  --font-serif-zh: 'Noto Serif SC', Georgia, serif;
+  --font-serif: 'Domine', 'Noto Serif SC', Georgia, serif;
+  --font-serif-zh: 'Domine', 'Noto Serif SC', Georgia, serif;
   --font-sans: 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'Montserrat', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 html {
