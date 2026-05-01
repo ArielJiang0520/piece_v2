@@ -1,0 +1,34 @@
+{
+  "name": "piece",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev:server": "bun --hot server/index.ts",
+    "dev:client": "bunx vite",
+    "dev": "bunx concurrently -n server,client -c blue,green \"bun run dev:server\" \"bun run dev:client\"",
+    "build": "bunx vite build",
+    "start": "NODE_ENV=production bun server/index.ts"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/bun": "^1.3.13",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4",
+    "concurrently": "^9.2.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-router-dom": "^7.14.2",
+    "tailwindcss": "^4.2.4",
+    "vite": "^5"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.1",
+    "@node-rs/argon2": "^2.0.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.16"
+  }
+}
