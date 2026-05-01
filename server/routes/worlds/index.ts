@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import { eq, and, desc } from 'drizzle-orm'
 import { db, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { handleListPieces } from './pieces'
-import { handleGenerate } from './generate'
+import promptRoutes from './prompts'
+import generateRoutes from './generate'
 
 const worldRoutes = new Hono<{ Variables: Variables }>()
 
@@ -60,7 +60,7 @@ worldRoutes.delete('/:id', authMiddleware, (c) => {
   return c.json({ ok: true })
 })
 
-worldRoutes.get('/:id/pieces', authMiddleware, handleListPieces)
-worldRoutes.post('/:id/generate', authMiddleware, handleGenerate)
+worldRoutes.route('/:id/prompts', promptRoutes)
+worldRoutes.route('/:id/generate', generateRoutes)
 
 export default worldRoutes

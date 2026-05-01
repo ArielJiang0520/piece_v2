@@ -5,6 +5,7 @@ import { apiFetch } from '../api'
 interface Piece {
   id: number
   world_id: number
+  prompt_id: number
   prompt: string
   body: string
   model: string | null
@@ -32,7 +33,7 @@ export default function PieceReader() {
       .then(setPiece)
       .catch(() => navigate('/'))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, navigate])
 
   async function deletePiece() {
     if (!piece) return
@@ -46,8 +47,8 @@ export default function PieceReader() {
   return (
     <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <div className="mb-6">
-        <Link to={`/worlds/${piece.world_id}/pieces`} className="text-violet-400 hover:text-violet-300 text-sm">
-          ← Pieces
+        <Link to={`/worlds/${piece.world_id}/prompts/${piece.prompt_id}`} className="text-violet-400 hover:text-violet-300 text-sm">
+          Back to prompt
         </Link>
       </div>
 

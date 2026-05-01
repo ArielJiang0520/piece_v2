@@ -17,7 +17,15 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const port = parseInt(process.env.PORT || '3001')
+const generationRoutePattern = /^\/api\/worlds\/[^/]+\/generate\/?$/
+
 export default {
   port,
-  fetch: app.fetch,
-}
+  fetch(req, server) {
+    if (generationRoutePattern.test(new URL(req.url).pathname)) {
+      server.timeout(req, 0)
+    }
+
+    return app.fetch(req)
+  },
+} satisfies Bun.Serve.Options<undefined>

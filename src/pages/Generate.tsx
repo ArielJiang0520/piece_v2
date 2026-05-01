@@ -1,28 +1,84 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../api'
 import { MODELS, DEFAULT_MODEL_ID } from '../config'
+
+interface PromptResponse {
+  prompt: {
+    id: number
+    text: string
+  }
+}
+
+type GenerationPhase = 'idle' | 'waiting_provider' | 'thinking' | 'writing'
 
 export default function Generate() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const queryPromptId = searchParams.get('promptId')
   const [worldName, setWorldName] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [loadedPromptId, setLoadedPromptId] = useState<string | null>(null)
+  const [loadedPromptText, setLoadedPromptText] = useState('')
+  const [loadingPrompt, setLoadingPrompt] = useState(false)
   const [model, setModel] = useState(DEFAULT_MODEL_ID)
+  const [temperature, setTemperature] = useState(1)
   const [output, setOutput] = useState('')
-  const [streaming, setStreaming] = useState(false)
+  const [phase, setPhase] = useState<GenerationPhase>('idle')
   const [pieceId, setPieceId] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const streaming = phase !== 'idle'
+  const waitingForProvider = phase === 'waiting_provider'
+  const isThinking = phase === 'thinking'
+  const pendingStatus = waitingForProvider
+    ? 'Waiting for provider...'
+    : isThinking
+      ? 'Thinking...'
+      : ''
 
   useEffect(() => {
     apiFetch(`/api/worlds/${id}`)
       .then(w => setWorldName(w.name))
       .catch(() => navigate('/'))
-  }, [id])
+  }, [id, navigate])
+
+  useEffect(() => {
+    if (!queryPromptId) {
+      setLoadedPromptId(null)
+      setLoadedPromptText('')
+      return
+    }
+
+    let cancelled = false
+    setLoadingPrompt(true)
+    setError('')
+
+    apiFetch(`/api/worlds/${id}/prompts/${encodeURIComponent(queryPromptId)}?limit=1`)
+      .then((response: PromptResponse) => {
+        if (cancelled) return
+        setPrompt(response.prompt.text)
+        setLoadedPromptId(String(response.prompt.id))
+        setLoadedPromptText(response.prompt.text)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setLoadedPromptId(null)
+        setLoadedPromptText('')
+        setError('Could not load prompt')
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPrompt(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [id, queryPromptId])
 
   async function generate() {
     if (!prompt.trim() || streaming) return
-    setStreaming(true)
+    setPhase('waiting_provider')
     setOutput('')
     setPieceId(null)
     setError('')
@@ -32,12 +88,17 @@ export default function Generate() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, model }),
+        body: JSON.stringify({
+          prompt,
+          promptId: loadedPromptId && prompt === loadedPromptText ? loadedPromptId : undefined,
+          model,
+          temperature,
+        }),
       })
 
       if (!res.ok || !res.body) {
         setError('Request failed')
-        setStreaming(false)
+        setPhase('idle')
         return
       }
 
@@ -58,21 +119,26 @@ export default function Generate() {
           if (!line.startsWith('data: ')) continue
           try {
             const msg = JSON.parse(line.slice(6))
-            if (msg.type === 'chunk') {
+            if (msg.type === 'status' && msg.status === 'waiting_provider') {
+              setPhase('waiting_provider')
+            } else if (msg.type === 'thinking') {
+              setPhase(prev => prev === 'writing' ? prev : 'thinking')
+            } else if (msg.type === 'chunk') {
+              setPhase('writing')
               setOutput(prev => prev + msg.content)
             } else if (msg.type === 'done') {
               setPieceId(msg.pieceId)
-              setStreaming(false)
+              setPhase('idle')
             } else if (msg.type === 'error') {
               setError(msg.message)
-              setStreaming(false)
+              setPhase('idle')
             }
           } catch {}
         }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
-      setStreaming(false)
+      setPhase('idle')
     }
   }
 
@@ -86,9 +152,9 @@ export default function Generate() {
 
       <h2 className="text-lg font-semibold text-zinc-100 mb-6">{worldName}</h2>
 
-      <div className="mb-3">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
         <select
-          className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+          className="w-full sm:flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 focus:outline-none focus:border-violet-500 disabled:opacity-50"
           value={model}
           onChange={e => setModel(e.target.value)}
           disabled={streaming}
@@ -97,16 +163,38 @@ export default function Generate() {
             <option key={m.id} value={m.id}>{m.label}</option>
           ))}
         </select>
+        <div className="w-full sm:w-56 bg-zinc-800 border border-zinc-700 rounded px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="temperature" className="text-xs font-medium text-zinc-300">
+              Temp
+            </label>
+            <span className="min-w-8 text-right text-sm tabular-nums text-zinc-100">
+              {temperature.toFixed(1)}
+            </span>
+          </div>
+          <input
+            id="temperature"
+            className="mt-2 w-full accent-violet-500 disabled:opacity-50"
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            value={temperature}
+            onChange={e => setTemperature(Number(e.target.value))}
+            disabled={streaming}
+            aria-label="Model temperature"
+          />
+        </div>
       </div>
 
       <div className="mb-4">
         <textarea
           className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500 resize-y"
           rows={4}
-          placeholder="Enter your prompt..."
+          placeholder={loadingPrompt ? 'Loading prompt...' : 'Enter your prompt...'}
           value={prompt}
           onChange={e => setPrompt(e.target.value)}
-          disabled={streaming}
+          disabled={streaming || loadingPrompt}
         />
       </div>
 
@@ -114,9 +202,9 @@ export default function Generate() {
         <button
           className="bg-violet-600 hover:bg-violet-500 text-white rounded px-5 py-2 font-medium transition-colors disabled:opacity-50"
           onClick={generate}
-          disabled={streaming || !prompt.trim()}
+          disabled={streaming || loadingPrompt || !prompt.trim()}
         >
-          {streaming ? 'Generating...' : 'Generate'}
+          {waitingForProvider ? 'Waiting for provider...' : isThinking ? 'Thinking...' : streaming ? 'Writing...' : 'Generate'}
         </button>
         {pieceId && (
           <button
@@ -129,6 +217,15 @@ export default function Generate() {
       </div>
 
       {error && <p className="text-rose-400 text-sm mb-4">{error}</p>}
+
+      {pendingStatus && (
+        <div className="bg-zinc-800 border border-zinc-700 rounded px-4 py-4">
+          <div className="flex items-center gap-3 text-zinc-300">
+            <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse" aria-hidden="true" />
+            <p className="text-sm">{pendingStatus}</p>
+          </div>
+        </div>
+      )}
 
       {output && (
         <div className="bg-zinc-800 border border-zinc-700 rounded px-4 py-4">
