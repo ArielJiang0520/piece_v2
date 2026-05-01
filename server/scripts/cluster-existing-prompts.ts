@@ -1,8 +1,12 @@
+// Utility: cluster only prompts that do not already have a cluster_id.
+// Mutates the database by assigning missing prompt clusters and logs each clustering decision.
 import { asc, isNull } from 'drizzle-orm'
 import { db, prompts } from '../db'
-import { clusterPromptById } from '../prompt-clustering'
+import { clusterPromptById, similarityThreshold } from '../prompt-clustering'
 
 let processed = 0
+
+console.log(`clustering unclustered prompts; threshold=${similarityThreshold()}`)
 
 while (true) {
   const prompt = db
@@ -15,7 +19,7 @@ while (true) {
 
   if (!prompt) break
 
-  await clusterPromptById(prompt.id)
+  await clusterPromptById(prompt.id, { logDecisions: true, reuseExistingEmbedding: true })
   processed += 1
   console.log(`clustered prompt ${prompt.id} (${processed} total)`)
 }

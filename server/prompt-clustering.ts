@@ -3,7 +3,7 @@ import { db, pieces, promptClusters, prompts } from './db'
 
 const EMBEDDING_MODEL = 'baai/bge-m3'
 const EMBEDDING_TIMEOUT_MS = 15000
-const DEFAULT_SIMILARITY_THRESHOLD = 0.8
+const DEFAULT_SIMILARITY_THRESHOLD = 0.95
 
 interface PromptForCluster {
   id: number
@@ -11,16 +11,22 @@ interface PromptForCluster {
   world_id: number
   cluster_id: number | null
   text: string
+  embedding: string | null
   piece_count: number
   updated_at: number
 }
 
-function similarityThreshold() {
+interface ClusterPromptOptions {
+  logDecisions?: boolean
+  reuseExistingEmbedding?: boolean
+}
+
+export function similarityThreshold() {
   const parsed = Number(process.env.PROMPT_CLUSTER_SIMILARITY_THRESHOLD)
   return Number.isFinite(parsed) ? parsed : DEFAULT_SIMILARITY_THRESHOLD
 }
 
-function parseEmbedding(value: string | null): number[] | null {
+export function parseEmbedding(value: string | null): number[] | null {
   if (!value) return null
   try {
     const parsed = JSON.parse(value)
@@ -35,7 +41,7 @@ function stringifyEmbedding(embedding: number[] | null) {
   return embedding ? JSON.stringify(embedding) : null
 }
 
-function cosineSimilarity(a: number[], b: number[]) {
+export function cosineSimilarity(a: number[], b: number[]) {
   if (a.length === 0 || a.length !== b.length) return 0
 
   let dot = 0
@@ -141,7 +147,7 @@ function createCluster(prompt: PromptForCluster, embedding: number[] | null) {
   return cluster.id
 }
 
-function bestClusterForEmbedding(userId: number, worldId: number, embedding: number[]) {
+function bestClusterForEmbedding(userId: number, worldId: number, embedding: number[], logDecision?: (message: string) => void) {
   const clusters = db
     .select({
       id: promptClusters.id,
@@ -161,19 +167,36 @@ function bestClusterForEmbedding(userId: number, worldId: number, embedding: num
 
   let best: (typeof clusters)[number] | null = null
   let bestScore = 0
+  const threshold = similarityThreshold()
+
+  logDecision?.(`  comparing with ${clusters.length} existing cluster${clusters.length === 1 ? '' : 's'}; threshold=${threshold}`)
 
   for (const cluster of clusters) {
     const clusterEmbedding = parseEmbedding(cluster.average_embedding)
-    if (!clusterEmbedding) continue
+    if (!clusterEmbedding) {
+      logDecision?.(`  cluster ${cluster.id}: skipped; invalid average embedding`)
+      continue
+    }
 
     const score = cosineSimilarity(embedding, clusterEmbedding)
+    logDecision?.(`  cluster ${cluster.id}: prompts=${cluster.prompt_count} cos_sim=${score.toFixed(6)}`)
     if (score > bestScore) {
       best = cluster
       bestScore = score
     }
   }
 
-  if (!best || bestScore < similarityThreshold()) return null
+  if (!best) {
+    logDecision?.('  decision: create new cluster; no comparable cluster found')
+    return null
+  }
+
+  if (bestScore < threshold) {
+    logDecision?.(`  decision: create new cluster; best cluster ${best.id} cos_sim=${bestScore.toFixed(6)} is below threshold`)
+    return null
+  }
+
+  logDecision?.(`  decision: use cluster ${best.id}; cos_sim=${bestScore.toFixed(6)}`)
   return best
 }
 
@@ -208,7 +231,8 @@ function addPromptToCluster(prompt: PromptForCluster, cluster: ReturnType<typeof
   return cluster.id
 }
 
-export async function clusterPromptById(promptId: number) {
+export async function clusterPromptById(promptId: number, options: ClusterPromptOptions = {}) {
+  const logDecision = options.logDecisions ? (message: string) => console.log(message) : undefined
   const prompt = db
     .select({
       id: prompts.id,
@@ -216,6 +240,7 @@ export async function clusterPromptById(promptId: number) {
       world_id: prompts.world_id,
       cluster_id: prompts.cluster_id,
       text: prompts.text,
+      embedding: prompts.embedding,
       piece_count: prompts.piece_count,
       updated_at: prompts.updated_at,
     })
@@ -224,13 +249,30 @@ export async function clusterPromptById(promptId: number) {
     .get()
 
   if (!prompt) throw new Error(`Prompt ${promptId} not found`)
-  if (prompt.cluster_id !== null) return prompt.cluster_id
+  if (prompt.cluster_id !== null) {
+    logDecision?.(`prompt ${prompt.id}: already in cluster ${prompt.cluster_id}; skipping`)
+    return prompt.cluster_id
+  }
 
-  const embedding = await embedPrompt(prompt.text)
-  if (!embedding) return createCluster(prompt, null)
+  logDecision?.(`prompt ${prompt.id}: ${JSON.stringify(prompt.text.slice(0, 120))}`)
 
-  const cluster = bestClusterForEmbedding(prompt.user_id, prompt.world_id, embedding)
-  return cluster ? addPromptToCluster(prompt, cluster, embedding) : createCluster(prompt, embedding)
+  let embedding = options.reuseExistingEmbedding ? parseEmbedding(prompt.embedding) : null
+  if (embedding) {
+    logDecision?.('  embedding: reused stored embedding')
+  } else {
+    logDecision?.('  embedding: requesting embedding')
+    embedding = await embedPrompt(prompt.text)
+  }
+
+  if (!embedding) {
+    const clusterId = createCluster(prompt, null)
+    logDecision?.(`  decision: create singleton cluster ${clusterId}; no embedding available`)
+    return clusterId
+  }
+
+  const cluster = bestClusterForEmbedding(prompt.user_id, prompt.world_id, embedding, logDecision)
+  if (cluster) return addPromptToCluster(prompt, cluster, embedding)
+  return createCluster(prompt, embedding)
 }
 
 export function recomputePromptCluster(clusterId: number | null | undefined) {

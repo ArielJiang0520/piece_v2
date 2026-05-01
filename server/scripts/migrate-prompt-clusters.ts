@@ -1,6 +1,8 @@
+// Utility: add the prompt clustering table, columns, and indexes if they are missing.
+// Mutates the database schema only; safe to rerun because each migration step is guarded.
 import { Database } from 'bun:sqlite'
 
-const dbPath = process.env.DB_PATH || './piece.db'
+const dbPath = process.env.DB_PATH || process.env.DEV_DB_PATH || './piece.db';
 const sqlite = new Database(dbPath)
 
 function tableExists(name: string) {
