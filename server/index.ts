@@ -16,11 +16,13 @@ if (process.env.NODE_ENV === 'production') {
   app.get('/*', serveStatic({ path: './dist/index.html' }))
 }
 
-const port = parseInt(process.env.PORT || '3001')
+const defaultPort = process.env.NODE_ENV === 'production' ? '3000' : '3001'
+const port = parseInt(process.env.PORT || defaultPort, 10)
 const generationRoutePattern = /^\/api\/worlds\/[^/]+\/generate\/?$/
 
 export default {
   port,
+  hostname: '0.0.0.0',
   fetch(req, server) {
     if (generationRoutePattern.test(new URL(req.url).pathname)) {
       server.timeout(req, 0)
