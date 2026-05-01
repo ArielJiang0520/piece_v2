@@ -2,8 +2,11 @@ import { Database } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
-const sqlite = new Database('./piece.db')
+const dbPath = process.env.DB_PATH || './piece.db';
+const sqlite = new Database(dbPath);
 sqlite.exec('PRAGMA foreign_keys = ON;')
+
+try { sqlite.exec(`ALTER TABLE worlds ADD COLUMN summary TEXT NOT NULL DEFAULT ''`) } catch { }
 
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -23,6 +26,7 @@ sqlite.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
     body TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -60,6 +64,7 @@ export const worlds = sqliteTable('worlds', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   name: text('name').notNull(),
+  summary: text('summary').notNull().default(''),
   body: text('body').notNull().default(''),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),

@@ -6,15 +6,15 @@ export default function WorldDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [name, setName] = useState('')
+  const [summary, setSummary] = useState('')
   const [body, setBody] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     apiFetch(`/api/worlds/${id}`)
-      .then(w => { setName(w.name); setBody(w.body) })
+      .then(w => { setName(w.name); setSummary(w.summary); setBody(w.body) })
       .catch(() => navigate('/'))
       .finally(() => setLoading(false))
   }, [id])
@@ -29,14 +29,12 @@ export default function WorldDetail() {
 
   async function saveBody() {
     setSaving(true)
-    setSaved(false)
     try {
       await apiFetch(`/api/worlds/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ summary, body }),
       })
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      navigate(`/worlds/${id}/pieces`)
     } catch (e) {
       console.error(e)
     } finally {
@@ -69,6 +67,17 @@ export default function WorldDetail() {
         />
       </div>
 
+      <div className="mb-6">
+        <label className="block text-xs text-zinc-500 mb-1 uppercase tracking-wide">Summary</label>
+        <textarea
+          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:border-violet-500 resize-y"
+          rows={3}
+          value={summary}
+          onChange={e => setSummary(e.target.value)}
+          placeholder="A short description of this world..."
+        />
+      </div>
+
       <div className="mb-4">
         <label className="block text-xs text-zinc-500 mb-1 uppercase tracking-wide">System instruction (world body)</label>
         <textarea
@@ -88,7 +97,6 @@ export default function WorldDetail() {
         >
           {saving ? 'Saving...' : 'Save'}
         </button>
-        {saved && <span className="text-zinc-400 text-sm">Saved</span>}
       </div>
 
       <div className="border-t border-zinc-800 pt-6">

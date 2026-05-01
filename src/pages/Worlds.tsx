@@ -6,6 +6,7 @@ import { apiFetch } from '../api'
 interface World {
   id: number
   name: string
+  summary: string
   updated_at: number
 }
 
@@ -112,6 +113,7 @@ export default function Worlds() {
               onClick={() => navigate(`/worlds/${w.id}/pieces`)}
             >
               <div className="text-zinc-100 font-medium">{w.name}</div>
+              {w.summary && <div className="text-zinc-400 text-sm mt-1">{w.summary}</div>}
               <div className="text-zinc-500 text-xs mt-1">{relativeTime(w.updated_at)}</div>
             </button>
           ))}
