@@ -82,11 +82,25 @@ export const worlds = sqliteTable('worlds', {
   updated_at: integer('updated_at').notNull(),
 })
 
+export const promptClusters = sqliteTable('prompt_clusters', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  world_id: integer('world_id').notNull().references(() => worlds.id),
+  average_embedding: text('average_embedding'),
+  prompt_count: integer('prompt_count').notNull().default(0),
+  piece_count: integer('piece_count').notNull().default(0),
+  latest_prompt_id: integer('latest_prompt_id'),
+  created_at: integer('created_at').notNull(),
+  updated_at: integer('updated_at').notNull(),
+})
+
 export const prompts = sqliteTable('prompts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
+  cluster_id: integer('cluster_id').references(() => promptClusters.id),
   text: text('text').notNull(),
+  embedding: text('embedding'),
   piece_count: integer('piece_count').notNull().default(0),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
@@ -102,4 +116,4 @@ export const pieces = sqliteTable('pieces', {
   created_at: integer('created_at').notNull(),
 })
 
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, prompts, pieces } })
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, promptClusters, prompts, pieces } })

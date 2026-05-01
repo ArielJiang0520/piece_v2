@@ -7,6 +7,8 @@
     "dev:client": "bunx vite",
     "dev": "bunx concurrently -n server,client -c blue,green \"bun run dev:server\" \"bun run dev:client\"",
     "build": "bunx vite build",
+    "migrate:prompt-clusters": "bun server/scripts/migrate-prompt-clusters.ts",
+    "cluster:prompts": "bun server/scripts/cluster-existing-prompts.ts",
     "start": "NODE_ENV=production bun server/index.ts"
   },
   "devDependencies": {

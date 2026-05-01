@@ -4,9 +4,10 @@ import { eq, and, sql } from 'drizzle-orm'
 import { db, worlds, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { MODELS } from '../../../src/config'
+import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
-const modelIds = new Set(MODELS.map(model => model.id))
+const modelsById = new Map(MODELS.map(model => [model.id, model]))
 
 generateRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = c.get('userId') as number
@@ -20,12 +21,13 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
 
   let existingPromptId: number | undefined
+  let existingPromptClusterId: number | null = null
   if (promptId !== undefined && promptId !== null) {
     const id = Number(promptId)
     if (!Number.isInteger(id) || id < 1) return c.json({ error: 'Invalid prompt id' }, 400)
 
     const existingPrompt = db
-      .select({ id: prompts.id, text: prompts.text })
+      .select({ id: prompts.id, text: prompts.text, cluster_id: prompts.cluster_id })
       .from(prompts)
       .where(and(eq(prompts.id, id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
       .get()
@@ -33,16 +35,18 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
     if (existingPrompt.text === promptText) {
       existingPromptId = existingPrompt.id
+      existingPromptClusterId = existingPrompt.cluster_id
     }
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
 
-  if (typeof requestedModel !== 'string' || !modelIds.has(requestedModel)) {
+  const modelOption = typeof requestedModel === 'string' ? modelsById.get(requestedModel) : undefined
+  if (!modelOption) {
     return c.json({ error: 'Invalid model requested' }, 400)
   }
-  const model = requestedModel
+  const model = modelOption.id
 
   const parsedTemperature = Number(requestedTemperature)
   const temperature = Number.isFinite(parsedTemperature)
@@ -64,6 +68,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
         body: JSON.stringify({
           model,
           temperature,
+          reasoning: modelOption.reasoning,
           stream: true,
           provider: { sort: 'throughput' },
           messages: [
@@ -130,6 +135,13 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
                 })
                 .where(and(eq(prompts.id, existingPromptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
                 .run()
+              if (existingPromptClusterId === null) {
+                existingPromptClusterId = await clusterPromptById(existingPromptId)
+              } else {
+                recomputePromptCluster(existingPromptClusterId)
+              }
+            } else {
+              await clusterPromptById(promptRow.id)
             }
 
             await stream.writeSSE({ data: JSON.stringify({ type: 'done', pieceId: result.id }) })

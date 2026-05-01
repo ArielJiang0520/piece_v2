@@ -5,20 +5,24 @@ import { relativeTime } from '../utils/time'
 
 interface PromptPiece {
   id: number
+  prompt_id: number
+  prompt: string
   preview: string
   created_at: number
 }
 
-interface PromptGroup {
+interface ClusterGroup {
   id: number
-  text: string
+  title: string
+  prompt_count: number
   piece_count: number
   updated_at: number
+  prompt_ids: number[]
   pieces: PromptPiece[]
 }
 
 interface PromptResponse {
-  items: PromptGroup[]
+  items: ClusterGroup[]
   page: number
   limit: number
   hasMore: boolean
@@ -36,7 +40,7 @@ export default function WorldPieces() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [worldName, setWorldName] = useState('')
-  const [groups, setGroups] = useState<PromptGroup[]>([])
+  const [groups, setGroups] = useState<ClusterGroup[]>([])
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -45,7 +49,7 @@ export default function WorldPieces() {
     setLoading(true)
     Promise.all([
       apiFetch(`/api/worlds/${id}`),
-      apiFetch(`/api/worlds/${id}/prompts?page=${page}&limit=${PAGE_SIZE}`),
+      apiFetch(`/api/worlds/${id}/clusters?page=${page}&limit=${PAGE_SIZE}`),
     ])
       .then(([world, response]: [{ name: string }, PromptResponse]) => {
         setWorldName(world.name)
@@ -64,7 +68,7 @@ export default function WorldPieces() {
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => navigate('/')} className="text-zinc-400 hover:text-zinc-200 text-sm">Back</button>
           <h1 className="text-lg font-semibold text-zinc-100 truncate">{worldName}</h1>
-          <Link to={`/worlds/${id}`} className="text-zinc-500 hover:text-zinc-300 text-sm" title="Edit world">
+          <Link to={`/worlds/${id}/details`} className="text-zinc-500 hover:text-zinc-300 text-sm" title="Edit world">
             Edit
           </Link>
         </div>
@@ -100,16 +104,19 @@ export default function WorldPieces() {
             {groups.map(group => (
               <section key={group.id} className="bg-zinc-800 border border-zinc-700 rounded">
                 <Link
-                  to={`/worlds/${id}/prompts/${group.id}`}
+                  to={`/worlds/${id}/clusters/${group.id}`}
                   className="block px-4 py-3 hover:bg-zinc-700 transition-colors rounded-t"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-zinc-100 text-sm font-medium leading-6">{group.text}</h2>
-                    <span className="shrink-0 text-zinc-500 text-xs mt-1">
-                      {group.piece_count} {group.piece_count === 1 ? 'piece' : 'pieces'}
-                    </span>
+                    <h2 className="text-zinc-100 text-sm font-medium leading-6">{group.title}</h2>
+                    <div className="shrink-0 text-right text-zinc-500 text-xs mt-1">
+                      <div>{group.prompt_count} {group.prompt_count === 1 ? 'prompt' : 'prompts'}</div>
+                      <div>{group.piece_count} {group.piece_count === 1 ? 'piece' : 'pieces'}</div>
+                    </div>
                   </div>
-                  <div className="text-zinc-600 text-xs mt-2">Latest {relativeTime(group.updated_at)}</div>
+                  <div className="text-zinc-600 text-xs mt-2">
+                    Cluster {group.id} - Latest {relativeTime(group.updated_at)}
+                  </div>
                 </Link>
 
                 <div className="border-t border-zinc-700">
@@ -123,7 +130,7 @@ export default function WorldPieces() {
                         className="grid grid-cols-[92px_1fr] gap-3 px-4 py-2 text-sm hover:bg-zinc-700 transition-colors"
                       >
                         <span className="text-zinc-500 text-xs whitespace-nowrap">{relativeTime(piece.created_at)}</span>
-                        <span className="text-zinc-300 truncate">{shortPreview(piece.preview)}</span>
+                        <span className="text-zinc-300 truncate">{shortPreview(piece.preview || piece.prompt)}</span>
                       </Link>
                     ))
                   )}

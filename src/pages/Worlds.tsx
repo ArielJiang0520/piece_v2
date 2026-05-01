@@ -102,7 +102,7 @@ export default function Worlds() {
             <button
               key={w.id}
               className="text-left bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded px-4 py-3 transition-colors"
-              onClick={() => navigate(`/worlds/${w.id}/pieces`)}
+              onClick={() => navigate(`/worlds/${w.id}`)}
             >
               <div className="text-zinc-100 font-medium">{w.name}</div>
               {w.summary && <div className="text-zinc-400 text-sm mt-1">{w.summary}</div>}

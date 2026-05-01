@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { db, worlds, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
+import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 
 const promptRoutes = new Hono<{ Variables: Variables }>()
 
@@ -18,45 +19,6 @@ function requireWorld(userId: number, worldId: number) {
     .where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId)))
     .get()
 }
-
-promptRoutes.get('/', authMiddleware, (c: any) => {
-  const userId = c.get('userId') as number
-  const worldId = parseInt(c.req.param('id'))
-  const world = requireWorld(userId, worldId)
-  if (!world) return c.json({ error: 'Not found' }, 404)
-
-  const { page, limit, offset } = pagination(c)
-  const rows = db
-    .select({
-      id: prompts.id,
-      text: prompts.text,
-      piece_count: prompts.piece_count,
-      updated_at: prompts.updated_at,
-    })
-    .from(prompts)
-    .where(and(eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-    .orderBy(desc(prompts.updated_at), desc(prompts.id))
-    .limit(limit + 1)
-    .offset(offset)
-    .all()
-
-  const items = rows.slice(0, limit).map(prompt => ({
-    ...prompt,
-    pieces: db
-      .select({
-        id: pieces.id,
-        preview: sql<string>`substr(${pieces.body}, 1, 120)`,
-        created_at: pieces.created_at,
-      })
-      .from(pieces)
-      .where(and(eq(pieces.prompt_id, prompt.id), eq(pieces.world_id, worldId), eq(pieces.user_id, userId)))
-      .orderBy(desc(pieces.created_at), desc(pieces.id))
-      .limit(3)
-      .all(),
-  }))
-
-  return c.json({ items, page, limit, hasMore: rows.length > limit })
-})
 
 promptRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = c.get('userId') as number
@@ -77,9 +39,11 @@ promptRoutes.post('/', authMiddleware, async (c: any) => {
     created_at: now,
     updated_at: now,
   }).returning().get()
+  const clusterId = await clusterPromptById(prompt.id)
 
   return c.json({
     id: prompt.id,
+    cluster_id: clusterId,
     text: prompt.text,
     piece_count: prompt.piece_count,
     created_at: prompt.created_at,
@@ -138,7 +102,7 @@ promptRoutes.delete('/:promptId', authMiddleware, (c: any) => {
   if (!world) return c.json({ error: 'Not found' }, 404)
 
   const prompt = db
-    .select({ id: prompts.id })
+    .select({ id: prompts.id, cluster_id: prompts.cluster_id })
     .from(prompts)
     .where(and(eq(prompts.id, promptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
     .get()
@@ -147,6 +111,7 @@ promptRoutes.delete('/:promptId', authMiddleware, (c: any) => {
   db.delete(prompts)
     .where(and(eq(prompts.id, promptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
     .run()
+  recomputePromptCluster(prompt.cluster_id)
 
   return c.json({ ok: true })
 })

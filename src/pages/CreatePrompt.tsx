@@ -42,7 +42,7 @@ export default function CreatePrompt() {
   return (
     <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <div className="mb-4">
-        <Link to={`/worlds/${id}/pieces`} className="text-violet-400 hover:text-violet-300 text-sm">
+        <Link to={`/worlds/${id}`} className="text-violet-400 hover:text-violet-300 text-sm">
           Back to {worldName || 'Pieces'}
         </Link>
       </div>

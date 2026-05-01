@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { db, prompts, pieces } from '../db'
 import { type Variables, authMiddleware } from '../middleware'
+import { recomputePromptCluster, recomputePromptPieceCount } from '../prompt-clustering'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
 
@@ -32,24 +33,16 @@ pieceRoutes.delete('/:id', authMiddleware, (c) => {
   const id = parseInt(c.req.param('id'))
   const piece = db.select().from(pieces).where(and(eq(pieces.id, id), eq(pieces.user_id, userId))).get()
   if (!piece) return c.json({ error: 'Not found' }, 404)
-  db.delete(pieces).where(eq(pieces.id, id)).run()
-
-  const summary = db
-    .select({
-      count: sql<number>`count(*)`,
-      latest_at: sql<number | null>`max(${pieces.created_at})`,
-    })
-    .from(pieces)
-    .where(and(eq(pieces.prompt_id, piece.prompt_id), eq(pieces.user_id, userId)))
+  const prompt = db
+    .select({ cluster_id: prompts.cluster_id })
+    .from(prompts)
+    .where(and(eq(prompts.id, piece.prompt_id), eq(prompts.user_id, userId)))
     .get()
 
-  db.update(prompts)
-    .set({
-      piece_count: summary?.count ?? 0,
-      updated_at: summary?.latest_at ?? Date.now(),
-    })
-    .where(eq(prompts.id, piece.prompt_id))
-    .run()
+  db.delete(pieces).where(eq(pieces.id, id)).run()
+
+  recomputePromptPieceCount(piece.prompt_id, userId)
+  recomputePromptCluster(prompt?.cluster_id)
 
   return c.json({ ok: true })
 })

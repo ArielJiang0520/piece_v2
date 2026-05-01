@@ -30,7 +30,7 @@ export default function PieceReader() {
   async function deletePiece() {
     if (!piece) return
     await apiFetch(`/api/pieces/${id}`, { method: 'DELETE' })
-    navigate(`/worlds/${piece.world_id}/pieces`)
+    navigate(`/worlds/${piece.world_id}`)
   }
 
   if (loading) return <div className="p-6 text-zinc-400">Loading...</div>

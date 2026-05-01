@@ -52,7 +52,7 @@ export default function PromptPieces() {
         setPieces(response.pieces)
         setHasMore(response.hasMore)
       })
-      .catch(() => navigate(`/worlds/${id}/pieces`))
+      .catch(() => navigate(`/worlds/${id}`))
       .finally(() => setLoading(false))
   }, [id, promptId, page, navigate])
 
@@ -64,7 +64,7 @@ export default function PromptPieces() {
 
     try {
       await apiFetch(`/api/worlds/${id}/prompts/${prompt.id}`, { method: 'DELETE' })
-      navigate(`/worlds/${id}/pieces`)
+      navigate(`/worlds/${id}`)
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : 'Could not delete prompt')
       setDeleting(false)
@@ -77,7 +77,7 @@ export default function PromptPieces() {
   return (
     <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
       <div className="mb-6">
-        <Link to={`/worlds/${id}/pieces`} className="text-violet-400 hover:text-violet-300 text-sm">
+        <Link to={`/worlds/${id}`} className="text-violet-400 hover:text-violet-300 text-sm">
           Back to {worldName}
         </Link>
       </div>

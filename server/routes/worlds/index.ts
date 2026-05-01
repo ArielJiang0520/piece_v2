@@ -4,6 +4,7 @@ import { db, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import promptRoutes from './prompts'
 import generateRoutes from './generate'
+import clusterRoutes from './clusters'
 
 const worldRoutes = new Hono<{ Variables: Variables }>()
 
@@ -61,6 +62,7 @@ worldRoutes.delete('/:id', authMiddleware, (c) => {
 })
 
 worldRoutes.route('/:id/prompts', promptRoutes)
+worldRoutes.route('/:id/clusters', clusterRoutes)
 worldRoutes.route('/:id/generate', generateRoutes)
 
 export default worldRoutes
