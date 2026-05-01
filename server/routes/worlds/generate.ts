@@ -55,7 +55,6 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
   return streamSSE(c, async (stream) => {
     let accumulated = ''
-    let sentThinking = false
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
@@ -153,9 +152,8 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
             const reasoning = delta?.reasoning
               ?? delta?.reasoning_content
               ?? delta?.reasoning_details?.map((detail: any) => detail?.text ?? detail?.summary ?? '').join('')
-            if (reasoning && !sentThinking) {
-              sentThinking = true
-              await stream.writeSSE({ data: JSON.stringify({ type: 'thinking' }) })
+            if (reasoning) {
+              await stream.writeSSE({ data: JSON.stringify({ type: 'thinking', content: String(reasoning) }) })
             }
 
             const content = delta?.content

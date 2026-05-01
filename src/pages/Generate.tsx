@@ -24,6 +24,8 @@ export default function Generate() {
   const [model, setModel] = useState(DEFAULT_MODEL_ID)
   const [temperature, setTemperature] = useState(1)
   const [output, setOutput] = useState('')
+  const [thinkingOutput, setThinkingOutput] = useState('')
+  const [thinkingExpanded, setThinkingExpanded] = useState(false)
   const [phase, setPhase] = useState<GenerationPhase>('idle')
   const [pieceId, setPieceId] = useState<number | null>(null)
   const [error, setError] = useState('')
@@ -76,6 +78,8 @@ export default function Generate() {
     if (!prompt.trim() || streaming) return
     setPhase('waiting_provider')
     setOutput('')
+    setThinkingOutput('')
+    setThinkingExpanded(false)
     setPieceId(null)
     setError('')
 
@@ -101,6 +105,7 @@ export default function Generate() {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let receivedContent = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -119,8 +124,14 @@ export default function Generate() {
               setPhase('waiting_provider')
             } else if (msg.type === 'thinking') {
               setPhase(prev => prev === 'writing' ? prev : 'thinking')
+              if (typeof msg.content === 'string' && msg.content) {
+                setThinkingOutput(prev => prev + msg.content)
+              }
+              if (!receivedContent) setThinkingExpanded(true)
             } else if (msg.type === 'chunk') {
+              receivedContent = true
               setPhase('writing')
+              setThinkingExpanded(false)
               setOutput(prev => prev + msg.content)
             } else if (msg.type === 'done') {
               setPieceId(msg.pieceId)
@@ -221,6 +232,19 @@ export default function Generate() {
             <p className="text-sm">{pendingStatus}</p>
           </div>
         </div>
+      )}
+
+      {thinkingOutput && (
+        <details
+          className="mb-4 bg-zinc-900 border border-zinc-700 rounded px-4 py-3"
+          open={thinkingExpanded}
+          onToggle={e => setThinkingExpanded(e.currentTarget.open)}
+        >
+          <summary className="cursor-pointer text-sm text-zinc-300 select-none">
+            Thinking
+          </summary>
+          <p className="mt-3 text-zinc-400 text-sm leading-relaxed whitespace-pre-wrap">{thinkingOutput}</p>
+        </details>
       )}
 
       {output && (
