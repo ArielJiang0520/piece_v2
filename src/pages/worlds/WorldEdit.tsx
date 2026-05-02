@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../api'
+import { apiFetch } from '../../api'
 
 interface World {
   name: string
@@ -9,7 +9,7 @@ interface World {
   body: string
 }
 
-export default function WorldDetail() {
+export default function WorldEdit() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()

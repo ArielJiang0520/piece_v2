@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../api'
-import { relativeTime } from '../utils/time'
+import { apiFetch } from '../../api'
+import { relativeTime } from '../../utils/time'
 
 interface Prompt {
   id: number
@@ -43,7 +43,7 @@ function worldHref(id: string | undefined, worldPage: number) {
   return `/worlds/${id}${worldPage > 1 ? `?page=${worldPage}` : ''}`
 }
 
-export default function PromptPieces() {
+export default function Prompt() {
   const { id, promptId } = useParams<{ id: string; promptId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -72,6 +72,10 @@ export default function PromptPieces() {
   useEffect(() => {
     if (errored) navigate(backHref)
   }, [errored, navigate, backHref])
+
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [page])
 
   const deleteMutation = useMutation({
     mutationFn: (promptIdNum: number) =>

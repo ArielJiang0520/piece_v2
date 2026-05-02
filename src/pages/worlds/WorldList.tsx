@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '../auth'
-import { apiFetch } from '../api'
-import RelativeTimeStatus from '../ui/RelativeTimeStatus'
+import { apiFetch } from '../../api'
+import RelativeTimeStatus from '../../ui/RelativeTimeStatus'
 
 interface World {
   id: number
@@ -20,8 +19,7 @@ function countLabel(count: number, singular: string) {
   return `${value} ${value === 1 ? singular : `${singular}s`}`
 }
 
-export default function Worlds() {
-  const { user, logout } = useAuth()
+export default function WorldList() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [showNew, setShowNew] = useState(false)
@@ -51,26 +49,8 @@ export default function Worlds() {
     createMutation.mutate(trimmed)
   }
 
-  async function handleLogout() {
-    await logout()
-    navigate('/login')
-  }
-
   return (
     <div className="min-h-screen page-width">
-      <header className="flex items-baseline justify-between gap-4 border-b border-paper-3 px-6 py-7">
-        <h1 className="font-serif text-[32px] font-bold leading-none tracking-normal text-ink">Piece</h1>
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="truncate text-sm text-ink-3">{user?.username}</span>
-          <button
-            className="shrink-0 rounded-sm border border-paper-3 px-3 py-1.5 text-sm text-ink-4 transition-colors hover:border-ink-4 hover:text-ink-3"
-            onClick={handleLogout}
-          >
-            Log out
-          </button>
-        </div>
-      </header>
-
       <main className="pb-10">
         <div className="px-6 pt-7">
           {!showNew ? (

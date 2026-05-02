@@ -2,9 +2,9 @@ import { useEffect } from 'react'
 import { Ellipsis, GitBranch, WandSparkles } from 'lucide-react'
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../api'
-import PieceCountIndicator from '../ui/PieceCountIndicator'
-import RelativeTimeStatus from '../ui/RelativeTimeStatus'
+import { apiFetch } from '../../api'
+import PieceCountIndicator from '../../ui/PieceCountIndicator'
+import RelativeTimeStatus from '../../ui/RelativeTimeStatus'
 
 interface ClusterGroup {
   id: number
@@ -27,7 +27,7 @@ function countLabel(count: number, singular: string) {
   return `${count} ${count === 1 ? singular : `${singular}s`}`
 }
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 20
 
 function parsePageParam(value: string | null) {
   const page = Number(value ?? '1')
@@ -38,7 +38,7 @@ function detailSearchForPage(page: number) {
   return page > 1 ? `?worldPage=${page}` : ''
 }
 
-export default function WorldPieces() {
+export default function World() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -62,6 +62,10 @@ export default function WorldPieces() {
   useEffect(() => {
     if (errored) navigate('/')
   }, [errored, navigate])
+
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [page])
 
   function setPage(nextPage: number) {
     setSearchParams(prev => {

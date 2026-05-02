@@ -1,10 +1,10 @@
 import { useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../api'
-import { diffPromptText } from '../utils/promptDiff'
-import PieceCountIndicator from '../ui/PieceCountIndicator'
-import RelativeTimeStatus from '../ui/RelativeTimeStatus'
+import { apiFetch } from '../../api'
+import { diffPromptText } from '../../utils/promptDiff'
+import PieceCountIndicator from '../../ui/PieceCountIndicator'
+import RelativeTimeStatus from '../../ui/RelativeTimeStatus'
 
 interface Cluster {
   id: number
@@ -40,7 +40,7 @@ function contextSearch(worldPage: number) {
   return worldPage > 1 ? `?worldPage=${worldPage}` : ''
 }
 
-export default function ClusterPieces() {
+export default function Cluster() {
   const { id, clusterId } = useParams<{ id: string; clusterId: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()

@@ -14,7 +14,7 @@ interface Piece {
   created_at: number
 }
 
-export default function PieceReader() {
+export default function Piece() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()

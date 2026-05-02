@@ -1,0 +1,123 @@
+import { useState } from 'react'
+import { ChevronRight, Menu, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { useAuth } from '../auth'
+import { apiFetch } from '../api'
+
+interface World {
+  id: number
+  name: string
+}
+
+export default function TopNav() {
+  const [open, setOpen] = useState(false)
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  const worldsQuery = useQuery({
+    queryKey: ['worlds'],
+    queryFn: () => apiFetch('/api/worlds') as Promise<World[]>,
+    enabled: open,
+  })
+  const recentWorlds = (worldsQuery.data ?? []).slice(0, 5)
+
+  async function handleLogout() {
+    setOpen(false)
+    await logout()
+    navigate('/login')
+  }
+
+  function goToWorld(id: number) {
+    setOpen(false)
+    navigate(`/worlds/${id}`)
+  }
+
+  function goToWorldList() {
+    setOpen(false)
+    navigate('/worlds')
+  }
+
+  return (
+    <>
+      <div className="sticky top-0 z-20 bg-paper/85 backdrop-blur">
+        <div className="page-width flex h-12 items-center justify-end px-4">
+          <button
+            type="button"
+            className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+            aria-label="Open menu"
+            title="Open menu"
+            onClick={() => setOpen(true)}
+          >
+            <Menu aria-hidden="true" className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      <div
+        className={`fixed inset-0 z-30 bg-ink/30 transition-opacity duration-200 ${
+          open ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={() => setOpen(false)}
+        aria-hidden="true"
+      />
+
+      <aside
+        className={`fixed right-0 top-0 z-40 flex h-dvh w-2/3 max-w-sm flex-col bg-paper shadow-[-12px_0_28px_rgba(26,18,16,0.12)] transition-transform duration-200 ease-out ${
+          open ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        aria-hidden={!open}
+      >
+        <div className="flex items-center justify-between border-b border-paper-3 px-5 py-4">
+          <span className="font-serif-zh text-base text-ink">{user?.username ?? ''}</span>
+          <button
+            type="button"
+            className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+          >
+            <X aria-hidden="true" className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          <button
+            type="button"
+            className="mb-3 flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4 transition-colors hover:text-ink"
+            onClick={goToWorldList}
+          >
+            <span>Your Worlds</span>
+            <ChevronRight aria-hidden="true" className="h-4 w-4" />
+          </button>
+          {recentWorlds.length === 0 ? (
+            <p className="text-sm text-ink-3">No worlds yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {recentWorlds.map(w => (
+                <li key={w.id}>
+                  <button
+                    type="button"
+                    className="w-full truncate rounded-sm px-2 py-2 text-left font-serif-zh text-[15px] text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+                    onClick={() => goToWorld(w.id)}
+                  >
+                    {w.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="border-t border-paper-3 px-5 py-4">
+          <button
+            type="button"
+            className="w-full rounded-sm border border-paper-3 px-4 py-2 text-sm text-ink-3 transition-colors hover:border-ink-4 hover:text-ink"
+            onClick={handleLogout}
+          >
+            Log out
+          </button>
+        </div>
+      </aside>
+    </>
+  )
+}

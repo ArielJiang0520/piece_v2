@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../api'
+import { apiFetch } from '../../api'
 
 interface SuggestionsResponse {
   prompts: string[]
 }
 
-export default function CreatePrompt() {
+export default function PromptNew() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [direction, setDirection] = useState('')

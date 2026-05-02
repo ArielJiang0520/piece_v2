@@ -1,19 +1,25 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './auth'
+import TopNav from './ui/TopNav'
 import Login from './pages/Login'
-import Worlds from './pages/Worlds'
-import WorldDetail from './pages/WorldDetail'
-import WorldPieces from './pages/WorldPieces'
-import ClusterPieces from './pages/ClusterPieces'
-import PromptPieces from './pages/PromptPieces'
-import CreatePrompt from './pages/CreatePrompt'
-import Generate from './pages/Generate'
-import PieceReader from './pages/PieceReader'
+import Piece from './pages/Piece'
+import WorldList from './pages/worlds/WorldList'
+import World from './pages/worlds/World'
+import WorldEdit from './pages/worlds/WorldEdit'
+import Cluster from './pages/worlds/Cluster'
+import Prompt from './pages/worlds/Prompt'
+import PromptNew from './pages/worlds/PromptNew'
+import Generate from './pages/worlds/Generate'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
-  return <>{children}</>
+  return (
+    <>
+      <TopNav />
+      {children}
+    </>
+  )
 }
 
 export default function App() {
@@ -21,14 +27,14 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Navigate to="/worlds" replace />} />
-      <Route path="/worlds" element={<ProtectedRoute><Worlds /></ProtectedRoute>} />
-      <Route path="/worlds/:id" element={<ProtectedRoute><WorldPieces /></ProtectedRoute>} />
-      <Route path="/worlds/:id/details" element={<ProtectedRoute><WorldDetail /></ProtectedRoute>} />
-      <Route path="/worlds/:id/clusters/:clusterId" element={<ProtectedRoute><ClusterPieces /></ProtectedRoute>} />
-      <Route path="/worlds/:id/prompts/new" element={<ProtectedRoute><CreatePrompt /></ProtectedRoute>} />
-      <Route path="/worlds/:id/prompts/:promptId" element={<ProtectedRoute><PromptPieces /></ProtectedRoute>} />
-      <Route path="/worlds/:id/generate" element={<ProtectedRoute><Generate /></ProtectedRoute>} />
-      <Route path="/pieces/:id" element={<ProtectedRoute><PieceReader /></ProtectedRoute>} />
+      <Route path="/worlds" element={<ProtectedLayout><WorldList /></ProtectedLayout>} />
+      <Route path="/worlds/:id" element={<ProtectedLayout><World /></ProtectedLayout>} />
+      <Route path="/worlds/:id/details" element={<ProtectedLayout><WorldEdit /></ProtectedLayout>} />
+      <Route path="/worlds/:id/clusters/:clusterId" element={<ProtectedLayout><Cluster /></ProtectedLayout>} />
+      <Route path="/worlds/:id/prompts/new" element={<ProtectedLayout><PromptNew /></ProtectedLayout>} />
+      <Route path="/worlds/:id/prompts/:promptId" element={<ProtectedLayout><Prompt /></ProtectedLayout>} />
+      <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />
+      <Route path="/pieces/:id" element={<ProtectedLayout><Piece /></ProtectedLayout>} />
     </Routes>
   )
 }

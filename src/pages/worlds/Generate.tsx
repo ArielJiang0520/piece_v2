@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
-import { apiFetch } from '../api'
-import { MODELS, DEFAULT_MODEL_ID } from '../config'
+import { apiFetch } from '../../api'
+import { MODELS, DEFAULT_MODEL_ID } from '../../config'
 
 interface PromptResponse {
   prompt: {
