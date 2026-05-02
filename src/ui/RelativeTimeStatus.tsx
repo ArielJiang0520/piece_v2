@@ -1,8 +1,5 @@
 import { relativeTime } from '../utils/time'
 
-const THREE_HOUR_MS = 3 * 60 * 60 * 1000
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
-
 function recencyClasses(timestamp: number | null | undefined) {
   if (!timestamp) return { text: 'text-ink-4', dot: 'bg-ink-4/60' }
 

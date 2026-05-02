@@ -50,7 +50,7 @@ export default function WorldDetail() {
   if (loading) return <div className="page-width p-6 text-ink-3">Loading...</div>
 
   return (
-    <div className="min-h-screen page-width px-4 py-6">
+    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
       <div className="mb-6">
         <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to pieces

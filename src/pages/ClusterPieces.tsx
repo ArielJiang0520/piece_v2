@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiFetch } from '../api'
+import { diffPromptText } from '../utils/promptDiff'
 import { relativeTime } from '../utils/time'
 
 interface Cluster {
@@ -11,18 +12,12 @@ interface Cluster {
   updated_at: number
 }
 
-interface Piece {
-  id: number
-  preview: string
-  created_at: number
-}
-
 interface ClusterPrompt {
   id: number
   text: string
   piece_count: number
+  created_at: number
   updated_at: number
-  pieces: Piece[]
 }
 
 interface ClusterResponse {
@@ -30,9 +25,8 @@ interface ClusterResponse {
   prompts: ClusterPrompt[]
 }
 
-function preview(text: string) {
-  const compact = text.replace(/\s+/g, ' ').trim()
-  return compact.length <= 140 ? compact : `${compact.slice(0, 140)}...`
+function countLabel(count: number, singular: string) {
+  return `${count} ${count === 1 ? singular : `${singular}s`}`
 }
 
 export default function ClusterPieces() {
@@ -42,6 +36,13 @@ export default function ClusterPieces() {
   const [cluster, setCluster] = useState<Cluster | null>(null)
   const [prompts, setPrompts] = useState<ClusterPrompt[]>([])
   const [loading, setLoading] = useState(true)
+  const promptDiffs = useMemo(
+    () => prompts.map((prompt, index) => {
+      const previousPrompt = prompts[index - 1]
+      return previousPrompt ? diffPromptText(previousPrompt.text, prompt.text) : null
+    }),
+    [prompts],
+  )
 
   useEffect(() => {
     setLoading(true)
@@ -62,55 +63,70 @@ export default function ClusterPieces() {
   if (!cluster) return null
 
   return (
-    <div className="min-h-screen page-width px-4 py-6">
+    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
       <div className="mb-6">
         <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to {worldName || 'Pieces'}
         </Link>
       </div>
 
-      <header className="mb-6">
-        <p className="text-ink-3 text-xs mb-2">
-          Cluster {cluster.id} - {cluster.prompt_count} {cluster.prompt_count === 1 ? 'prompt' : 'prompts'} - {cluster.piece_count} {cluster.piece_count === 1 ? 'piece' : 'pieces'} - latest {relativeTime(cluster.updated_at)}
-        </p>
-        <h1 className="font-serif-zh text-2xl font-normal text-ink leading-tight">{cluster.title}</h1>
-      </header>
+      {prompts.length === 0 ? (
+        <p className="text-ink-3 text-sm">No variations yet.</p>
+      ) : (
+        <>
+          <div className="flex flex-col gap-4">
+            {prompts.map((prompt, index) => {
+              const diff = promptDiffs[index]
 
-      <div className="flex flex-col gap-4">
-        {prompts.map(prompt => (
-          <section key={prompt.id} className="bg-paper border border-paper-3 rounded-md">
-            <Link
-              to={`/worlds/${id}/prompts/${prompt.id}`}
-              className="block px-4 py-3 hover:bg-paper-2 transition-colors rounded-t-md"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <h2 className="font-serif-zh text-ink text-sm font-normal leading-6">{prompt.text}</h2>
-                <span className="shrink-0 text-ink-3 text-xs mt-1">
-                  {prompt.piece_count} {prompt.piece_count === 1 ? 'piece' : 'pieces'}
-                </span>
-              </div>
-              <div className="text-ink-3 text-xs mt-2">Prompt {prompt.id} - Latest {relativeTime(prompt.updated_at)}</div>
-            </Link>
-
-            <div className="border-t border-paper-3">
-              {prompt.pieces.length === 0 ? (
-                <p className="px-4 py-3 text-ink-3 text-sm">No pieces yet.</p>
-              ) : (
-                prompt.pieces.map(piece => (
+              return (
+                <section
+                  key={prompt.id}
+                  className="overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_1px_0_rgba(26,18,16,0.02)]"
+                >
                   <Link
-                    key={piece.id}
-                    to={`/pieces/${piece.id}`}
-                    className="grid grid-cols-[92px_1fr] gap-3 px-4 py-2 text-sm hover:bg-paper-2 transition-colors"
+                    to={`/worlds/${id}/prompts/${prompt.id}`}
+                    className="block px-5 py-5 transition-colors hover:bg-paper-2/45 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose/30"
                   >
-                    <span className="text-ink-3 text-xs whitespace-nowrap">{relativeTime(piece.created_at)}</span>
-                    <span className="text-ink-2 truncate">{preview(piece.preview)}</span>
+                    <div className="mb-4 flex items-center justify-between gap-4 text-xs text-ink-4">
+                      <span>{countLabel(prompt.piece_count, 'piece')}</span>
+                      <span className="shrink-0">Inserted {relativeTime(prompt.updated_at)}</span>
+                    </div>
+                    <h2 className="font-serif-zh text-sm font-normal leading-6 text-ink-2">
+                      {prompt.text}
+                    </h2>
+
+                    {diff && (
+                      <div className="mt-4 space-y-1 rounded-sm border border-paper-3 bg-paper-2 px-3 py-2 font-mono text-xs leading-5">
+                        {diff.removed && (
+                          <div className="text-red-800/70">
+                            <span className="select-none">- </span>
+                            {diff.removed}
+                          </div>
+                        )}
+                        {diff.added && (
+                          <div className="text-green-800/70">
+                            <span className="select-none">+ </span>
+                            {diff.added}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+
                   </Link>
-                ))
-              )}
-            </div>
-          </section>
-        ))}
-      </div>
+
+                  <Link
+                    to={`/worlds/${id}/generate?promptId=${prompt.id}`}
+                    className="block w-full border-t border-paper-3 text-paper-2 px-4 py-2 text-center text-xs font-medium bg-ink-3/80 transition-colors hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose/30"
+                  >
+                    Use this prompt
+                  </Link>
+                </section>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

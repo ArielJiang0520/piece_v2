@@ -5,6 +5,7 @@ import { relativeTime } from '../utils/time'
 
 interface Prompt {
   id: number
+  cluster_id: number | null
   text: string
   piece_count: number
   created_at: number
@@ -23,6 +24,11 @@ interface PromptPiecesResponse {
   page: number
   limit: number
   hasMore: boolean
+}
+
+interface DeletePromptResponse {
+  ok: boolean
+  cluster_id: number | null
 }
 
 const PAGE_SIZE = 30
@@ -63,8 +69,9 @@ export default function PromptPieces() {
     setDeleteError('')
 
     try {
-      await apiFetch(`/api/worlds/${id}/prompts/${prompt.id}`, { method: 'DELETE' })
-      navigate(`/worlds/${id}`)
+      const response = await apiFetch(`/api/worlds/${id}/prompts/${prompt.id}`, { method: 'DELETE' }) as DeletePromptResponse
+      const clusterId = response.cluster_id ?? prompt.cluster_id
+      navigate(clusterId ? `/worlds/${id}/clusters/${clusterId}` : `/worlds/${id}`)
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : 'Could not delete prompt')
       setDeleting(false)
@@ -75,7 +82,7 @@ export default function PromptPieces() {
   if (!prompt) return null
 
   return (
-    <div className="min-h-screen page-width px-4 py-6">
+    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
       <div className="mb-6">
         <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to {worldName}

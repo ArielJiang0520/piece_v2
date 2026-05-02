@@ -150,6 +150,7 @@ promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
   const prompt = db
     .select({
       id: prompts.id,
+      cluster_id: prompts.cluster_id,
       text: prompts.text,
       piece_count: prompts.piece_count,
       created_at: prompts.created_at,
@@ -202,7 +203,7 @@ promptRoutes.delete('/:promptId', authMiddleware, (c: any) => {
     .run()
   recomputePromptCluster(prompt.cluster_id)
 
-  return c.json({ ok: true })
+  return c.json({ ok: true, cluster_id: prompt.cluster_id })
 })
 
 export default promptRoutes

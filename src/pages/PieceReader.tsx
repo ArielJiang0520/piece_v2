@@ -37,7 +37,7 @@ export default function PieceReader() {
   if (!piece) return null
 
   return (
-    <div className="min-h-screen page-width px-4 py-6">
+    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
       <div className="mb-6">
         <Link to={`/worlds/${piece.world_id}/prompts/${piece.prompt_id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to prompt

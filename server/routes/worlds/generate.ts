@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, desc, sql } from 'drizzle-orm'
 import { db, worlds, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { MODELS } from '../../../src/config'
@@ -36,6 +36,20 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     if (existingPrompt.text === promptText) {
       existingPromptId = existingPrompt.id
       existingPromptClusterId = existingPrompt.cluster_id
+    }
+  }
+
+  if (existingPromptId === undefined) {
+    const matchingPrompt = db
+      .select({ id: prompts.id, cluster_id: prompts.cluster_id })
+      .from(prompts)
+      .where(and(eq(prompts.text, promptText), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+      .orderBy(desc(prompts.updated_at), desc(prompts.id))
+      .get()
+
+    if (matchingPrompt) {
+      existingPromptId = matchingPrompt.id
+      existingPromptClusterId = matchingPrompt.cluster_id
     }
   }
 
@@ -143,7 +157,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
               await clusterPromptById(promptRow.id)
             }
 
-            await stream.writeSSE({ data: JSON.stringify({ type: 'done', pieceId: result.id }) })
+            await stream.writeSSE({ data: JSON.stringify({ type: 'done', pieceId: result.id, promptId: promptRow.id }) })
             return
           }
           try {

@@ -32,16 +32,17 @@ export default function Generate() {
   const [thinkingOutput, setThinkingOutput] = useState('')
   const [thinkingExpanded, setThinkingExpanded] = useState(false)
   const [phase, setPhase] = useState<GenerationPhase>('idle')
-  const [pieceId, setPieceId] = useState<number | null>(null)
   const [error, setError] = useState('')
   const streaming = phase !== 'idle'
   const waitingForProvider = phase === 'waiting_provider'
   const isThinking = phase === 'thinking'
-  const pendingStatus = waitingForProvider
+  const generateButtonLabel = waitingForProvider
     ? 'Waiting for provider...'
     : isThinking
       ? 'Thinking...'
-      : ''
+      : streaming
+        ? 'Writing...'
+        : 'Generate'
 
   useEffect(() => {
     apiFetch(`/api/worlds/${id}`)
@@ -103,7 +104,6 @@ export default function Generate() {
     setOutput('')
     setThinkingOutput('')
     setThinkingExpanded(false)
-    setPieceId(null)
     setError('')
 
     try {
@@ -157,13 +157,15 @@ export default function Generate() {
               setThinkingExpanded(false)
               setOutput(prev => prev + msg.content)
             } else if (msg.type === 'done') {
-              setPieceId(msg.pieceId)
+              if (Number.isInteger(msg.promptId)) {
+                setLoadedPromptId(msg.promptId)
+              }
               setPhase('idle')
             } else if (msg.type === 'error') {
               setError(msg.message)
               setPhase('idle')
             }
-          } catch {}
+          } catch { }
         }
       }
     } catch (e) {
@@ -173,7 +175,7 @@ export default function Generate() {
   }
 
   return (
-    <div className="min-h-screen page-width px-4 py-6">
+    <div className="min-h-screen page-width px-4 pb-32 pt-6">
       <div className="mb-4">
         <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to {worldName || 'Pieces'}
@@ -228,34 +230,7 @@ export default function Generate() {
         />
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          className="bg-rose hover:bg-rose-deep text-white rounded-sm px-5 py-2 font-medium transition-colors disabled:opacity-50"
-          onClick={generate}
-          disabled={streaming || loadingPrompt || !prompt.trim()}
-        >
-          {waitingForProvider ? 'Waiting for provider...' : isThinking ? 'Thinking...' : streaming ? 'Writing...' : 'Generate'}
-        </button>
-        {pieceId && (
-          <button
-            className="border border-rose text-rose hover:text-rose-deep hover:border-rose-deep rounded-sm px-5 py-2 font-medium transition-colors"
-            onClick={() => navigate(`/pieces/${pieceId}`)}
-          >
-            Read
-          </button>
-        )}
-      </div>
-
       {error && <p className="text-rose-deep text-sm mb-4">{error}</p>}
-
-      {pendingStatus && (
-        <div className="bg-paper border border-paper-3 rounded-md px-4 py-4">
-          <div className="flex items-center gap-3 text-ink-2">
-            <span className="h-2 w-2 rounded-full bg-rose animate-pulse" aria-hidden="true" />
-            <p className="text-sm">{pendingStatus}</p>
-          </div>
-        </div>
-      )}
 
       {thinkingOutput && (
         <details
@@ -270,11 +245,22 @@ export default function Generate() {
         </details>
       )}
 
-      {output && (
-        <div className="bg-paper border border-paper-3 rounded-md px-4 py-4">
-          <p className="prose whitespace-pre-wrap">{output}</p>
-        </div>
-      )}
+      <div className="text-sm h-175 overflow-y-auto rounded-md border border-paper-3 bg-paper-2 px-4 py-4 cursor-not-allowed">
+        {output ? (
+          <p className="prose whitespace-pre-wrap text-[15px]!">{output}</p>
+        ) : (
+          <p className="text-ink-4">Generated text will appear here.</p>
+        )}
+      </div>
+
+      <button
+        type="button"
+        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] min-h-14 min-w-36 rounded-full border border-rose bg-rose px-6 py-3 text-sm font-medium text-white shadow-[0_16px_34px_rgba(205,83,106,0.34)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.42)] focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
+        onClick={generate}
+        disabled={streaming || loadingPrompt || !prompt.trim()}
+      >
+        {generateButtonLabel}
+      </button>
     </div>
   )
 }

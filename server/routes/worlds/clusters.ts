@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db, pieces, promptClusters, prompts, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 
@@ -148,29 +148,15 @@ clusterRoutes.get('/:clusterId', authMiddleware, (c: any) => {
     })
     .from(prompts)
     .where(and(eq(prompts.cluster_id, clusterId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-    .orderBy(desc(prompts.updated_at), desc(prompts.id))
+    .orderBy(asc(prompts.created_at), asc(prompts.id))
     .all()
-
-  const items = promptRows.map(prompt => ({
-    ...prompt,
-    pieces: db
-      .select({
-        id: pieces.id,
-        preview: sql<string>`substr(${pieces.body}, 1, 200)`,
-        created_at: pieces.created_at,
-      })
-      .from(pieces)
-      .where(and(eq(pieces.prompt_id, prompt.id), eq(pieces.world_id, worldId), eq(pieces.user_id, userId)))
-      .orderBy(desc(pieces.created_at), desc(pieces.id))
-      .all(),
-  }))
 
   return c.json({
     cluster: {
       ...cluster,
-      title: items.find(prompt => prompt.id === cluster.latest_prompt_id)?.text ?? items[0]?.text ?? 'Untitled cluster',
+      title: promptRows.find(prompt => prompt.id === cluster.latest_prompt_id)?.text ?? promptRows[0]?.text ?? 'Untitled cluster',
     },
-    prompts: items,
+    prompts: promptRows,
   })
 })
 
