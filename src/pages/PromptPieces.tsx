@@ -71,11 +71,11 @@ export default function PromptPieces() {
     }
   }
 
-  if (loading) return <div className="p-6 text-ink-3">Loading...</div>
+  if (loading) return <div className="page-width p-6 text-ink-3">Loading...</div>
   if (!prompt) return null
 
   return (
-    <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
+    <div className="min-h-screen page-width px-4 py-6">
       <div className="mb-6">
         <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to {worldName}

@@ -51,7 +51,7 @@ export default function CreatePrompt() {
   }
 
   return (
-    <div className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
+    <div className="min-h-screen page-width px-4 py-6">
       <div className="mb-4">
         <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
           Back to {worldName || 'Pieces'}

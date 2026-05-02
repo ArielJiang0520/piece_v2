@@ -26,6 +26,16 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
   if (!world) return c.json({ error: 'Not found' }, 404)
 
   const { page, limit, offset } = pagination(c)
+  const total = db
+    .select({ value: sql<number>`count(*)` })
+    .from(promptClusters)
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .get()?.value ?? 0
+  const totalPieces = db
+    .select({ value: sql<number>`coalesce(sum(${promptClusters.piece_count}), 0)` })
+    .from(promptClusters)
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .get()?.value ?? 0
   const rows = db
     .select({
       id: promptClusters.id,
@@ -41,46 +51,66 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
     .offset(offset)
     .all()
 
-  const items = rows.slice(0, limit).map(cluster => {
-    const clusterPrompts = db
-      .select({
-        id: prompts.id,
-        text: prompts.text,
-        updated_at: prompts.updated_at,
-      })
-      .from(prompts)
-      .where(and(eq(prompts.cluster_id, cluster.id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-      .orderBy(desc(prompts.updated_at), desc(prompts.id))
-      .all()
-    const promptIds = clusterPrompts.map(prompt => prompt.id)
+  const pageRows = rows.slice(0, limit)
+  const clusterIds = pageRows.map(cluster => cluster.id)
+  const promptRows = clusterIds.length === 0 ? [] : db
+    .select({
+      id: prompts.id,
+      cluster_id: prompts.cluster_id,
+      text: prompts.text,
+      updated_at: prompts.updated_at,
+    })
+    .from(prompts)
+    .where(and(
+      inArray(prompts.cluster_id, clusterIds),
+      eq(prompts.world_id, worldId),
+      eq(prompts.user_id, userId),
+    ))
+    .orderBy(desc(prompts.updated_at), desc(prompts.id))
+    .all()
+  const latestPieceRows = clusterIds.length === 0 ? [] : db
+    .select({
+      cluster_id: prompts.cluster_id,
+      latest_piece_at: sql<number | null>`max(${pieces.created_at})`,
+    })
+    .from(pieces)
+    .innerJoin(prompts, eq(pieces.prompt_id, prompts.id))
+    .where(and(
+      inArray(prompts.cluster_id, clusterIds),
+      eq(pieces.world_id, worldId),
+      eq(pieces.user_id, userId),
+      eq(prompts.world_id, worldId),
+      eq(prompts.user_id, userId),
+    ))
+    .groupBy(prompts.cluster_id)
+    .all()
+
+  const promptsByCluster = new Map<number, typeof promptRows>()
+  for (const prompt of promptRows) {
+    if (prompt.cluster_id === null) continue
+    const clusterPrompts = promptsByCluster.get(prompt.cluster_id) ?? []
+    clusterPrompts.push(prompt)
+    promptsByCluster.set(prompt.cluster_id, clusterPrompts)
+  }
+
+  const latestPieceByCluster = new Map(
+    latestPieceRows
+      .filter(row => row.cluster_id !== null)
+      .map(row => [row.cluster_id!, row.latest_piece_at]),
+  )
+
+  const items = pageRows.map(cluster => {
+    const clusterPrompts = promptsByCluster.get(cluster.id) ?? []
     const latestPrompt = clusterPrompts.find(prompt => prompt.id === cluster.latest_prompt_id) ?? clusterPrompts[0]
 
     return {
       ...cluster,
       title: latestPrompt?.text ?? 'Untitled cluster',
-      prompt_ids: promptIds,
-      pieces: promptIds.length === 0 ? [] : db
-        .select({
-          id: pieces.id,
-          prompt_id: pieces.prompt_id,
-          prompt: prompts.text,
-          preview: sql<string>`substr(${pieces.body}, 1, 120)`,
-          created_at: pieces.created_at,
-        })
-        .from(pieces)
-        .innerJoin(prompts, eq(pieces.prompt_id, prompts.id))
-        .where(and(
-          inArray(pieces.prompt_id, promptIds),
-          eq(pieces.world_id, worldId),
-          eq(pieces.user_id, userId),
-        ))
-        .orderBy(desc(pieces.created_at), desc(pieces.id))
-        .limit(3)
-        .all(),
+      latest_piece_at: latestPieceByCluster.get(cluster.id) ?? null,
     }
   })
 
-  return c.json({ items, page, limit, hasMore: rows.length > limit })
+  return c.json({ items, page, limit, total, totalPieces, hasMore: rows.length > limit })
 })
 
 clusterRoutes.get('/:clusterId', authMiddleware, (c: any) => {

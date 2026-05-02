@@ -42,6 +42,8 @@
   --space-7: 48px;
   --space-8: 64px;
 
+  --page-max-width: 480px;
+
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 16px;
@@ -99,4 +101,10 @@ body {
   font-family: var(--font-sans);
   font-size: var(--text-ui);
   line-height: var(--leading-ui);
+}
+
+.page-width {
+  width: 100%;
+  max-width: var(--page-max-width);
+  margin-inline: auto;
 }

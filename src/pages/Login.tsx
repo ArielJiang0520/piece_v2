@@ -22,7 +22,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+      <div className="page-width">
         <h1 className="font-serif-zh text-2xl font-normal mb-8 text-ink">Piece</h1>
         <div className="flex flex-col gap-3">
           <input
