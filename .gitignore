@@ -1,7 +1,8 @@
 node_modules
 dist
-piece.db
-piece.db-*
 .env
-prod.db
-prod.db-*
+*.db
+*.db.*
+*.db-*
+*.csv
+old_csv

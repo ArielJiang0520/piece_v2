@@ -30,12 +30,27 @@ sqlite.run(`
     updated_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS prompt_clusters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    average_embedding TEXT,
+    prompt_count INTEGER NOT NULL DEFAULT 0,
+    piece_count INTEGER NOT NULL DEFAULT 0,
+    latest_prompt_id INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS prompts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE SET NULL,
     text TEXT NOT NULL,
+    embedding TEXT,
     piece_count INTEGER NOT NULL DEFAULT 0,
+    is_favorite INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -55,8 +70,15 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_pieces_prompt_created ON pieces(prompt_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_world_updated ON prompts(user_id, world_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_prompts_cluster ON prompts(cluster_id);
+  CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_updated ON prompt_clusters(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_worlds_user_updated ON worlds(user_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+`)
+
+sqlite.run(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_prompts_user_world_normalized_text_unique
+  ON prompts(user_id, world_id, rtrim(text, ' ' || char(9) || char(10) || char(13)));
 `)
 
 export const users = sqliteTable('users', {
@@ -102,6 +124,7 @@ export const prompts = sqliteTable('prompts', {
   text: text('text').notNull(),
   embedding: text('embedding'),
   piece_count: integer('piece_count').notNull().default(0),
+  is_favorite: integer('is_favorite').notNull().default(0),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })

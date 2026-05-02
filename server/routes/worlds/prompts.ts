@@ -4,6 +4,7 @@ import { db, worlds, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 import { MODELS, PROMPT_SUGGESTION_MODEL_ID } from '../../../src/config'
+import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 
 const promptRoutes = new Hono<{ Variables: Variables }>()
 const modelsById = new Map(MODELS.map(model => [model.id, model]))
@@ -56,8 +57,35 @@ promptRoutes.post('/', authMiddleware, async (c: any) => {
   if (!world) return c.json({ error: 'Not found' }, 404)
 
   const body = await c.req.json()
-  const text = typeof body.text === 'string' ? body.text.trim() : ''
+  const text = normalizePromptInput(body.text)
   if (!text) return c.json({ error: 'Prompt required' }, 400)
+
+  const existingPrompt = db
+    .select({
+      id: prompts.id,
+      cluster_id: prompts.cluster_id,
+      text: prompts.text,
+      piece_count: prompts.piece_count,
+      created_at: prompts.created_at,
+      updated_at: prompts.updated_at,
+    })
+    .from(prompts)
+    .where(and(promptTextMatchesNormalized(prompts.text, text), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+    .orderBy(desc(prompts.updated_at), desc(prompts.id))
+    .get()
+
+  if (existingPrompt) {
+    const clusterId = existingPrompt.cluster_id ?? await clusterPromptById(existingPrompt.id)
+
+    return c.json({
+      id: existingPrompt.id,
+      cluster_id: clusterId,
+      text: existingPrompt.text,
+      piece_count: existingPrompt.piece_count,
+      created_at: existingPrompt.created_at,
+      updated_at: existingPrompt.updated_at,
+    })
+  }
 
   const now = Date.now()
   const prompt = db.insert(prompts).values({

@@ -20,7 +20,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<ProtectedRoute><Worlds /></ProtectedRoute>} />
+      <Route path="/" element={<Navigate to="/worlds" replace />} />
+      <Route path="/worlds" element={<ProtectedRoute><Worlds /></ProtectedRoute>} />
       <Route path="/worlds/:id" element={<ProtectedRoute><WorldPieces /></ProtectedRoute>} />
       <Route path="/worlds/:id/details" element={<ProtectedRoute><WorldDetail /></ProtectedRoute>} />
       <Route path="/worlds/:id/clusters/:clusterId" element={<ProtectedRoute><ClusterPieces /></ProtectedRoute>} />

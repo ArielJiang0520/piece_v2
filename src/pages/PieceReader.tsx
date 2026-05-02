@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api'
 import { relativeTime } from '../utils/time'
 
@@ -16,25 +17,41 @@ interface Piece {
 export default function PieceReader() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [piece, setPiece] = useState<Piece | null>(null)
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  useEffect(() => {
-    apiFetch(`/api/pieces/${id}`)
-      .then(setPiece)
-      .catch(() => navigate('/'))
-      .finally(() => setLoading(false))
-  }, [id, navigate])
+  const pieceQuery = useQuery({
+    queryKey: ['piece', id],
+    queryFn: () => apiFetch(`/api/pieces/${id}`) as Promise<Piece>,
+    enabled: !!id,
+  })
 
-  async function deletePiece() {
-    if (!piece) return
-    await apiFetch(`/api/pieces/${id}`, { method: 'DELETE' })
-    navigate(`/worlds/${piece.world_id}`)
+  useEffect(() => {
+    if (pieceQuery.isError) navigate('/')
+  }, [pieceQuery.isError, navigate])
+
+  const deleteMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/pieces/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      const piece = pieceQuery.data
+      if (!piece) return
+      const worldId = String(piece.world_id)
+      queryClient.removeQueries({ queryKey: ['piece', id] })
+      queryClient.invalidateQueries({ queryKey: ['world', worldId] })
+      queryClient.invalidateQueries({ queryKey: ['world-clusters', worldId] })
+      queryClient.invalidateQueries({ queryKey: ['cluster', worldId] })
+      queryClient.invalidateQueries({ queryKey: ['prompt', worldId, String(piece.prompt_id)] })
+      navigate(`/worlds/${piece.world_id}`)
+    },
+  })
+
+  function deletePiece() {
+    if (!pieceQuery.data || deleteMutation.isPending) return
+    deleteMutation.mutate()
   }
 
-  if (loading) return <div className="page-width p-6 text-ink-3">Loading...</div>
-  if (!piece) return null
+  if (!pieceQuery.data) return <div className="page-width p-6 text-ink-3">Loading...</div>
+  const piece = pieceQuery.data
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">

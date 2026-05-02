@@ -1,53 +1,95 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api'
+
+interface World {
+  name: string
+  summary: string
+  body: string
+}
 
 export default function WorldDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [summary, setSummary] = useState('')
   const [body, setBody] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [initialized, setInitialized] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
+  const worldQuery = useQuery({
+    queryKey: ['world', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<World>,
+    enabled: !!id,
+  })
+
   useEffect(() => {
-    apiFetch(`/api/worlds/${id}`)
-      .then(w => { setName(w.name); setSummary(w.summary); setBody(w.body) })
-      .catch(() => navigate('/'))
-      .finally(() => setLoading(false))
-  }, [id])
-
-  async function saveName() {
-    if (!name.trim()) return
-    await apiFetch(`/api/worlds/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name: name.trim() }),
-    }).catch(console.error)
-  }
-
-  async function saveBody() {
-    setSaving(true)
-    try {
-      await apiFetch(`/api/worlds/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ summary, body }),
-      })
-      navigate(`/worlds/${id}`)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setSaving(false)
+    if (worldQuery.data && !initialized) {
+      setName(worldQuery.data.name)
+      setSummary(worldQuery.data.summary)
+      setBody(worldQuery.data.body)
+      setInitialized(true)
     }
+  }, [worldQuery.data, initialized])
+
+  useEffect(() => {
+    if (worldQuery.isError) navigate('/')
+  }, [worldQuery.isError, navigate])
+
+  function invalidateWorld() {
+    queryClient.invalidateQueries({ queryKey: ['world', id] })
+    queryClient.invalidateQueries({ queryKey: ['worlds'] })
+    queryClient.invalidateQueries({ queryKey: ['world-clusters', id] })
   }
 
-  async function deleteWorld() {
-    await apiFetch(`/api/worlds/${id}`, { method: 'DELETE' })
-    navigate('/')
+  const saveNameMutation = useMutation({
+    mutationFn: (next: string) =>
+      apiFetch(`/api/worlds/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: next }),
+      }),
+    onSuccess: invalidateWorld,
+  })
+
+  const saveBodyMutation = useMutation({
+    mutationFn: (payload: { summary: string; body: string }) =>
+      apiFetch(`/api/worlds/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      invalidateWorld()
+      navigate(`/worlds/${id}`)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/worlds/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['worlds'] })
+      queryClient.removeQueries({ queryKey: ['world', id] })
+      queryClient.removeQueries({ queryKey: ['world-clusters', id] })
+      navigate('/')
+    },
+  })
+
+  function saveName() {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    saveNameMutation.mutate(trimmed)
   }
 
-  if (loading) return <div className="page-width p-6 text-ink-3">Loading...</div>
+  function saveBody() {
+    saveBodyMutation.mutate({ summary, body })
+  }
+
+  function deleteWorld() {
+    deleteMutation.mutate()
+  }
+
+  if (!initialized) return <div className="page-width p-6 text-ink-3">Loading...</div>
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
@@ -93,9 +135,9 @@ export default function WorldDetail() {
         <button
           className="bg-rose hover:bg-rose-deep text-white rounded-sm px-4 py-2 font-medium transition-colors disabled:opacity-50"
           onClick={saveBody}
-          disabled={saving}
+          disabled={saveBodyMutation.isPending}
         >
-          {saving ? 'Saving...' : 'Save'}
+          {saveBodyMutation.isPending ? 'Saving...' : 'Save'}
         </button>
       </div>
 

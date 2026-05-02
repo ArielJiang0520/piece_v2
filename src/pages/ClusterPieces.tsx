@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api'
 import { diffPromptText } from '../utils/promptDiff'
-import { relativeTime } from '../utils/time'
+import PieceCountIndicator from '../ui/PieceCountIndicator'
+import RelativeTimeStatus from '../ui/RelativeTimeStatus'
 
 interface Cluster {
   id: number
@@ -25,17 +27,49 @@ interface ClusterResponse {
   prompts: ClusterPrompt[]
 }
 
-function countLabel(count: number, singular: string) {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`
+function parsePageParam(value: string | null) {
+  const page = Number(value ?? '1')
+  return Number.isInteger(page) && page > 0 ? page : 1
+}
+
+function worldHref(id: string | undefined, worldPage: number) {
+  return `/worlds/${id}${worldPage > 1 ? `?page=${worldPage}` : ''}`
+}
+
+function contextSearch(worldPage: number) {
+  return worldPage > 1 ? `?worldPage=${worldPage}` : ''
 }
 
 export default function ClusterPieces() {
   const { id, clusterId } = useParams<{ id: string; clusterId: string }>()
   const navigate = useNavigate()
-  const [worldName, setWorldName] = useState('')
-  const [cluster, setCluster] = useState<Cluster | null>(null)
-  const [prompts, setPrompts] = useState<ClusterPrompt[]>([])
-  const [loading, setLoading] = useState(true)
+  const [searchParams] = useSearchParams()
+  const worldPage = parsePageParam(searchParams.get('worldPage'))
+  const backHref = worldHref(id, worldPage)
+  const detailSearch = contextSearch(worldPage)
+
+  const worldQuery = useQuery({
+    queryKey: ['world', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string }>,
+    enabled: !!id,
+  })
+
+  const clusterQuery = useQuery({
+    queryKey: ['cluster', id, clusterId],
+    queryFn: () =>
+      apiFetch(`/api/worlds/${id}/clusters/${clusterId}`) as Promise<ClusterResponse>,
+    enabled: !!id && !!clusterId,
+  })
+
+  const errored = worldQuery.isError || clusterQuery.isError
+  useEffect(() => {
+    if (errored) navigate(backHref)
+  }, [errored, navigate, backHref])
+
+  const worldName = worldQuery.data?.name ?? ''
+  const cluster = clusterQuery.data?.cluster ?? null
+  const prompts = clusterQuery.data?.prompts ?? []
+
   const promptDiffs = useMemo(
     () => prompts.map((prompt, index) => {
       const previousPrompt = prompts[index - 1]
@@ -44,28 +78,15 @@ export default function ClusterPieces() {
     [prompts],
   )
 
-  useEffect(() => {
-    setLoading(true)
-    Promise.all([
-      apiFetch(`/api/worlds/${id}`),
-      apiFetch(`/api/worlds/${id}/clusters/${clusterId}`),
-    ])
-      .then(([world, response]: [{ name: string }, ClusterResponse]) => {
-        setWorldName(world.name)
-        setCluster(response.cluster)
-        setPrompts(response.prompts)
-      })
-      .catch(() => navigate(`/worlds/${id}`))
-      .finally(() => setLoading(false))
-  }, [id, clusterId, navigate])
-
-  if (loading) return <div className="page-width p-6 text-ink-3">Loading...</div>
+  if (!worldQuery.data || !clusterQuery.data) {
+    return <div className="page-width p-6 text-ink-3">Loading...</div>
+  }
   if (!cluster) return null
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
       <div className="mb-6">
-        <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
+        <Link to={backHref} className="text-rose hover:text-rose-deep text-sm">
           Back to {worldName || 'Pieces'}
         </Link>
       </div>
@@ -84,14 +105,14 @@ export default function ClusterPieces() {
                   className="overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_1px_0_rgba(26,18,16,0.02)]"
                 >
                   <Link
-                    to={`/worlds/${id}/prompts/${prompt.id}`}
-                    className="block px-5 py-5 transition-colors hover:bg-paper-2/45 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose/30"
+                    to={`/worlds/${id}/prompts/${prompt.id}${detailSearch}`}
+                    className="block px-5 py-5 transition-colors hover:bg-paper-2/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink-4/35"
                   >
-                    <div className="mb-4 flex items-center justify-between gap-4 text-xs text-ink-4">
-                      <span>{countLabel(prompt.piece_count, 'piece')}</span>
-                      <span className="shrink-0">Inserted {relativeTime(prompt.updated_at)}</span>
+                    <div className="flex items-center justify-between gap-4 text-xs leading-none text-ink-4">
+                      <RelativeTimeStatus timestamp={prompt.updated_at} emptyLabel="No pieces" />
+                      <PieceCountIndicator count={prompt.piece_count} className="shrink-0" />
                     </div>
-                    <h2 className="font-serif-zh text-sm font-normal leading-6 text-ink-2">
+                    <h2 className="mt-3 font-serif-zh text-sm font-normal leading-6 text-ink-2">
                       {prompt.text}
                     </h2>
 
@@ -111,13 +132,11 @@ export default function ClusterPieces() {
                         )}
                       </div>
                     )}
-
-
                   </Link>
 
                   <Link
                     to={`/worlds/${id}/generate?promptId=${prompt.id}`}
-                    className="block w-full border-t border-paper-3 text-paper-2 px-4 py-2 text-center text-xs font-medium bg-ink-3/80 transition-colors hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose/30"
+                    className="block w-full border-t border-paper-3 text-paper-2 px-4 py-2 text-center text-xs font-medium bg-ink-3/80 transition-colors hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink-4/35"
                   >
                     Use this prompt
                   </Link>

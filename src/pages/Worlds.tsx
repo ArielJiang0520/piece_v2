@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { apiFetch } from '../api'
 import RelativeTimeStatus from '../ui/RelativeTimeStatus'
@@ -22,29 +23,32 @@ function countLabel(count: number, singular: string) {
 export default function Worlds() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [worlds, setWorlds] = useState<World[]>([])
+  const queryClient = useQueryClient()
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
-  const [creating, setCreating] = useState(false)
 
-  useEffect(() => {
-    apiFetch('/api/worlds').then(setWorlds).catch(console.error)
-  }, [])
+  const worldsQuery = useQuery({
+    queryKey: ['worlds'],
+    queryFn: () => apiFetch('/api/worlds') as Promise<World[]>,
+  })
+  const worlds = worldsQuery.data ?? []
 
-  async function createWorld() {
-    if (!newName.trim()) return
-    setCreating(true)
-    try {
-      const world = await apiFetch('/api/worlds', {
+  const createMutation = useMutation({
+    mutationFn: (name: string) =>
+      apiFetch('/api/worlds', {
         method: 'POST',
-        body: JSON.stringify({ name: newName.trim() }),
-      })
+        body: JSON.stringify({ name }),
+      }) as Promise<World>,
+    onSuccess: world => {
+      queryClient.invalidateQueries({ queryKey: ['worlds'] })
       navigate(`/worlds/${world.id}`)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setCreating(false)
-    }
+    },
+  })
+
+  function createWorld() {
+    const trimmed = newName.trim()
+    if (!trimmed || createMutation.isPending) return
+    createMutation.mutate(trimmed)
   }
 
   async function handleLogout() {
@@ -90,7 +94,7 @@ export default function Worlds() {
               <button
                 className="rounded-sm bg-rose px-4 py-2 font-medium text-white transition-colors hover:bg-rose-deep disabled:opacity-50"
                 onClick={createWorld}
-                disabled={creating}
+                disabled={createMutation.isPending}
               >
                 Create
               </button>

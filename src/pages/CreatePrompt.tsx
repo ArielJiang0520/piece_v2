@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api'
 
 interface SuggestionsResponse {
@@ -9,18 +10,22 @@ interface SuggestionsResponse {
 export default function CreatePrompt() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [worldName, setWorldName] = useState('')
   const [direction, setDirection] = useState('')
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [previousPrompts, setPreviousPrompts] = useState<string[]>([])
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
+  const worldQuery = useQuery({
+    queryKey: ['world', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string }>,
+    enabled: !!id,
+  })
+  const worldName = worldQuery.data?.name ?? ''
+
   useEffect(() => {
-    apiFetch(`/api/worlds/${id}`)
-      .then(w => setWorldName(w.name))
-      .catch(() => navigate('/'))
-  }, [id, navigate])
+    if (worldQuery.isError) navigate('/')
+  }, [worldQuery.isError, navigate])
 
   async function generateSuggestions() {
     if (generating) return

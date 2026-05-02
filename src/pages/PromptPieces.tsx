@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api'
 import { relativeTime } from '../utils/time'
 
@@ -33,58 +34,85 @@ interface DeletePromptResponse {
 
 const PAGE_SIZE = 30
 
+function parsePageParam(value: string | null) {
+  const page = Number(value ?? '1')
+  return Number.isInteger(page) && page > 0 ? page : 1
+}
+
+function worldHref(id: string | undefined, worldPage: number) {
+  return `/worlds/${id}${worldPage > 1 ? `?page=${worldPage}` : ''}`
+}
+
 export default function PromptPieces() {
   const { id, promptId } = useParams<{ id: string; promptId: string }>()
   const navigate = useNavigate()
-  const [worldName, setWorldName] = useState('')
-  const [prompt, setPrompt] = useState<Prompt | null>(null)
-  const [pieces, setPieces] = useState<Piece[]>([])
+  const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const worldPage = parsePageParam(searchParams.get('worldPage'))
+  const backHref = worldHref(id, worldPage)
   const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
+  const worldQuery = useQuery({
+    queryKey: ['world', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string }>,
+    enabled: !!id,
+  })
+
+  const promptQuery = useQuery({
+    queryKey: ['prompt', id, promptId, page],
+    queryFn: () =>
+      apiFetch(`/api/worlds/${id}/prompts/${promptId}?page=${page}&limit=${PAGE_SIZE}`) as Promise<PromptPiecesResponse>,
+    enabled: !!id && !!promptId,
+    placeholderData: previous => previous,
+  })
+
+  const errored = worldQuery.isError || promptQuery.isError
   useEffect(() => {
-    setLoading(true)
-    Promise.all([
-      apiFetch(`/api/worlds/${id}`),
-      apiFetch(`/api/worlds/${id}/prompts/${promptId}?page=${page}&limit=${PAGE_SIZE}`),
-    ])
-      .then(([world, response]: [{ name: string }, PromptPiecesResponse]) => {
-        setWorldName(world.name)
-        setPrompt(response.prompt)
-        setPieces(response.pieces)
-        setHasMore(response.hasMore)
-      })
-      .catch(() => navigate(`/worlds/${id}`))
-      .finally(() => setLoading(false))
-  }, [id, promptId, page, navigate])
+    if (errored) navigate(backHref)
+  }, [errored, navigate, backHref])
 
-  async function deletePrompt() {
-    if (!prompt || deleting) return
-
-    setDeleting(true)
-    setDeleteError('')
-
-    try {
-      const response = await apiFetch(`/api/worlds/${id}/prompts/${prompt.id}`, { method: 'DELETE' }) as DeletePromptResponse
-      const clusterId = response.cluster_id ?? prompt.cluster_id
-      navigate(clusterId ? `/worlds/${id}/clusters/${clusterId}` : `/worlds/${id}`)
-    } catch (e) {
+  const deleteMutation = useMutation({
+    mutationFn: (promptIdNum: number) =>
+      apiFetch(`/api/worlds/${id}/prompts/${promptIdNum}`, { method: 'DELETE' }) as Promise<DeletePromptResponse>,
+    onSuccess: (response, promptIdNum) => {
+      const fallbackClusterId = promptQuery.data?.prompt.cluster_id ?? null
+      const clusterId = response.cluster_id ?? fallbackClusterId
+      queryClient.invalidateQueries({ queryKey: ['world', id] })
+      queryClient.invalidateQueries({ queryKey: ['world-clusters', id] })
+      if (clusterId != null) {
+        queryClient.invalidateQueries({ queryKey: ['cluster', id, String(clusterId)] })
+      }
+      queryClient.removeQueries({ queryKey: ['prompt', id, String(promptIdNum)] })
+      const contextSearch = worldPage > 1 ? `?worldPage=${worldPage}` : ''
+      navigate(clusterId != null ? `/worlds/${id}/clusters/${clusterId}${contextSearch}` : backHref)
+    },
+    onError: e => {
       setDeleteError(e instanceof Error ? e.message : 'Could not delete prompt')
-      setDeleting(false)
-    }
+    },
+  })
+
+  const worldName = worldQuery.data?.name ?? ''
+  const prompt = promptQuery.data?.prompt ?? null
+  const pieces = promptQuery.data?.pieces ?? []
+  const hasMore = promptQuery.data?.hasMore ?? false
+
+  function deletePrompt() {
+    if (!prompt || deleteMutation.isPending) return
+    setDeleteError('')
+    deleteMutation.mutate(prompt.id)
   }
 
-  if (loading) return <div className="page-width p-6 text-ink-3">Loading...</div>
+  if (!worldQuery.data || !promptQuery.data) {
+    return <div className="page-width p-6 text-ink-3">Loading...</div>
+  }
   if (!prompt) return null
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
       <div className="mb-6">
-        <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
+        <Link to={backHref} className="text-rose hover:text-rose-deep text-sm">
           Back to {worldName}
         </Link>
       </div>
@@ -98,7 +126,7 @@ export default function PromptPieces() {
             <button
               className="border border-paper-3 text-ink-3 hover:text-rose-deep hover:border-rose rounded-sm px-4 py-2 font-medium transition-colors text-sm disabled:opacity-50"
               onClick={() => setConfirmDelete(true)}
-              disabled={deleting}
+              disabled={deleteMutation.isPending}
             >
               Delete prompt
             </button>
@@ -120,14 +148,14 @@ export default function PromptPieces() {
             <button
               className="bg-rose-deep hover:bg-rose text-white rounded-sm px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
               onClick={deletePrompt}
-              disabled={deleting}
+              disabled={deleteMutation.isPending}
             >
-              {deleting ? 'Deleting...' : 'Yes, delete'}
+              {deleteMutation.isPending ? 'Deleting...' : 'Yes, delete'}
             </button>
             <button
               className="text-ink-3 hover:text-ink text-sm disabled:opacity-50"
               onClick={() => setConfirmDelete(false)}
-              disabled={deleting}
+              disabled={deleteMutation.isPending}
             >
               Cancel
             </button>

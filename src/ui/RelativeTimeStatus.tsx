@@ -1,10 +1,12 @@
 import { relativeTime } from '../utils/time'
 
+const ONE_HOUR_MS = 60 * 60 * 1e3
+
 function recencyClasses(timestamp: number | null | undefined) {
   if (!timestamp) return { text: 'text-ink-4', dot: 'bg-ink-4/60' }
 
-  // const age = Date.now() - timestamp
-  // if (age < THREE_HOUR_MS) return { text: 'text-emerald-800/65', dot: 'bg-emerald-600/45' }
+  const age = Date.now() - timestamp
+  if (age < ONE_HOUR_MS) return { text: 'text-emerald-800/65', dot: 'bg-emerald-600/45' }
   // if (age < SEVEN_DAYS_MS) return { text: 'text-amber-800/65', dot: 'bg-amber-600/45' }
   return { text: 'text-ink-4', dot: 'bg-ink-4/60' }
 }

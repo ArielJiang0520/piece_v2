@@ -14,7 +14,7 @@ export default function Login() {
     try {
       if (action === 'login') await login(username, password)
       else await signup(username, password)
-      navigate('/')
+      navigate('/worlds')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
     }

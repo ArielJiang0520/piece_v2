@@ -5,9 +5,15 @@ import { db, worlds, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { MODELS } from '../../../src/config'
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
+import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
 const modelsById = new Map(MODELS.map(model => [model.id, model]))
+const activeGenerations = new Map<string, AbortController>()
+
+function generationKey(userId: number, worldId: number, generationId: string) {
+  return `${userId}:${worldId}:${generationId}`
+}
 
 generateRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = c.get('userId') as number
@@ -15,10 +21,12 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const world = db.select().from(worlds).where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId))).get()
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { prompt, promptId, model: requestedModel, temperature: requestedTemperature } = await c.req.json()
+  const { prompt, promptId, model: requestedModel, temperature: requestedTemperature, useThinking, generationId } = await c.req.json()
 
-  const promptText = typeof prompt === 'string' ? prompt.trim() : ''
+  const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
+  const generationToken = typeof generationId === 'string' ? generationId.trim() : ''
+  if (!generationToken) return c.json({ error: 'Generation id required' }, 400)
 
   let existingPromptId: number | undefined
   let existingPromptClusterId: number | null = null
@@ -33,7 +41,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
       .get()
     if (!existingPrompt) return c.json({ error: 'Prompt not found' }, 404)
 
-    if (existingPrompt.text === promptText) {
+    if (existingPrompt.text.trim() === promptText) {
       existingPromptId = existingPrompt.id
       existingPromptClusterId = existingPrompt.cluster_id
     }
@@ -43,7 +51,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     const matchingPrompt = db
       .select({ id: prompts.id, cluster_id: prompts.cluster_id })
       .from(prompts)
-      .where(and(eq(prompts.text, promptText), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+      .where(and(promptTextMatchesNormalized(prompts.text, promptText), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
       .orderBy(desc(prompts.updated_at), desc(prompts.id))
       .get()
 
@@ -69,11 +77,20 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
   return streamSSE(c, async (stream) => {
     let accumulated = ''
+    const controller = new AbortController()
+    const key = generationKey(userId, worldId, generationToken)
+    activeGenerations.get(key)?.abort()
+    activeGenerations.set(key, controller)
+
+    const abortOpenRouter = () => controller.abort()
+    c.req.raw.signal.addEventListener('abort', abortOpenRouter, { once: true })
+
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
@@ -81,7 +98,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
         body: JSON.stringify({
           model,
           temperature,
-          reasoning: modelOption.reasoning,
+          reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
           stream: true,
           provider: { sort: 'throughput' },
           messages: [
@@ -181,10 +198,37 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
         }
       }
     } catch (err) {
+      if (controller.signal.aborted) return
+
       const msg = err instanceof Error ? err.message : 'Unknown error'
       await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: msg }) })
+    } finally {
+      c.req.raw.signal.removeEventListener('abort', abortOpenRouter)
+      if (activeGenerations.get(key) === controller) {
+        activeGenerations.delete(key)
+      }
     }
   })
+})
+
+generateRoutes.post('/stop', authMiddleware, async (c: any) => {
+  const userId = c.get('userId') as number
+  const worldId = parseInt(c.req.param('id'))
+  const world = db.select({ id: worlds.id }).from(worlds).where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId))).get()
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  let body: any = {}
+  try {
+    body = await c.req.json()
+  } catch { }
+
+  const generationToken = typeof body.generationId === 'string' ? body.generationId.trim() : ''
+  if (!generationToken) return c.json({ error: 'Generation id required' }, 400)
+
+  const controller = activeGenerations.get(generationKey(userId, worldId, generationToken))
+  controller?.abort()
+
+  return c.json({ stopped: Boolean(controller) })
 })
 
 export default generateRoutes
