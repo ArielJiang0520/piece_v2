@@ -37,7 +37,6 @@ export default function App() {
         <Route path="/worlds/:id/clusters/:clusterId" element={<ProtectedLayout><Cluster /></ProtectedLayout>} />
         <Route path="/worlds/:id/prompts/new" element={<ProtectedLayout><PromptNew /></ProtectedLayout>} />
         <Route path="/worlds/:id/prompts/:promptId" element={<ProtectedLayout><Prompt /></ProtectedLayout>} />
-        <Route path="/worlds/:id/explore" element={<ProtectedLayout><WorldExplore /></ProtectedLayout>} />
         <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />
         <Route path="/pieces/:id" element={<ProtectedLayout><Piece /></ProtectedLayout>} />
       </Routes>
