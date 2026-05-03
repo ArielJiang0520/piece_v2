@@ -25,7 +25,7 @@ export default function WorldList() {
   const queryClient = useQueryClient()
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
-  useTopNavConfig({ title: 'Worlds' })
+  useTopNavConfig({ title: 'Home' })
 
   const worldsQuery = useQuery({
     queryKey: ['worlds'],

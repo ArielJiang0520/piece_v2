@@ -56,10 +56,6 @@ export default function Cluster() {
 
   useTopNavConfig({ title: 'Prompt Variations', backHref })
 
-  useEffect(() => {
-    if (!restoreStateRef.current) window.scrollTo({ top: 0 })
-  }, [id, clusterId])
-
   const worldQuery = useQuery({
     queryKey: ['world', id],
     queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string }>,

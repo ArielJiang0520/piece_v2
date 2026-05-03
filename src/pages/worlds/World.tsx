@@ -276,7 +276,14 @@ export default function World() {
           </Link>
         </header>
 
-        <div className="mt-9">
+        <Link
+          to={`/worlds/${id}/explore`}
+          className="mt-5 flex w-full items-center justify-center rounded-md bg-rose py-3 text-sm font-medium text-white transition-colors hover:bg-rose-deep focus:outline-none focus:ring-2 focus:ring-rose/40"
+        >
+          Explore
+        </Link>
+
+        <div className="mt-4">
           <div className="relative">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" />
             <input
