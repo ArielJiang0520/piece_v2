@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db, pieces, promptClusters, prompts, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
+import { cosineSimilarity, embedPrompt, parseEmbedding } from '../../prompt-clustering'
 
 const clusterRoutes = new Hono<{ Variables: Variables }>()
 
@@ -19,41 +20,28 @@ function pagination(c: any, fallbackLimit = 20) {
   return { page, limit, offset: (page - 1) * limit }
 }
 
-clusterRoutes.get('/', authMiddleware, (c: any) => {
-  const userId = c.get('userId') as number
-  const worldId = parseInt(c.req.param('id'))
-  const world = requireWorld(userId, worldId)
-  if (!world) return c.json({ error: 'Not found' }, 404)
+const SORT_ORDERS = {
+  latest_updated: [desc(promptClusters.updated_at), desc(promptClusters.id)],
+  oldest_updated: [asc(promptClusters.updated_at), asc(promptClusters.id)],
+  most_pieces: [desc(promptClusters.piece_count), desc(promptClusters.updated_at), desc(promptClusters.id)],
+  most_variations: [desc(promptClusters.prompt_count), desc(promptClusters.updated_at), desc(promptClusters.id)],
+} as const
 
-  const { page, limit, offset } = pagination(c)
-  const total = db
-    .select({ value: sql<number>`count(*)` })
-    .from(promptClusters)
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
-    .get()?.value ?? 0
-  const totalPieces = db
-    .select({ value: sql<number>`coalesce(sum(${promptClusters.piece_count}), 0)` })
-    .from(promptClusters)
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
-    .get()?.value ?? 0
-  const rows = db
-    .select({
-      id: promptClusters.id,
-      prompt_count: promptClusters.prompt_count,
-      piece_count: promptClusters.piece_count,
-      latest_prompt_id: promptClusters.latest_prompt_id,
-      updated_at: promptClusters.updated_at,
-    })
-    .from(promptClusters)
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
-    .orderBy(desc(promptClusters.updated_at), desc(promptClusters.id))
-    .limit(limit + 1)
-    .offset(offset)
-    .all()
+type SortKey = keyof typeof SORT_ORDERS
 
-  const pageRows = rows.slice(0, limit)
-  const clusterIds = pageRows.map(cluster => cluster.id)
-  const promptRows = clusterIds.length === 0 ? [] : db
+interface ClusterRow {
+  id: number
+  prompt_count: number
+  piece_count: number
+  latest_prompt_id: number | null
+  updated_at: number
+}
+
+function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow[]) {
+  const clusterIds = clusterRows.map(cluster => cluster.id)
+  if (clusterIds.length === 0) return clusterRows.map(cluster => ({ ...cluster, title: 'Untitled cluster', latest_piece_at: null as number | null }))
+
+  const promptRows = db
     .select({
       id: prompts.id,
       cluster_id: prompts.cluster_id,
@@ -68,7 +56,7 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
     ))
     .orderBy(desc(prompts.updated_at), desc(prompts.id))
     .all()
-  const latestPieceRows = clusterIds.length === 0 ? [] : db
+  const latestPieceRows = db
     .select({
       cluster_id: prompts.cluster_id,
       latest_piece_at: sql<number | null>`max(${pieces.created_at})`,
@@ -99,16 +87,108 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
       .map(row => [row.cluster_id!, row.latest_piece_at]),
   )
 
-  const items = pageRows.map(cluster => {
+  return clusterRows.map(cluster => {
     const clusterPrompts = promptsByCluster.get(cluster.id) ?? []
     const latestPrompt = clusterPrompts.find(prompt => prompt.id === cluster.latest_prompt_id) ?? clusterPrompts[0]
-
     return {
       ...cluster,
       title: latestPrompt?.text ?? 'Untitled cluster',
       latest_piece_at: latestPieceByCluster.get(cluster.id) ?? null,
     }
   })
+}
+
+const SEARCH_LIMIT = 50
+
+clusterRoutes.get('/search', authMiddleware, async (c: any) => {
+  const userId = c.get('userId') as number
+  const worldId = parseInt(c.req.param('id'))
+  const world = requireWorld(userId, worldId)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const query = (c.req.query('q') ?? '').trim()
+  if (!query) return c.json({ items: [], total: 0, query, hasMore: false })
+
+  const queryEmbedding = await embedPrompt(query)
+  if (!queryEmbedding) return c.json({ error: 'Embedding failed' }, 503)
+
+  const clusters = db
+    .select({
+      id: promptClusters.id,
+      average_embedding: promptClusters.average_embedding,
+      prompt_count: promptClusters.prompt_count,
+      piece_count: promptClusters.piece_count,
+      latest_prompt_id: promptClusters.latest_prompt_id,
+      updated_at: promptClusters.updated_at,
+    })
+    .from(promptClusters)
+    .where(and(
+      eq(promptClusters.user_id, userId),
+      eq(promptClusters.world_id, worldId),
+      isNotNull(promptClusters.average_embedding),
+    ))
+    .all()
+
+  const scored: { cluster: ClusterRow; score: number }[] = []
+  for (const cluster of clusters) {
+    const embedding = parseEmbedding(cluster.average_embedding)
+    if (!embedding) continue
+    scored.push({
+      cluster: {
+        id: cluster.id,
+        prompt_count: cluster.prompt_count,
+        piece_count: cluster.piece_count,
+        latest_prompt_id: cluster.latest_prompt_id,
+        updated_at: cluster.updated_at,
+      },
+      score: cosineSimilarity(queryEmbedding, embedding),
+    })
+  }
+  scored.sort((a, b) => b.score - a.score)
+  const top = scored.slice(0, SEARCH_LIMIT)
+
+  const enriched = enrichClusters(userId, worldId, top.map(s => s.cluster))
+  const items = enriched.map((cluster, i) => ({ ...cluster, score: top[i]!.score }))
+
+  return c.json({ items, total: scored.length, query, hasMore: false })
+})
+
+clusterRoutes.get('/', authMiddleware, (c: any) => {
+  const userId = c.get('userId') as number
+  const worldId = parseInt(c.req.param('id'))
+  const world = requireWorld(userId, worldId)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const { page, limit, offset } = pagination(c)
+  const sortParam = c.req.query('sort') as string | undefined
+  const sortKey: SortKey = sortParam && sortParam in SORT_ORDERS ? sortParam as SortKey : 'latest_updated'
+  const total = db
+    .select({ value: sql<number>`count(*)` })
+    .from(promptClusters)
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .get()?.value ?? 0
+  const totalPieces = db
+    .select({ value: sql<number>`coalesce(sum(${promptClusters.piece_count}), 0)` })
+    .from(promptClusters)
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .get()?.value ?? 0
+  const rows = db
+    .select({
+      id: promptClusters.id,
+      prompt_count: promptClusters.prompt_count,
+      piece_count: promptClusters.piece_count,
+      latest_prompt_id: promptClusters.latest_prompt_id,
+      updated_at: promptClusters.updated_at,
+    })
+    .from(promptClusters)
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .orderBy(...SORT_ORDERS[sortKey])
+    .limit(limit + 1)
+    .offset(offset)
+    .all()
+
+  const pageRows = rows.slice(0, limit)
+  const items = enrichClusters(userId, worldId, pageRows)
 
   return c.json({ items, page, limit, total, totalPieces, hasMore: rows.length > limit })
 })

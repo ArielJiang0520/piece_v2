@@ -77,7 +77,7 @@ function averageEmbeddings(embeddings: number[][]) {
   return average
 }
 
-async function embedPrompt(text: string) {
+export async function embedPrompt(text: string) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
     console.warn('OPENROUTER_API_KEY is not set; creating singleton prompt cluster without embedding')

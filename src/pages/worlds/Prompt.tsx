@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import { relativeTime } from '../../utils/time'
+import { useTopNavConfig } from '../../ui/TopNav'
 
 interface Prompt {
   id: number
@@ -38,7 +39,7 @@ export default function Prompt() {
   const { id, promptId } = useParams<{ id: string; promptId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const backHref = `/worlds/${id}`
+  const backHref = id ? `/worlds/${id}` : '/worlds'
   const [page, setPage] = useState(1)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -85,10 +86,14 @@ export default function Prompt() {
     },
   })
 
-  const worldName = worldQuery.data?.name ?? ''
   const prompt = promptQuery.data?.prompt ?? null
   const pieces = promptQuery.data?.pieces ?? []
   const hasMore = promptQuery.data?.hasMore ?? false
+
+  const navBackHref = prompt?.cluster_id != null
+    ? `/worlds/${id}/clusters/${prompt.cluster_id}`
+    : backHref
+  useTopNavConfig({ title: 'Prompt', backHref: navBackHref })
 
   function deletePrompt() {
     if (!prompt || deleteMutation.isPending) return
@@ -103,12 +108,6 @@ export default function Prompt() {
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-      <div className="mb-6">
-        <Link to={backHref} className="text-rose hover:text-rose-deep text-sm">
-          Back to {worldName}
-        </Link>
-      </div>
-
       <header className="mb-6">
         <div className="flex items-start justify-between gap-4 mb-2">
           <p className="text-ink-3 text-xs mt-2">
@@ -174,23 +173,23 @@ export default function Prompt() {
       )}
 
       {pieces.length > 0 && (
-      <div className="flex items-center justify-between mt-6">
-        <button
-          className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
-          onClick={() => setPage(prev => Math.max(1, prev - 1))}
-          disabled={page === 1}
-        >
-          Previous
-        </button>
-        <span className="text-ink-3 text-xs">Page {page}</span>
-        <button
-          className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
-          onClick={() => setPage(prev => prev + 1)}
-          disabled={!hasMore}
-        >
-          Next
-        </button>
-      </div>
+        <div className="flex items-center justify-between mt-6">
+          <button
+            className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
+            onClick={() => setPage(prev => Math.max(1, prev - 1))}
+            disabled={page === 1}
+          >
+            Previous
+          </button>
+          <span className="text-ink-3 text-xs">Page {page}</span>
+          <button
+            className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
+            onClick={() => setPage(prev => prev + 1)}
+            disabled={!hasMore}
+          >
+            Next
+          </button>
+        </div>
       )}
     </div>
   )

@@ -6,3 +6,5 @@ dist
 *.db-*
 *.csv
 old_csv
+.claude
+.vscode

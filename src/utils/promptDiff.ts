@@ -23,8 +23,29 @@ function tokenize(text: string) {
   return Array.from(segmenter.segment(text), item => item.segment)
 }
 
+const CJK_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+const WORD_CHAR = /[\p{L}\p{N}]/u
+
+function isSpaceSeparatedWordChar(ch: string) {
+  return WORD_CHAR.test(ch) && !CJK_SCRIPT.test(ch)
+}
+
 function formatTokens(tokens: string[]) {
-  return tokens.join('').replace(/\s+/g, ' ').trim()
+  let result = ''
+  for (const token of tokens) {
+    if (!token) continue
+    const lastChar = result[result.length - 1]
+    const firstChar = token[0]
+    if (
+      lastChar &&
+      isSpaceSeparatedWordChar(lastChar) &&
+      isSpaceSeparatedWordChar(firstChar)
+    ) {
+      result += ' '
+    }
+    result += token
+  }
+  return result.replace(/\s+/g, ' ').trim()
 }
 
 export function diffPromptText(previous: string, current: string): PromptDiff | null {

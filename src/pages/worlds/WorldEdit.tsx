@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
+import { useTopNavConfig } from '../../ui/TopNav'
 
 interface World {
   name: string
@@ -18,6 +19,8 @@ export default function WorldEdit() {
   const [body, setBody] = useState('')
   const [initialized, setInitialized] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const backHref = id ? `/worlds/${id}` : '/worlds'
+  useTopNavConfig({ title: 'Edit World', backHref })
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
@@ -93,12 +96,6 @@ export default function WorldEdit() {
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-      <div className="mb-6">
-        <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
-          Back to pieces
-        </Link>
-      </div>
-
       <div className="mb-6">
         <label className="block text-xs text-ink-3 mb-1 uppercase tracking-wide">World name</label>
         <input

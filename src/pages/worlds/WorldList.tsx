@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import RelativeTimeStatus from '../../ui/RelativeTimeStatus'
+import { useTopNavConfig } from '../../ui/TopNav'
 
 interface World {
   id: number
@@ -24,6 +25,7 @@ export default function WorldList() {
   const queryClient = useQueryClient()
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
+  useTopNavConfig({ title: 'Worlds' })
 
   const worldsQuery = useQuery({
     queryKey: ['worlds'],

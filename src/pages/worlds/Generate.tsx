@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { apiFetch } from '../../api'
 import { MODELS, DEFAULT_MODEL_ID } from '../../config'
 import { useGeneration } from '../../hooks/useGeneration'
+import { useTopNavConfig } from '../../ui/TopNav'
 
 interface PromptResponse {
   prompt: {
@@ -30,6 +31,8 @@ export default function Generate() {
   const [temperature, setTemperature] = useState(1)
   const [useThinking, setUseThinking] = useState(false)
   const [promptError, setPromptError] = useState('')
+  const backHref = id ? `/worlds/${id}` : '/worlds'
+  useTopNavConfig({ title: 'Generate', backHref })
 
   const {
     phase,
@@ -123,12 +126,6 @@ export default function Generate() {
 
   return (
     <div className="min-h-screen page-width px-4 pb-32 pt-6">
-      <div className="mb-4">
-        <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
-          Back to {worldName || 'Pieces'}
-        </Link>
-      </div>
-
       <h2 className="font-serif-zh text-2xl font-normal text-ink mb-6">{worldName}</h2>
 
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">

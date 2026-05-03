@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { ChevronRight, Menu, X } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { ArrowLeft, ChevronRight, Menu, X } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { apiFetch } from '../api'
@@ -10,10 +10,40 @@ interface World {
   name: string
 }
 
+interface TopNavConfig {
+  title?: string
+  backHref?: string
+}
+
+const TopNavConfigContext = createContext<TopNavConfig>({})
+const TopNavSetConfigContext = createContext<(config: TopNavConfig) => void>(() => {})
+
+export function TopNavProvider({ children }: { children: React.ReactNode }) {
+  const [config, setConfig] = useState<TopNavConfig>({})
+  return (
+    <TopNavSetConfigContext.Provider value={setConfig}>
+      <TopNavConfigContext.Provider value={config}>
+        {children}
+      </TopNavConfigContext.Provider>
+    </TopNavSetConfigContext.Provider>
+  )
+}
+
+export function useTopNavConfig(config: TopNavConfig) {
+  const setConfig = useContext(TopNavSetConfigContext)
+  const { title, backHref } = config
+  useEffect(() => {
+    setConfig({ title, backHref })
+    return () => setConfig({})
+  }, [setConfig, title, backHref])
+}
+
 export default function TopNav() {
   const [open, setOpen] = useState(false)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const config = useContext(TopNavConfigContext)
 
   const worldsQuery = useQuery({
     queryKey: ['worlds'],
@@ -22,31 +52,56 @@ export default function TopNav() {
   })
   const recentWorlds = (worldsQuery.data ?? []).slice(0, 5)
 
-  async function handleLogout() {
+  function closeMenu() {
+    menuButtonRef.current?.focus({ preventScroll: true })
     setOpen(false)
+  }
+
+  async function handleLogout() {
+    closeMenu()
     await logout()
     navigate('/login')
   }
 
   function goToWorld(id: number) {
-    setOpen(false)
+    closeMenu()
     navigate(`/worlds/${id}`)
   }
 
   function goToWorldList() {
-    setOpen(false)
+    closeMenu()
     navigate('/worlds')
   }
 
   return (
     <>
       <div className="sticky top-0 z-20 bg-paper/85 backdrop-blur">
-        <div className="page-width flex h-12 items-center justify-end px-4">
+        <div className="page-width relative flex h-12 items-center px-4">
+          {config.backHref ? (
+            <Link
+              to={config.backHref}
+              className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+              aria-label="Back"
+              title="Back"
+            >
+              <ArrowLeft aria-hidden="true" className="h-5 w-5" />
+            </Link>
+          ) : (
+            <span className="h-9 w-9" aria-hidden="true" />
+          )}
+
+          {config.title && (
+            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-sm font-medium text-ink-2">
+              {config.title}
+            </h1>
+          )}
+
           <button
             type="button"
-            className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+            className="ml-auto grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
             aria-label="Open menu"
             title="Open menu"
+            ref={menuButtonRef}
             onClick={() => setOpen(true)}
           >
             <Menu aria-hidden="true" className="h-5 w-5" />
@@ -58,7 +113,7 @@ export default function TopNav() {
         className={`fixed inset-0 z-30 bg-ink/30 transition-opacity duration-200 ${
           open ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
-        onClick={() => setOpen(false)}
+        onClick={closeMenu}
         aria-hidden="true"
       />
 
@@ -74,7 +129,7 @@ export default function TopNav() {
             type="button"
             className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
             aria-label="Close menu"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             <X aria-hidden="true" className="h-5 w-5" />
           </button>

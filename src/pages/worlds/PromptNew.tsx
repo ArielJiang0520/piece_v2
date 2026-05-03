@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
+import { useTopNavConfig } from '../../ui/TopNav'
 
 interface SuggestionsResponse {
   prompts: string[]
@@ -15,13 +16,14 @@ export default function PromptNew() {
   const [previousPrompts, setPreviousPrompts] = useState<string[]>([])
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
+  const backHref = id ? `/worlds/${id}` : '/worlds'
+  useTopNavConfig({ title: 'Create Prompt', backHref })
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
     queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string }>,
     enabled: !!id,
   })
-  const worldName = worldQuery.data?.name ?? ''
 
   useEffect(() => {
     if (worldQuery.isError) navigate('/')
@@ -57,12 +59,6 @@ export default function PromptNew() {
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-      <div className="mb-4">
-        <Link to={`/worlds/${id}`} className="text-rose hover:text-rose-deep text-sm">
-          Back to {worldName || 'Pieces'}
-        </Link>
-      </div>
-
       <h1 className="font-serif-zh text-2xl font-normal text-ink mb-6">Create a prompt</h1>
 
       <div className="mb-4">

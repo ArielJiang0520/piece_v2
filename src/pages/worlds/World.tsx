@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, Ellipsis, GitBranch, WandSparkles } from 'lucide-react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { ArrowUp, ArrowUpDown, Check, Ellipsis, GitBranch, Search, WandSparkles, X } from 'lucide-react'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
+import { useScrollReturn } from '../../hooks/useScrollReturn'
 import PieceCountIndicator from '../../ui/PieceCountIndicator'
 import RelativeTimeStatus from '../../ui/RelativeTimeStatus'
+import { useTopNavConfig } from '../../ui/TopNav'
 
 interface ClusterGroup {
   id: number
@@ -23,6 +25,13 @@ interface PromptResponse {
   hasMore: boolean
 }
 
+interface SearchResponse {
+  items: ClusterGroup[]
+  total: number
+  query: string
+  hasMore: boolean
+}
+
 interface WorldReturnState {
   clusterId: number
   loadedPages: number
@@ -35,58 +44,67 @@ function countLabel(count: number, singular: string) {
 
 const PAGE_SIZE = 20
 
-function worldReturnKey(worldId: string) {
-  return `world-return:${worldId}`
-}
+const SORT_OPTIONS = [
+  { value: 'latest', label: 'Latest' },
+  { value: 'most_pieces', label: 'Most pieces' },
+  { value: 'most_variations', label: 'Most variations' },
+  { value: 'oldest', label: 'Oldest' },
+] as const
 
-function readWorldReturnState(worldId: string | undefined) {
-  if (!worldId) return null
+type SortKey = typeof SORT_OPTIONS[number]['value']
 
-  try {
-    const raw = sessionStorage.getItem(worldReturnKey(worldId))
-    if (!raw) return null
-
-    const parsed = JSON.parse(raw) as Partial<WorldReturnState>
-    if (
-      typeof parsed.clusterId !== 'number' ||
-      typeof parsed.loadedPages !== 'number' ||
-      typeof parsed.cardTop !== 'number'
-    ) {
-      return null
-    }
-
-    return {
-      clusterId: parsed.clusterId,
-      loadedPages: Math.max(1, parsed.loadedPages),
-      cardTop: parsed.cardTop,
-    }
-  } catch {
+function parseWorldReturnState(value: unknown) {
+  const parsed = value as Partial<WorldReturnState>
+  if (
+    typeof parsed.clusterId !== 'number' ||
+    typeof parsed.loadedPages !== 'number' ||
+    typeof parsed.cardTop !== 'number'
+  ) {
     return null
   }
-}
 
-function clearWorldReturnState(worldId: string | undefined) {
-  if (!worldId) return
-
-  try {
-    sessionStorage.removeItem(worldReturnKey(worldId))
-  } catch { }
+  return {
+    clusterId: parsed.clusterId,
+    loadedPages: Math.max(1, parsed.loadedPages),
+    cardTop: parsed.cardTop,
+  }
 }
 
 export default function World() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
-  const restoreKeyRef = useRef<string | null>(null)
-  const restoreStateRef = useRef<WorldReturnState | null>(null)
-  const restoreScheduledRef = useRef(false)
+  const {
+    stateRef: restoreStateRef,
+    scheduledRef: restoreScheduledRef,
+    clear: clearWorldReturnState,
+    save: saveWorldReturnState,
+  } = useScrollReturn(id ? `world-return:${id}` : null, parseWorldReturnState)
   const [showScrollTop, setShowScrollTop] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sortParam = searchParams.get('sort')
+  const sort: SortKey = SORT_OPTIONS.some(o => o.value === sortParam)
+    ? sortParam as SortKey
+    : 'latest'
+  const [sortOpen, setSortOpen] = useState(false)
+  const sortMenuRef = useRef<HTMLDivElement | null>(null)
+  const queryParam = (searchParams.get('q') ?? '').trim()
+  const [searchInput, setSearchInput] = useState(queryParam)
+  const isSearching = queryParam.length > 0
 
-  if (id !== restoreKeyRef.current) {
-    restoreKeyRef.current = id ?? null
-    restoreStateRef.current = readWorldReturnState(id)
-    restoreScheduledRef.current = false
-  }
+  useEffect(() => {
+    if (searchInput.trim() === queryParam) return
+    const t = setTimeout(() => {
+      setSearchParams(prev => {
+        const params = new URLSearchParams(prev)
+        const trimmed = searchInput.trim()
+        if (trimmed) params.set('q', trimmed)
+        else params.delete('q')
+        return params
+      }, { replace: true })
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchInput, queryParam, setSearchParams])
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
@@ -95,16 +113,22 @@ export default function World() {
   })
 
   const clustersQuery = useInfiniteQuery({
-    queryKey: ['world-clusters', id],
+    queryKey: ['world-clusters', id, sort],
     queryFn: ({ pageParam }) =>
-      apiFetch(`/api/worlds/${id}/clusters?page=${pageParam}&limit=${PAGE_SIZE}`) as Promise<PromptResponse>,
-    enabled: !!id,
+      apiFetch(`/api/worlds/${id}/clusters?page=${pageParam}&limit=${PAGE_SIZE}&sort=${sort}`) as Promise<PromptResponse>,
+    enabled: !!id && !isSearching,
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.hasMore ? lastPage.page + 1 : undefined,
   })
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = clustersQuery
 
-  const errored = worldQuery.isError || clustersQuery.isError
+  const searchQuery = useQuery({
+    queryKey: ['world-clusters-search', id, queryParam],
+    queryFn: () => apiFetch(`/api/worlds/${id}/clusters/search?q=${encodeURIComponent(queryParam)}`) as Promise<SearchResponse>,
+    enabled: !!id && isSearching,
+  })
+
+  const errored = worldQuery.isError || (isSearching ? searchQuery.isError : clustersQuery.isError)
   useEffect(() => {
     if (errored) navigate('/')
   }, [errored, navigate])
@@ -120,8 +144,40 @@ export default function World() {
   }, [])
 
   useEffect(() => {
+    if (!sortOpen) return
+
+    function handleClickOutside(event: PointerEvent) {
+      if (!sortMenuRef.current) return
+      if (!sortMenuRef.current.contains(event.target as Node)) setSortOpen(false)
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSortOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handleClickOutside)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [sortOpen])
+
+  function handleSortChange(next: SortKey) {
+    setSortOpen(false)
+    if (next === sort) return
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      if (next === 'latest') params.delete('sort')
+      else params.set('sort', next)
+      return params
+    }, { replace: true })
+    clearWorldReturnState()
+    window.scrollTo({ top: 0 })
+  }
+
+  useEffect(() => {
     const node = loadMoreRef.current
-    if (!node || !hasNextPage) return
+    if (!node || !hasNextPage || isSearching) return
 
     const observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting) && !isFetchingNextPage && !restoreStateRef.current) {
@@ -131,17 +187,21 @@ export default function World() {
 
     observer.observe(node)
     return () => observer.disconnect()
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, isSearching])
 
   const pages = clustersQuery.data?.pages ?? []
-  const groups = useMemo(() => pages.flatMap(page => page.items), [pages])
+  const listGroups = useMemo(() => pages.flatMap(page => page.items), [pages])
+  const groups = isSearching ? (searchQuery.data?.items ?? []) : listGroups
+
+  const activeData = isSearching ? searchQuery.data : clustersQuery.data
 
   useEffect(() => {
     const restoreState = restoreStateRef.current
-    if (!id || !clustersQuery.data || !restoreState || restoreScheduledRef.current) return
+    if (!id || !activeData || !restoreState || restoreScheduledRef.current) return
 
     const hasCluster = groups.some(group => group.id === restoreState.clusterId)
     const shouldLoadMore =
+      !isSearching &&
       hasNextPage &&
       !isFetchingNextPage &&
       (pages.length < restoreState.loadedPages || !hasCluster)
@@ -152,8 +212,7 @@ export default function World() {
     }
 
     if (!hasCluster) {
-      clearWorldReturnState(id)
-      restoreStateRef.current = null
+      clearWorldReturnState()
       return
     }
 
@@ -163,10 +222,9 @@ export default function World() {
       if (card) {
         window.scrollBy({ top: card.getBoundingClientRect().top - restoreState.cardTop })
       }
-      clearWorldReturnState(id)
-      restoreStateRef.current = null
+      clearWorldReturnState()
     })
-  }, [fetchNextPage, groups, hasNextPage, id, isFetchingNextPage, pages.length, clustersQuery.data])
+  }, [fetchNextPage, groups, hasNextPage, id, isFetchingNextPage, pages.length, activeData, isSearching, clearWorldReturnState])
 
   function saveClusterReturnState(clusterId: number, event: MouseEvent<HTMLAnchorElement>) {
     if (!id) return
@@ -174,13 +232,11 @@ export default function World() {
     const card = event.currentTarget.closest('[data-cluster-id]') as HTMLElement | null
     const cardTop = card?.getBoundingClientRect().top ?? 0
 
-    try {
-      sessionStorage.setItem(worldReturnKey(id), JSON.stringify({
-        clusterId,
-        loadedPages: Math.max(1, pages.length),
-        cardTop,
-      }))
-    } catch { }
+    saveWorldReturnState({
+      clusterId,
+      loadedPages: Math.max(1, pages.length),
+      cardTop,
+    })
   }
 
   function scrollToTop() {
@@ -191,8 +247,11 @@ export default function World() {
   const firstPage = pages[0]
   const totalClusters = firstPage?.total ?? 0
   const totalPieces = firstPage?.totalPieces ?? 0
+  const searchTotal = searchQuery.data?.items.length ?? 0
+  const worldTitle = worldName || 'World'
+  useTopNavConfig({ title: worldTitle, backHref: '/worlds' })
 
-  if (!worldQuery.data || !clustersQuery.data) {
+  if (!worldQuery.data || (isSearching ? false : !clustersQuery.data)) {
     return (
       <div className="page-width min-h-screen bg-paper px-7 py-12 text-sm text-ink-4">
         Loading...
@@ -218,16 +277,89 @@ export default function World() {
         </header>
 
         <div className="mt-9">
-          <div className="mt-4 text-xs text-ink-4">
-            {countLabel(totalClusters, 'prompt')}
-            <span className="px-2">&middot;</span>
-            {countLabel(totalPieces, 'piece')}
+          <div className="relative">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={event => setSearchInput(event.target.value)}
+              placeholder="Search prompts by meaning..."
+              className="w-full rounded-md border border-paper-3 bg-paper py-2.5 pl-9 pr-9 text-sm text-ink placeholder:text-ink-4 focus:border-ink-4/40 focus:outline-none focus:ring-2 focus:ring-rose/20"
+              aria-label="Search prompts"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput('')}
+                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-ink-4 hover:bg-paper-2 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
+                aria-label="Clear search"
+                title="Clear search"
+              >
+                <X aria-hidden="true" className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
+        </div>
+
+        <div className="mt-5 flex items-center justify-between gap-4">
+          <div className="text-xs text-ink-4">
+            {isSearching ? (
+              searchQuery.isLoading
+                ? 'Searching...'
+                : `${countLabel(searchTotal, 'match')} for "${queryParam}"`
+            ) : (
+              <>
+                {countLabel(totalClusters, 'prompt')}
+                <span className="px-2">&middot;</span>
+                {countLabel(totalPieces, 'piece')}
+              </>
+            )}
+          </div>
+          {!isSearching && groups.length > 0 && (
+            <div ref={sortMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setSortOpen(open => !open)}
+                className="flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+                aria-haspopup="menu"
+                aria-expanded={sortOpen}
+              >
+                <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5" />
+                <span>{SORT_OPTIONS.find(o => o.value === sort)?.label}</span>
+              </button>
+              {sortOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-10 mt-1 w-48 overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_8px_24px_rgba(26,18,16,0.12)]"
+                >
+                  {SORT_OPTIONS.map(option => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={sort === option.value}
+                      onClick={() => handleSortChange(option.value)}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs text-ink-2 transition-colors hover:bg-paper-2 focus:outline-none focus:bg-paper-2"
+                    >
+                      <span>{option.label}</span>
+                      {sort === option.value && (
+                        <Check aria-hidden="true" className="h-3.5 w-3.5 text-ink-3" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {groups.length === 0 ? (
           <div className="pt-16 text-center">
-            <p className="mb-5 text-sm text-ink-3">No prompts yet.</p>
+            <p className="mb-5 text-sm text-ink-3">
+              {isSearching
+                ? (searchQuery.isLoading ? 'Searching...' : 'No matches.')
+                : 'No prompts yet.'}
+            </p>
           </div>
         ) : (
           <>
@@ -260,11 +392,15 @@ export default function World() {
               ))}
             </div>
 
-            <div ref={loadMoreRef} className="mt-7 min-h-8 text-center text-sm text-ink-4">
-              {isFetchingNextPage && 'Loading more...'}
-            </div>
-            {!hasNextPage && groups.length > PAGE_SIZE && (
-              <div className="mt-2 text-center text-xs text-ink-4">End of prompts</div>
+            {!isSearching && (
+              <>
+                <div ref={loadMoreRef} className="mt-7 min-h-8 text-center text-sm text-ink-4">
+                  {isFetchingNextPage && 'Loading more...'}
+                </div>
+                {!hasNextPage && groups.length > PAGE_SIZE && (
+                  <div className="mt-2 text-center text-xs text-ink-4">End of prompts</div>
+                )}
+              </>
             )}
           </>
         )}

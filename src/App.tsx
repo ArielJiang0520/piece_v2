@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './auth'
-import TopNav from './ui/TopNav'
+import TopNav, { TopNavProvider } from './ui/TopNav'
 import Login from './pages/Login'
 import Piece from './pages/Piece'
 import WorldList from './pages/worlds/WorldList'
@@ -24,17 +24,19 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Navigate to="/worlds" replace />} />
-      <Route path="/worlds" element={<ProtectedLayout><WorldList /></ProtectedLayout>} />
-      <Route path="/worlds/:id" element={<ProtectedLayout><World /></ProtectedLayout>} />
-      <Route path="/worlds/:id/edit" element={<ProtectedLayout><WorldEdit /></ProtectedLayout>} />
-      <Route path="/worlds/:id/clusters/:clusterId" element={<ProtectedLayout><Cluster /></ProtectedLayout>} />
-      <Route path="/worlds/:id/prompts/new" element={<ProtectedLayout><PromptNew /></ProtectedLayout>} />
-      <Route path="/worlds/:id/prompts/:promptId" element={<ProtectedLayout><Prompt /></ProtectedLayout>} />
-      <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />
-      <Route path="/pieces/:id" element={<ProtectedLayout><Piece /></ProtectedLayout>} />
-    </Routes>
+    <TopNavProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Navigate to="/worlds" replace />} />
+        <Route path="/worlds" element={<ProtectedLayout><WorldList /></ProtectedLayout>} />
+        <Route path="/worlds/:id" element={<ProtectedLayout><World /></ProtectedLayout>} />
+        <Route path="/worlds/:id/edit" element={<ProtectedLayout><WorldEdit /></ProtectedLayout>} />
+        <Route path="/worlds/:id/clusters/:clusterId" element={<ProtectedLayout><Cluster /></ProtectedLayout>} />
+        <Route path="/worlds/:id/prompts/new" element={<ProtectedLayout><PromptNew /></ProtectedLayout>} />
+        <Route path="/worlds/:id/prompts/:promptId" element={<ProtectedLayout><Prompt /></ProtectedLayout>} />
+        <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />
+        <Route path="/pieces/:id" element={<ProtectedLayout><Piece /></ProtectedLayout>} />
+      </Routes>
+    </TopNavProvider>
   )
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api'
 import { relativeTime } from '../utils/time'
+import { useTopNavConfig } from '../ui/TopNav'
 
 interface Piece {
   id: number
@@ -25,6 +26,11 @@ export default function Piece() {
     queryFn: () => apiFetch(`/api/pieces/${id}`) as Promise<Piece>,
     enabled: !!id,
   })
+  const piece = pieceQuery.data ?? null
+  const backHref = piece
+    ? `/worlds/${piece.world_id}/prompts/${piece.prompt_id}`
+    : undefined
+  useTopNavConfig({ title: 'Piece', backHref })
 
   useEffect(() => {
     if (pieceQuery.isError) navigate('/')
@@ -50,17 +56,10 @@ export default function Piece() {
     deleteMutation.mutate()
   }
 
-  if (!pieceQuery.data) return <div className="page-width p-6 text-ink-3">Loading...</div>
-  const piece = pieceQuery.data
+  if (!piece) return <div className="page-width p-6 text-ink-3">Loading...</div>
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-      <div className="mb-6">
-        <Link to={`/worlds/${piece.world_id}/prompts/${piece.prompt_id}`} className="text-rose hover:text-rose-deep text-sm">
-          Back to prompt
-        </Link>
-      </div>
-
       <p className="font-serif-zh text-ink-2 text-sm mb-8 italic">"{piece.prompt}"</p>
 
       <div className="mb-12">
