@@ -5,6 +5,7 @@ import { type Variables, authMiddleware } from '../../middleware'
 import promptRoutes from './prompts'
 import generateRoutes from './generate'
 import clusterRoutes from './clusters'
+import pieceRoutes from './pieces'
 
 const worldRoutes = new Hono<{ Variables: Variables }>()
 
@@ -108,5 +109,6 @@ worldRoutes.delete('/:id', authMiddleware, (c) => {
 worldRoutes.route('/:id/prompts', promptRoutes)
 worldRoutes.route('/:id/clusters', clusterRoutes)
 worldRoutes.route('/:id/generate', generateRoutes)
+worldRoutes.route('/:id/pieces', pieceRoutes)
 
 export default worldRoutes

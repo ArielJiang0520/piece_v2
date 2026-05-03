@@ -1,11 +1,10 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { eq, and, desc, sql } from 'drizzle-orm'
-import { db, worlds, prompts, pieces } from '../../db'
+import { eq, and } from 'drizzle-orm'
+import { db, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { MODELS } from '../../../src/config'
-import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
-import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
+import { normalizePromptInput } from '../../prompt-text'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
 const modelsById = new Map(MODELS.map(model => [model.id, model]))
@@ -21,45 +20,12 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const world = db.select().from(worlds).where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId))).get()
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { prompt, promptId, model: requestedModel, temperature: requestedTemperature, useThinking, generationId } = await c.req.json()
+  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, generationId } = await c.req.json()
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
   const generationToken = typeof generationId === 'string' ? generationId.trim() : ''
   if (!generationToken) return c.json({ error: 'Generation id required' }, 400)
-
-  let existingPromptId: number | undefined
-  let existingPromptClusterId: number | null = null
-  if (promptId !== undefined && promptId !== null) {
-    const id = Number(promptId)
-    if (!Number.isInteger(id) || id < 1) return c.json({ error: 'Invalid prompt id' }, 400)
-
-    const existingPrompt = db
-      .select({ id: prompts.id, text: prompts.text, cluster_id: prompts.cluster_id })
-      .from(prompts)
-      .where(and(eq(prompts.id, id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-      .get()
-    if (!existingPrompt) return c.json({ error: 'Prompt not found' }, 404)
-
-    if (existingPrompt.text.trim() === promptText) {
-      existingPromptId = existingPrompt.id
-      existingPromptClusterId = existingPrompt.cluster_id
-    }
-  }
-
-  if (existingPromptId === undefined) {
-    const matchingPrompt = db
-      .select({ id: prompts.id, cluster_id: prompts.cluster_id })
-      .from(prompts)
-      .where(and(promptTextMatchesNormalized(prompts.text, promptText), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-      .orderBy(desc(prompts.updated_at), desc(prompts.id))
-      .get()
-
-    if (matchingPrompt) {
-      existingPromptId = matchingPrompt.id
-      existingPromptClusterId = matchingPrompt.cluster_id
-    }
-  }
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
@@ -76,7 +42,6 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     : 1
 
   return streamSSE(c, async (stream) => {
-    let accumulated = ''
     const controller = new AbortController()
     const key = generationKey(userId, worldId, generationToken)
     activeGenerations.get(key)?.abort()
@@ -100,7 +65,10 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           temperature,
           reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
           stream: true,
-          provider: { sort: 'throughput' },
+          provider: {
+            sort: 'throughput'
+          },
+          require_parameters: true,
           messages: [
             { role: 'system', content: [world.summary, world.body].filter(Boolean).join('\n\n') },
             { role: 'user', content: promptText },
@@ -136,45 +104,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           if (!line.startsWith('data: ')) continue
           const data = line.slice(6)
           if (data === '[DONE]') {
-            const now = Date.now()
-            const promptRow = existingPromptId === undefined
-              ? db.insert(prompts).values({
-                user_id: userId,
-                world_id: worldId,
-                text: promptText,
-                piece_count: 1,
-                created_at: now,
-                updated_at: now,
-              }).returning({ id: prompts.id }).get()
-              : { id: existingPromptId }
-
-            const result = db.insert(pieces).values({
-              user_id: userId,
-              world_id: worldId,
-              prompt_id: promptRow.id,
-              body: accumulated,
-              model,
-              created_at: now,
-            }).returning().get()
-
-            if (existingPromptId !== undefined) {
-              db.update(prompts)
-                .set({
-                  updated_at: now,
-                  piece_count: sql`${prompts.piece_count} + 1`,
-                })
-                .where(and(eq(prompts.id, existingPromptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-                .run()
-              if (existingPromptClusterId === null) {
-                existingPromptClusterId = await clusterPromptById(existingPromptId)
-              } else {
-                recomputePromptCluster(existingPromptClusterId)
-              }
-            } else {
-              await clusterPromptById(promptRow.id)
-            }
-
-            await stream.writeSSE({ data: JSON.stringify({ type: 'done', pieceId: result.id, promptId: promptRow.id }) })
+            await stream.writeSSE({ data: JSON.stringify({ type: 'done' }) })
             return
           }
           try {
@@ -189,7 +119,6 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
             const content = delta?.content
             if (content) {
-              accumulated += content
               await stream.writeSSE({ data: JSON.stringify({ type: 'chunk', content }) })
             }
           } catch {

@@ -45,7 +45,7 @@ function reducer(state: State, action: Action): State {
 
 interface UseGenerationOptions {
   worldId: string | undefined
-  onDone?: (result: { promptId: number | null }) => void
+  onDone?: () => void
 }
 
 export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
@@ -113,9 +113,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
               dispatch({ type: 'chunk', content: msg.content })
             } else if (msg.type === 'done') {
               dispatch({ type: 'done' })
-              onDoneRef.current?.({
-                promptId: Number.isInteger(msg.promptId) ? msg.promptId : null,
-              })
+              onDoneRef.current?.()
             } else if (msg.type === 'error') {
               dispatch({ type: 'error', message: msg.message })
             }

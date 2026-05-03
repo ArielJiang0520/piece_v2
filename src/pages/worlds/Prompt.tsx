@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import { relativeTime } from '../../utils/time'
-import { useTopNavConfig } from '../../ui/TopNav'
+import { useTopNavConfig } from '../../components/TopNav'
 
 interface Prompt {
   id: number

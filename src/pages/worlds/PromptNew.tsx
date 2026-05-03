@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
-import { useTopNavConfig } from '../../ui/TopNav'
+import { useTopNavConfig } from '../../components/TopNav'
 
 interface SuggestionsResponse {
   prompts: string[]

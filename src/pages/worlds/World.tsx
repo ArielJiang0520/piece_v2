@@ -4,9 +4,9 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import { useScrollReturn } from '../../hooks/useScrollReturn'
-import PieceCountIndicator from '../../ui/PieceCountIndicator'
-import RelativeTimeStatus from '../../ui/RelativeTimeStatus'
-import { useTopNavConfig } from '../../ui/TopNav'
+import PieceCountIndicator from '../../components/PieceCountIndicator'
+import RelativeTimeStatus from '../../components/RelativeTimeStatus'
+import { useTopNavConfig } from '../../components/TopNav'
 
 interface ClusterGroup {
   id: number
