@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import { relativeTime } from '../../utils/time'
@@ -34,22 +34,11 @@ interface DeletePromptResponse {
 
 const PAGE_SIZE = 30
 
-function parsePageParam(value: string | null) {
-  const page = Number(value ?? '1')
-  return Number.isInteger(page) && page > 0 ? page : 1
-}
-
-function worldHref(id: string | undefined, worldPage: number) {
-  return `/worlds/${id}${worldPage > 1 ? `?page=${worldPage}` : ''}`
-}
-
 export default function Prompt() {
   const { id, promptId } = useParams<{ id: string; promptId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [searchParams] = useSearchParams()
-  const worldPage = parsePageParam(searchParams.get('worldPage'))
-  const backHref = worldHref(id, worldPage)
+  const backHref = `/worlds/${id}`
   const [page, setPage] = useState(1)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -89,8 +78,7 @@ export default function Prompt() {
         queryClient.invalidateQueries({ queryKey: ['cluster', id, String(clusterId)] })
       }
       queryClient.removeQueries({ queryKey: ['prompt', id, String(promptIdNum)] })
-      const contextSearch = worldPage > 1 ? `?worldPage=${worldPage}` : ''
-      navigate(clusterId != null ? `/worlds/${id}/clusters/${clusterId}${contextSearch}` : backHref)
+      navigate(clusterId != null ? `/worlds/${id}/clusters/${clusterId}` : backHref)
     },
     onError: e => {
       setDeleteError(e instanceof Error ? e.message : 'Could not delete prompt')

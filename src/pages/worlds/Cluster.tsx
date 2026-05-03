@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import { diffPromptText } from '../../utils/promptDiff'
@@ -27,26 +27,10 @@ interface ClusterResponse {
   prompts: ClusterPrompt[]
 }
 
-function parsePageParam(value: string | null) {
-  const page = Number(value ?? '1')
-  return Number.isInteger(page) && page > 0 ? page : 1
-}
-
-function worldHref(id: string | undefined, worldPage: number) {
-  return `/worlds/${id}${worldPage > 1 ? `?page=${worldPage}` : ''}`
-}
-
-function contextSearch(worldPage: number) {
-  return worldPage > 1 ? `?worldPage=${worldPage}` : ''
-}
-
 export default function Cluster() {
   const { id, clusterId } = useParams<{ id: string; clusterId: string }>()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const worldPage = parsePageParam(searchParams.get('worldPage'))
-  const backHref = worldHref(id, worldPage)
-  const detailSearch = contextSearch(worldPage)
+  const backHref = `/worlds/${id}`
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
@@ -105,7 +89,7 @@ export default function Cluster() {
                   className="overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_1px_0_rgba(26,18,16,0.02)]"
                 >
                   <Link
-                    to={`/worlds/${id}/prompts/${prompt.id}${detailSearch}`}
+                    to={`/worlds/${id}/prompts/${prompt.id}`}
                     className="block px-5 py-5 transition-colors hover:bg-paper-2/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink-4/35"
                   >
                     <div className="flex items-center justify-between gap-4 text-xs leading-none text-ink-4">

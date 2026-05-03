@@ -29,7 +29,7 @@ export default function App() {
       <Route path="/" element={<Navigate to="/worlds" replace />} />
       <Route path="/worlds" element={<ProtectedLayout><WorldList /></ProtectedLayout>} />
       <Route path="/worlds/:id" element={<ProtectedLayout><World /></ProtectedLayout>} />
-      <Route path="/worlds/:id/details" element={<ProtectedLayout><WorldEdit /></ProtectedLayout>} />
+      <Route path="/worlds/:id/edit" element={<ProtectedLayout><WorldEdit /></ProtectedLayout>} />
       <Route path="/worlds/:id/clusters/:clusterId" element={<ProtectedLayout><Cluster /></ProtectedLayout>} />
       <Route path="/worlds/:id/prompts/new" element={<ProtectedLayout><PromptNew /></ProtectedLayout>} />
       <Route path="/worlds/:id/prompts/:promptId" element={<ProtectedLayout><Prompt /></ProtectedLayout>} />
