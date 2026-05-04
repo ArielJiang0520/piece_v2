@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { RotateCw, Trash2 } from 'lucide-react'
 import { apiFetch } from '../../api'
-import { relativeTime } from '../../utils/time'
+import { entityLabel } from '../../config'
+import ConfirmDialog from '../../components/ConfirmDialog'
+import RelativeTimeStatus from '../../components/RelativeTimeStatus'
 import { useTopNavConfig } from '../../components/TopNav'
 
 interface Prompt {
@@ -38,8 +41,10 @@ const PAGE_SIZE = 30
 export default function Prompt() {
   const { id, promptId } = useParams<{ id: string; promptId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const backHref = id ? `/worlds/${id}` : '/worlds'
+  const fromWorldList = (location.state as { fromWorldList?: boolean } | null)?.fromWorldList === true
   const [page, setPage] = useState(1)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -79,21 +84,44 @@ export default function Prompt() {
         queryClient.invalidateQueries({ queryKey: ['cluster', id, String(clusterId)] })
       }
       queryClient.removeQueries({ queryKey: ['prompt', id, String(promptIdNum)] })
-      navigate(clusterId != null ? `/worlds/${id}/clusters/${clusterId}` : backHref)
+      navigate(fromWorldList || clusterId == null ? backHref : `/worlds/${id}/clusters/${clusterId}`)
     },
     onError: e => {
-      setDeleteError(e instanceof Error ? e.message : 'Could not delete prompt')
+      setDeleteError(e instanceof Error ? e.message : `Could not delete ${entityLabel('prompt')}`)
     },
   })
 
   const prompt = promptQuery.data?.prompt ?? null
-  const pieces = promptQuery.data?.pieces ?? []
+  const pieces = useMemo(
+    () => [...(promptQuery.data?.pieces ?? [])].sort((a, b) => b.created_at - a.created_at || b.id - a.id),
+    [promptQuery.data?.pieces],
+  )
   const hasMore = promptQuery.data?.hasMore ?? false
 
-  const navBackHref = prompt?.cluster_id != null
+  const navBackHref = !fromWorldList && prompt?.cluster_id != null
     ? `/worlds/${id}/clusters/${prompt.cluster_id}`
     : backHref
-  useTopNavConfig({ title: 'Prompt', backHref: navBackHref })
+  const navRightAction = useMemo(() => {
+    if (!prompt) return undefined
+
+    return (
+      <button
+        type="button"
+        className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus:ring-2 focus:ring-rose/30 disabled:opacity-50"
+        onClick={() => setConfirmDelete(true)}
+        disabled={deleteMutation.isPending}
+        aria-label={`Delete ${entityLabel('prompt')}`}
+        title={`Delete ${entityLabel('prompt')}`}
+      >
+        <Trash2 aria-hidden="true" className="h-5 w-5" />
+      </button>
+    )
+  }, [deleteMutation.isPending, prompt])
+  useTopNavConfig({
+    title: entityLabel('prompt', { capitalize: true }),
+    backHref: navBackHref,
+    rightAction: navRightAction,
+  })
 
   function deletePrompt() {
     if (!prompt || deleteMutation.isPending) return
@@ -107,73 +135,74 @@ export default function Prompt() {
   if (!prompt) return null
 
   return (
-    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-      <header className="mb-6">
-        <div className="flex items-start justify-between gap-4 mb-2">
-          <p className="text-ink-3 text-xs mt-2">
-            {prompt.piece_count} {prompt.piece_count === 1 ? 'piece' : 'pieces'} - latest {relativeTime(prompt.updated_at)}
-          </p>
-          <div className="shrink-0 flex items-center gap-2">
-            <button
-              className="border border-paper-3 text-ink-3 hover:text-rose-deep hover:border-rose rounded-sm px-4 py-2 font-medium transition-colors text-sm disabled:opacity-50"
-              onClick={() => setConfirmDelete(true)}
-              disabled={deleteMutation.isPending}
-            >
-              Delete prompt
-            </button>
-            <Link
-              to={`/worlds/${id}/generate?promptId=${prompt.id}`}
-              className="bg-rose hover:bg-rose-deep text-white rounded-sm px-4 py-2 font-medium transition-colors text-sm"
-            >
-              Use this prompt
-            </Link>
-          </div>
-        </div>
-        <h1 className="font-serif-zh text-2xl font-normal text-ink leading-tight">{prompt.text}</h1>
+    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-8">
+      <header className="relative mb-12 pt-8 text-center">
+        <h1 className="mx-auto max-w-88 font-serif-zh text-[18px] font-normal leading-[1.55] text-ink">
+          {prompt.text}
+        </h1>
+
+        <Link
+          to={`/worlds/${id}/generate?promptId=${prompt.id}`}
+          className="text-sm  mx-auto mt-16 flex min-h-10 w-full max-w-104 items-center justify-center gap-3 rounded-lg border border-rose bg-rose px-6 py-4 font-semibold text-white shadow-[0_16px_34px_rgba(205,83,106,0.24)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.34)] focus:outline-none focus:ring-4 focus:ring-rose/25"
+        >
+          <RotateCw aria-hidden="true" className="h-4 w-4" />
+          <span>Another {entityLabel('piece')}</span>
+        </Link>
       </header>
 
-      {confirmDelete && (
-        <div className="border border-rose bg-rose-pale rounded-md px-4 py-3 mb-6">
-          <p className="text-ink-2 text-sm mb-3">Delete this prompt and all of its pieces?</p>
-          <div className="flex items-center gap-3">
-            <button
-              className="bg-rose-deep hover:bg-rose text-white rounded-sm px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
-              onClick={deletePrompt}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? 'Deleting...' : 'Yes, delete'}
-            </button>
-            <button
-              className="text-ink-3 hover:text-ink text-sm disabled:opacity-50"
-              onClick={() => setConfirmDelete(false)}
-              disabled={deleteMutation.isPending}
-            >
-              Cancel
-            </button>
-            {deleteError && <span className="text-rose-deep text-sm">{deleteError}</span>}
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Delete this ${entityLabel('prompt')}?`}
+        description={`This will delete the ${entityLabel('prompt')} and all of its ${entityLabel('piece', { plural: true })}.`}
+        confirmLabel="Yes, delete"
+        pendingLabel="Deleting..."
+        isPending={deleteMutation.isPending}
+        error={deleteError}
+        onConfirm={deletePrompt}
+        onClose={() => setConfirmDelete(false)}
+      />
 
       {pieces.length === 0 ? (
-        <p className="text-ink-3 text-sm">No pieces yet.</p>
+        <p className="text-center text-sm text-ink-3">No {entityLabel('piece', { plural: true })} yet.</p>
       ) : (
-        <div className="flex flex-col gap-2">
-          {pieces.map(piece => (
-            <Link
-              key={piece.id}
-              to={`/pieces/${piece.id}`}
-              className="bg-paper hover:bg-paper-2 border border-paper-3 rounded-md px-4 py-3 transition-colors"
-            >
-              <div className="text-ink-2 text-sm line-clamp-2">{piece.preview}</div>
-              <div className="text-ink-3 text-xs mt-2">{relativeTime(piece.created_at)}</div>
-            </Link>
-          ))}
-        </div>
+        <section>
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div className="flex items-baseline gap-3">
+              <span className="font-serif-zh text-[28px] leading-none text-ink">
+                {prompt.piece_count}
+              </span>
+              <span className="pb-1 text-sm text-ink-3">
+                {entityLabel('piece', { plural: prompt.piece_count !== 1 })}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {pieces.map((piece, index) => {
+              const pieceNumber = Math.max(1, prompt.piece_count - ((page - 1) * PAGE_SIZE) - index)
+
+              return (
+                <Link
+                  key={piece.id}
+                  to={`/pieces/${piece.id}`}
+                  className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 rounded-md border border-paper-3 bg-paper px-4 py-4 transition-colors hover:border-ink-4/35 hover:bg-paper-2/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose/25"
+                >
+                  <span className="pt-0.5 text-sm font-medium text-ink-4">#{pieceNumber}</span>
+                  <span className="min-w-0">
+                    <span className="text-[14px] leading-6 text-ink-2 line-clamp-3">
+                      {piece.preview}
+                    </span>
+                    <RelativeTimeStatus timestamp={piece.created_at} className="mt-2" />
+                  </span>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
       )}
 
       {pieces.length > 0 && (
-        <div className="flex items-center justify-between mt-6">
+        <div className="mt-7 flex items-center justify-between">
           <button
             className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
             onClick={() => setPage(prev => Math.max(1, prev - 1))}

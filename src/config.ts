@@ -13,5 +13,22 @@ export const MODELS: ModelOption[] = [
   { id: 'z-ai/glm-5.1', label: 'GLM 5.1', reasoning: { effort: 'low' } },
 ]
 
-export const DEFAULT_MODEL_ID = MODELS[0]!.id
-export const PROMPT_SUGGESTION_MODEL_ID = DEFAULT_MODEL_ID
+export const DEFAULT_MODEL_ID = 'z-ai/glm-5'
+
+export const ENTITY_LABELS = {
+  world: 'world',
+  prompt: 'scene',
+  piece: 'take',
+} as const
+
+export type EntityKey = keyof typeof ENTITY_LABELS
+
+export function entityLabel(
+  key: EntityKey,
+  options: { plural?: boolean; capitalize?: boolean } = {},
+) {
+  let label: string = ENTITY_LABELS[key]
+  if (options.plural) label += 's'
+  if (options.capitalize) label = label.charAt(0).toUpperCase() + label.slice(1)
+  return label
+}

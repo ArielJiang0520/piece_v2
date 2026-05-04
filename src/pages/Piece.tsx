@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Trash2 } from 'lucide-react'
 import { apiFetch } from '../api'
+import { entityLabel } from '../config'
 import { relativeTime } from '../utils/time'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { useTopNavConfig } from '../components/TopNav'
 
 interface Piece {
@@ -20,6 +23,7 @@ export default function Piece() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const pieceQuery = useQuery({
     queryKey: ['piece', id],
@@ -30,11 +34,6 @@ export default function Piece() {
   const backHref = piece
     ? `/worlds/${piece.world_id}/prompts/${piece.prompt_id}`
     : undefined
-  useTopNavConfig({ title: 'Piece', backHref })
-
-  useEffect(() => {
-    if (pieceQuery.isError) navigate('/')
-  }, [pieceQuery.isError, navigate])
 
   const deleteMutation = useMutation({
     mutationFn: () => apiFetch(`/api/pieces/${id}`, { method: 'DELETE' }),
@@ -47,12 +46,43 @@ export default function Piece() {
       queryClient.invalidateQueries({ queryKey: ['world-clusters', worldId] })
       queryClient.invalidateQueries({ queryKey: ['cluster', worldId] })
       queryClient.invalidateQueries({ queryKey: ['prompt', worldId, String(piece.prompt_id)] })
-      navigate(`/worlds/${piece.world_id}`)
+      navigate(`/worlds/${piece.world_id}/prompts/${piece.prompt_id}`)
+    },
+    onError: e => {
+      setDeleteError(e instanceof Error ? e.message : `Could not delete ${entityLabel('piece')}`)
     },
   })
 
+  const navRightAction = useMemo(() => {
+    if (!piece) return undefined
+
+    return (
+      <button
+        type="button"
+        className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus:ring-2 focus:ring-rose/30 disabled:opacity-50"
+        onClick={() => setConfirmDelete(true)}
+        disabled={deleteMutation.isPending}
+        aria-label={`Delete ${entityLabel('piece')}`}
+        title={`Delete ${entityLabel('piece')}`}
+      >
+        <Trash2 aria-hidden="true" className="h-5 w-5" />
+      </button>
+    )
+  }, [deleteMutation.isPending, piece])
+
+  useTopNavConfig({
+    title: entityLabel('piece', { capitalize: true }),
+    backHref,
+    rightAction: navRightAction,
+  })
+
+  useEffect(() => {
+    if (pieceQuery.isError) navigate('/')
+  }, [pieceQuery.isError, navigate])
+
   function deletePiece() {
     if (!pieceQuery.data || deleteMutation.isPending) return
+    setDeleteError('')
     deleteMutation.mutate()
   }
 
@@ -66,33 +96,21 @@ export default function Piece() {
         <p className="prose whitespace-pre-wrap">{piece.body}</p>
       </div>
 
-      <div className="border-t border-paper-3 pt-6 flex items-center justify-between">
+      <div className="border-t border-paper-3 pt-6">
         <span className="text-ink-3 text-xs">{relativeTime(piece.created_at)}</span>
-        {!confirmDelete ? (
-          <button
-            className="text-ink-3 hover:text-rose-deep text-sm transition-colors"
-            onClick={() => setConfirmDelete(true)}
-          >
-            Delete
-          </button>
-        ) : (
-          <div className="flex items-center gap-3">
-            <span className="text-ink-3 text-sm">Delete this piece?</span>
-            <button
-              className="bg-rose-deep hover:bg-rose text-white rounded-sm px-3 py-1 text-sm transition-colors"
-              onClick={deletePiece}
-            >
-              Yes, delete
-            </button>
-            <button
-              className="text-ink-3 hover:text-ink text-sm"
-              onClick={() => setConfirmDelete(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Delete this ${entityLabel('piece')}?`}
+        description={`This will permanently delete this ${entityLabel('piece')}.`}
+        confirmLabel="Yes, delete"
+        pendingLabel="Deleting..."
+        isPending={deleteMutation.isPending}
+        error={deleteError}
+        onConfirm={deletePiece}
+        onClose={() => setConfirmDelete(false)}
+      />
     </div>
   )
 }

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { apiFetch } from '../../api'
-import { MODELS, DEFAULT_MODEL_ID } from '../../config'
+import TextField from '../../components/TextField'
+import { MODELS, DEFAULT_MODEL_ID, entityLabel } from '../../config'
 import { useGeneration } from '../../hooks/useGeneration'
 import { useTopNavConfig } from '../../components/TopNav'
 import { useToast } from '../../components/Toast'
@@ -23,14 +24,9 @@ interface PromptResponse {
   }
 }
 
-interface GenerateLocationState {
-  promptDraft?: unknown
-}
-
 export default function Generate() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const location = useLocation()
   const queryClient = useQueryClient()
   const toast = useToast()
   const [searchParams] = useSearchParams()
@@ -58,6 +54,13 @@ export default function Generate() {
     if (streaming) setSaveState('idle')
   }, [streaming])
 
+  useEffect(() => {
+    if (streaming) return
+    if (!output || generationError || saveState !== 'idle') return
+    void handleSave()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streaming])
+
   const error = generationError || promptError
   const generateButtonLabel =
     phase === 'waiting_provider' ? 'Waiting...'
@@ -75,24 +78,6 @@ export default function Generate() {
   useEffect(() => {
     if (worldQuery.isError) navigate('/')
   }, [worldQuery.isError, navigate])
-
-  useEffect(() => {
-    if (queryPromptId) return
-
-    const state = location.state as GenerateLocationState | null
-    const promptDraft = state?.promptDraft
-    if (typeof promptDraft !== 'string') return
-
-    const trimmedDraft = promptDraft.trim()
-    if (!trimmedDraft) return
-
-    setPrompt(trimmedDraft)
-    setLoadedPromptId(null)
-    navigate(
-      { pathname: location.pathname, search: location.search },
-      { replace: true, state: null },
-    )
-  }, [location.pathname, location.search, location.state, navigate, queryPromptId])
 
   const promptQuery = useQuery({
     queryKey: ['prompt-head', id, queryPromptId],
@@ -113,7 +98,7 @@ export default function Generate() {
       setPromptError('')
     } else if (promptQuery.isError) {
       setLoadedPromptId(null)
-      setPromptError('Could not load prompt')
+      setPromptError(`Could not load ${entityLabel('prompt')}`)
     }
   }, [queryPromptId, promptQuery.data, promptQuery.isError])
 
@@ -129,10 +114,6 @@ export default function Generate() {
   }
 
   const canSave = !streaming && !!output && saveState !== 'saving' && saveState !== 'saved'
-  const saveButtonLabel =
-    saveState === 'saving' ? 'Saving...'
-      : saveState === 'saved' ? 'Already saved'
-        : 'Save'
 
   async function handleSave() {
     if (!id || !canSave) return
@@ -158,8 +139,10 @@ export default function Generate() {
 
       toast.show({
         kind: 'success',
-        title: result.isNewPrompt ? 'New prompt created' : 'Piece added to existing prompt',
-        action: { label: 'View prompt', href: `/worlds/${id}/prompts/${result.promptId}` },
+        title: result.isNewPrompt
+          ? `New ${entityLabel('prompt')} created`
+          : `${entityLabel('piece', { capitalize: true })} added to existing ${entityLabel('prompt')}`,
+        action: { label: `View ${entityLabel('prompt')}`, href: `/worlds/${id}/prompts/${result.promptId}` },
       })
     } catch (err) {
       setSaveState('error')
@@ -173,8 +156,6 @@ export default function Generate() {
 
   return (
     <div className="min-h-screen page-width px-4 pb-32 pt-6">
-      <h2 className="font-serif-zh text-2xl font-normal text-ink mb-6">{worldName}</h2>
-
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
         <select
           className="w-full sm:flex-1 bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink focus:outline-none focus:border-rose disabled:opacity-50"
@@ -231,16 +212,16 @@ export default function Generate() {
         <span className="text-xs font-medium text-ink-3">Thinking</span>
       </div>
 
-      <div className="mb-4">
-        <textarea
-          className="w-full bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink placeholder-ink-3 focus:outline-none focus:border-rose resize-y"
-          rows={4}
-          placeholder={loadingPrompt ? 'Loading prompt...' : 'Enter your prompt...'}
-          value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-          disabled={streaming || loadingPrompt}
-        />
-      </div>
+      <TextField
+        containerClassName="mb-4"
+        label={entityLabel('prompt', { capitalize: true })}
+        multiline
+        rows={4}
+        placeholder={loadingPrompt ? `Loading ${entityLabel('prompt')}...` : `Enter your ${entityLabel('prompt')}...`}
+        value={prompt}
+        onChange={e => setPrompt(e.target.value)}
+        disabled={streaming || loadingPrompt}
+      />
 
       {error && <p className="text-rose-deep text-sm mb-4">{error}</p>}
 
@@ -264,14 +245,6 @@ export default function Generate() {
             <X className="size-5" aria-hidden="true" />
           </button>
         )}
-        <button
-          type="button"
-          className="min-h-14 min-w-32 rounded-full border border-paper-3 bg-paper-2 px-5 py-3 text-sm font-medium text-ink shadow-[0_14px_30px_rgba(54,44,38,0.16)] transition-all hover:-translate-y-0.5 hover:border-rose hover:text-rose-deep focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-40"
-          onClick={handleSave}
-          disabled={!canSave}
-        >
-          {saveButtonLabel}
-        </button>
         <button
           type="button"
           className="min-h-14 min-w-36 rounded-full border border-rose bg-rose px-6 py-3 text-sm font-medium text-white shadow-[0_16px_34px_rgba(205,83,106,0.34)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.42)] focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"

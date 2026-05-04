@@ -13,12 +13,14 @@ function recencyClasses(timestamp: number | null | undefined) {
 
 interface RelativeTimeStatusProps {
   timestamp: number | null | undefined
+  className?: string
   emptyLabel?: string
   prefix?: string
 }
 
 export default function RelativeTimeStatus({
   timestamp,
+  className = 'mb-4',
   emptyLabel = 'No activity',
   prefix = '',
 }: RelativeTimeStatusProps) {
@@ -26,7 +28,7 @@ export default function RelativeTimeStatus({
   const label = timestamp ? `${prefix}${relativeTime(timestamp)}` : emptyLabel
 
   return (
-    <div className={`mb-4 flex items-center gap-2.5 text-xs font-normal leading-none ${classes.text}`}>
+    <div className={`${className} flex items-center gap-2.5 text-xs font-normal leading-none ${classes.text}`}>
       <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${classes.dot}`} />
       <span>{label}</span>
     </div>

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from './api'
 
 interface User {
@@ -16,6 +17,7 @@ interface AuthCtx {
 const AuthContext = createContext<AuthCtx | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -31,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     })
+    queryClient.clear()
     setUser(u)
   }
 
@@ -39,11 +42,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     })
+    queryClient.clear()
     setUser(u)
   }
 
   async function logout() {
     await apiFetch('/api/auth/logout', { method: 'POST' })
+    queryClient.clear()
     setUser(null)
   }
 

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { eq, and } from 'drizzle-orm'
-import { db, worlds } from '../../db'
+import { db, registers, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { MODELS } from '../../../src/config'
 import { normalizePromptInput } from '../../prompt-text'
@@ -14,11 +14,43 @@ function generationKey(userId: number, worldId: number, generationId: string) {
   return `${userId}:${worldId}:${generationId}`
 }
 
+function buildSystemPrompt(worldOrigin: string, worldBody: string, registerDetails: string | null): string {
+  const origin = worldOrigin.trim()
+  const originSentence = !origin || origin === 'original'
+    ? `The world is based on the user's original setting.`
+    : `The world is based on an existing work: ${origin}.`
+
+  const sections: string[] = [originSentence]
+
+  if (worldBody.trim()) {
+    sections.push(`# World setting\n${worldBody.trim()}`)
+  }
+
+  sections.push(
+    `# Task\nThe user will give you a prompt. Using the world setting above, write a one-shot piece (a single, self-contained passage) that responds to the user's prompt while staying faithful to the world.`,
+  )
+
+  if (registerDetails && registerDetails.trim()) {
+    sections.push(`# The world's register\n${registerDetails.trim()}`)
+  }
+
+  sections.push(
+    `# Language\nRegardless of the language of these instructions, always reply in the same language as the user's prompt.`,
+  )
+
+  return sections.join('\n\n')
+}
+
 generateRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = c.get('userId') as number
   const worldId = parseInt(c.req.param('id'))
   const world = db.select().from(worlds).where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId))).get()
   if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const register = world.register_id
+    ? db.select().from(registers).where(eq(registers.id, world.register_id)).get()
+    : null
+  const systemPrompt = buildSystemPrompt(world.origin, world.body, register?.details ?? null)
 
   const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, generationId } = await c.req.json()
 
@@ -70,7 +102,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           },
           require_parameters: true,
           messages: [
-            { role: 'system', content: [world.summary, world.body].filter(Boolean).join('\n\n') },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: promptText },
           ],
         }),

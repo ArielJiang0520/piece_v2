@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
+import { entityLabel } from '../../config'
+import CountIndicator from '../../components/CountIndicator'
 import RelativeTimeStatus from '../../components/RelativeTimeStatus'
 import { useTopNavConfig } from '../../components/TopNav'
 
@@ -9,23 +11,18 @@ interface World {
   id: number
   name: string
   summary: string
+  origin: string
+  register_id: number | null
+  register_title: string | null
   updated_at: number
   latest_piece_at: number | null
   prompt_cluster_count: number
   piece_count: number
 }
 
-function countLabel(count: number, singular: string) {
-  const value = Number(count)
-  return `${value} ${value === 1 ? singular : `${singular}s`}`
-}
-
 export default function WorldList() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [showNew, setShowNew] = useState(false)
-  const [newName, setNewName] = useState('')
-  useTopNavConfig({ title: 'Home' })
+  useTopNavConfig({ title: `Your ${entityLabel('world', { plural: true, capitalize: true })}` })
 
   const worldsQuery = useQuery({
     queryKey: ['worlds'],
@@ -33,72 +30,17 @@ export default function WorldList() {
   })
   const worlds = worldsQuery.data ?? []
 
-  const createMutation = useMutation({
-    mutationFn: (name: string) =>
-      apiFetch('/api/worlds', {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      }) as Promise<World>,
-    onSuccess: world => {
-      queryClient.invalidateQueries({ queryKey: ['worlds'] })
-      navigate(`/worlds/${world.id}`)
-    },
-  })
-
-  function createWorld() {
-    const trimmed = newName.trim()
-    if (!trimmed || createMutation.isPending) return
-    createMutation.mutate(trimmed)
-  }
-
   return (
     <div className="min-h-screen page-width">
-      <main className="pb-10">
-        <div className="px-6 pt-7">
-          {!showNew ? (
-            <button
-              className="inline-flex items-center gap-3 rounded-sm bg-rose px-6 py-3 text-base font-medium text-white transition-colors hover:bg-rose-deep"
-              onClick={() => setShowNew(true)}
-            >
-              <span className="text-[28px] font-light leading-4" aria-hidden="true">+</span>
-              New World
-            </button>
-          ) : (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                className="flex-1 bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink placeholder-ink-3 focus:outline-none focus:border-rose"
-                placeholder="World name"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && createWorld()}
-                autoFocus
-              />
-              <button
-                className="rounded-sm bg-rose px-4 py-2 font-medium text-white transition-colors hover:bg-rose-deep disabled:opacity-50"
-                onClick={createWorld}
-                disabled={createMutation.isPending}
-              >
-                Create
-              </button>
-              <button
-                className="rounded-sm border border-paper-3 px-4 py-2 text-ink-3 transition-colors hover:border-ink-4 hover:text-ink"
-                onClick={() => { setShowNew(false); setNewName('') }}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3 px-6 pb-4 pt-8">
+      <main className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
+        <div className="flex items-center gap-3 px-6 pb-4 pt-2">
           <div className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
-            Your Worlds &middot; {worlds.length}
+            {worlds.length} {entityLabel('world', { plural: true, capitalize: true })}
           </div>
-          <div className="h-px flex-1 bg-paper-3" />
         </div>
 
         {worlds.length === 0 ? (
-          <p className="px-6 text-sm text-ink-3">No worlds yet. Create one to get started.</p>
+          <p className="px-6 text-sm text-ink-3">No {entityLabel('world', { plural: true })} yet. Create one to get started.</p>
         ) : (
           <div className="flex flex-col gap-3 px-4">
             {worlds.map(w => {
@@ -112,15 +54,25 @@ export default function WorldList() {
                 >
                   <RelativeTimeStatus timestamp={timestamp} prefix="Updated " />
                   <div className="font-serif-zh text-[21px] font-normal leading-snug text-ink">{w.name}</div>
-                  {w.summary && (
-                    <div className="font-serif-zh mt-2 line-clamp-3 text-sm text-ink-3">
-                      {w.summary}
-                    </div>
-                  )}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {w.origin && (
+                      <span className="rounded-sm bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-3">
+                        {w.origin}
+                      </span>
+                    )}
+                    {w.register_title && (
+                      <span className="rounded-sm bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-3">
+                        {w.register_title}
+                      </span>
+                    )}
+                  </div>
                   <div className="mt-4 text-xs text-ink-4">
-                    {countLabel(w.prompt_cluster_count, 'prompt')}
-                    <span className="px-2">&middot;</span>
-                    {countLabel(w.piece_count, 'piece')}
+                    <CountIndicator
+                      count={w.prompt_cluster_count}
+                      entity="prompt"
+                      maxDots={20}
+                      unitsPerDot={25}
+                    />
                   </div>
                 </button>
               )
@@ -128,6 +80,16 @@ export default function WorldList() {
           </div>
         )}
       </main>
+
+      <button
+        type="button"
+        onClick={() => navigate('/worlds/new')}
+        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] inline-flex items-center gap-2 rounded-full border border-rose bg-rose px-5 py-3 text-base font-medium text-white shadow-[0_16px_34px_rgba(205,83,106,0.34)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.42)] focus:outline-none focus:ring-4 focus:ring-rose/25"
+        aria-label={`New ${entityLabel('world', { capitalize: true })}`}
+      >
+        <Plus aria-hidden="true" className="h-5 w-5" />
+        New {entityLabel('world', { capitalize: true })}
+      </button>
     </div>
   )
 }

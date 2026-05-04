@@ -24,8 +24,10 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
+    origin TEXT NOT NULL DEFAULT 'original',
     summary TEXT NOT NULL DEFAULT '',
     body TEXT NOT NULL DEFAULT '',
+    register_id INTEGER REFERENCES registers(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -64,7 +66,33 @@ sqlite.run(`
     model TEXT,
     created_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS registers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    details TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT ''
+  );
 `)
+
+function addColumnIfMissing(table: string, column: string, ddl: string) {
+  const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (!rows.some(row => row.name === column)) {
+    sqlite.run(`ALTER TABLE ${table} ADD COLUMN ${ddl};`)
+  }
+}
+
+function dropColumnIfPresent(table: string, column: string) {
+  const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (rows.some(row => row.name === column)) {
+    sqlite.run(`ALTER TABLE ${table} DROP COLUMN ${column};`)
+  }
+}
+
+addColumnIfMissing('worlds', 'origin', "origin TEXT NOT NULL DEFAULT 'original'")
+dropColumnIfPresent('worlds', 'language')
+addColumnIfMissing('registers', 'summary', "summary TEXT NOT NULL DEFAULT ''")
+addColumnIfMissing('worlds', 'register_id', 'register_id INTEGER REFERENCES registers(id) ON DELETE SET NULL')
 
 sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
@@ -96,12 +124,21 @@ export const sessions = sqliteTable('sessions', {
   expires_at: integer('expires_at').notNull(),
 })
 
+export const registers = sqliteTable('registers', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  details: text('details').notNull(),
+  summary: text('summary').notNull().default(''),
+})
+
 export const worlds = sqliteTable('worlds', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   name: text('name').notNull(),
+  origin: text('origin').notNull().default('original'),
   summary: text('summary').notNull().default(''),
   body: text('body').notNull().default(''),
+  register_id: integer('register_id').references(() => registers.id),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })
@@ -141,4 +178,4 @@ export const pieces = sqliteTable('pieces', {
   created_at: integer('created_at').notNull(),
 })
 
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, promptClusters, prompts, pieces } })
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, promptClusters, prompts, pieces, registers } })

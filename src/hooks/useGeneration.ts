@@ -23,8 +23,13 @@ type Action =
   | { type: 'chunk'; content: string }
   | { type: 'error'; message: string }
   | { type: 'done' }
+  | { type: 'stop' }
 
 const initialState: State = { phase: 'idle', output: '', error: '' }
+const DISPLAY_FLUSH_MS = 80
+const MAX_DISPLAY_UNITS_PER_SECOND = 100
+const MAX_DISPLAY_UNITS_PER_FLUSH = 10
+const DENSE_SCRIPT_PATTERN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -40,6 +45,30 @@ function reducer(state: State, action: Action): State {
       return { ...state, phase: 'idle', error: action.message }
     case 'done':
       return { ...state, phase: 'idle' }
+    case 'stop':
+      return { phase: 'idle', output: '', error: '' }
+  }
+}
+
+function getDisplayUnitCost(char: string) {
+  if (!/\S/u.test(char)) return 0
+  return DENSE_SCRIPT_PATTERN.test(char) ? 2 : 1
+}
+
+function takeDisplaySlice(text: string, maxUnits: number) {
+  let unitCount = 0
+  let end = 0
+
+  for (const char of text) {
+    const cost = getDisplayUnitCost(char)
+    if (cost > 0 && unitCount + cost > maxUnits && end > 0) break
+    unitCount += cost
+    end += char.length
+  }
+
+  return {
+    visible: text.slice(0, end),
+    remaining: text.slice(end),
   }
 }
 
@@ -52,12 +81,100 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
   const [state, dispatch] = useReducer(reducer, initialState)
   const activeGenerationIdRef = useRef<string | null>(null)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
+  const pendingChunkRef = useRef('')
+  const chunkFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const displayUnitBudgetRef = useRef(0)
+  const lastChunkFlushAtRef = useRef(0)
+  const pendingCompletionRef = useRef<Extract<Action, { type: 'done' | 'error' }> | null>(null)
   const stopRequestedRef = useRef(false)
   const onDoneRef = useRef(onDone)
   onDoneRef.current = onDone
 
+  function clearChunkFlushTimer() {
+    if (!chunkFlushTimerRef.current) return
+    clearTimeout(chunkFlushTimerRef.current)
+    chunkFlushTimerRef.current = null
+  }
+
+  function resetDisplayPacer() {
+    pendingChunkRef.current = ''
+    displayUnitBudgetRef.current = 0
+    lastChunkFlushAtRef.current = Date.now()
+    pendingCompletionRef.current = null
+    clearChunkFlushTimer()
+  }
+
+  function finishPendingCompletion() {
+    if (pendingChunkRef.current || !pendingCompletionRef.current) return
+
+    const completion = pendingCompletionRef.current
+    pendingCompletionRef.current = null
+    if (completion.type === 'done') {
+      dispatch({ type: 'done' })
+      onDoneRef.current?.()
+    } else {
+      dispatch(completion)
+    }
+  }
+
+  function getDisplayUnitAllowance() {
+    const now = Date.now()
+    const elapsed = Math.max(0, now - lastChunkFlushAtRef.current)
+    lastChunkFlushAtRef.current = now
+
+    const budget = Math.min(
+      displayUnitBudgetRef.current + (MAX_DISPLAY_UNITS_PER_SECOND * elapsed) / 1000,
+      MAX_DISPLAY_UNITS_PER_FLUSH,
+    )
+    const allowance = Math.max(1, Math.floor(budget))
+    displayUnitBudgetRef.current = Math.max(0, budget - allowance)
+
+    return allowance
+  }
+
+  function scheduleChunkFlush() {
+    if (chunkFlushTimerRef.current) return
+
+    chunkFlushTimerRef.current = setTimeout(() => {
+      chunkFlushTimerRef.current = null
+      flushNextChunkSlice()
+    }, DISPLAY_FLUSH_MS)
+  }
+
+  function flushNextChunkSlice() {
+    const content = pendingChunkRef.current
+    if (!content) {
+      finishPendingCompletion()
+      return
+    }
+
+    const { visible, remaining } = takeDisplaySlice(content, getDisplayUnitAllowance())
+    if (!visible) {
+      scheduleChunkFlush()
+      return
+    }
+
+    pendingChunkRef.current = remaining
+    dispatch({ type: 'chunk', content: visible })
+
+    if (remaining) scheduleChunkFlush()
+    else finishPendingCompletion()
+  }
+
+  function queueChunk(content: string) {
+    pendingChunkRef.current += content
+    scheduleChunkFlush()
+  }
+
+  function completeAfterDisplay(action: Extract<Action, { type: 'done' | 'error' }>) {
+    pendingCompletionRef.current = action
+    if (pendingChunkRef.current) scheduleChunkFlush()
+    else finishPendingCompletion()
+  }
+
   useEffect(() => {
     return () => {
+      clearChunkFlushTimer()
       activeRequestControllerRef.current?.abort()
     }
   }, [])
@@ -70,9 +187,11 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     const requestController = new AbortController()
     activeGenerationIdRef.current = generationId
     activeRequestControllerRef.current = requestController
+    resetDisplayPacer()
     stopRequestedRef.current = false
     dispatch({ type: 'start' })
 
+    let streamSettled = false
     try {
       const res = await fetch(`/api/worlds/${worldId}/generate`, {
         method: 'POST',
@@ -83,6 +202,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
       })
 
       if (!res.ok || !res.body) {
+        streamSettled = true
         if (!stopRequestedRef.current) dispatch({ type: 'error', message: 'Request failed' })
         else dispatch({ type: 'done' })
         return
@@ -110,25 +230,29 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
             } else if (msg.type === 'thinking') {
               dispatch({ type: 'phase', phase: 'thinking' })
             } else if (msg.type === 'chunk') {
-              dispatch({ type: 'chunk', content: msg.content })
+              if (typeof msg.content === 'string') queueChunk(msg.content)
             } else if (msg.type === 'done') {
-              dispatch({ type: 'done' })
-              onDoneRef.current?.()
+              streamSettled = true
+              completeAfterDisplay({ type: 'done' })
+              return
             } else if (msg.type === 'error') {
-              dispatch({ type: 'error', message: msg.message })
+              streamSettled = true
+              completeAfterDisplay({ type: 'error', message: msg.message })
+              return
             }
           } catch { }
         }
       }
     } catch (e) {
       if (!stopRequestedRef.current) {
-        dispatch({ type: 'error', message: e instanceof Error ? e.message : 'Unknown error' })
+        streamSettled = true
+        completeAfterDisplay({ type: 'error', message: e instanceof Error ? e.message : 'Unknown error' })
       }
     } finally {
       if (activeGenerationIdRef.current === generationId) {
         activeGenerationIdRef.current = null
         activeRequestControllerRef.current = null
-        dispatch({ type: 'done' })
+        if (!streamSettled && !stopRequestedRef.current) completeAfterDisplay({ type: 'done' })
       }
     }
   }
@@ -138,7 +262,10 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     if (!generationId || !worldId) return
 
     stopRequestedRef.current = true
-    dispatch({ type: 'done' })
+    pendingCompletionRef.current = null
+    pendingChunkRef.current = ''
+    clearChunkFlushTimer()
+    dispatch({ type: 'stop' })
     void fetch(`/api/worlds/${worldId}/generate/stop`, {
       method: 'POST',
       credentials: 'include',

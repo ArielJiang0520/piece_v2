@@ -2,11 +2,13 @@ import { useEffect, useMemo, type MouseEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
+import { entityLabel } from '../../config'
 import { useScrollReturn } from '../../hooks/useScrollReturn'
 import { diffPromptText } from '../../utils/promptDiff'
-import PieceCountIndicator from '../../components/PieceCountIndicator'
-import RelativeTimeStatus from '../../components/RelativeTimeStatus'
+import { relativeTime } from '../../utils/time'
+import CountIndicator from '../../components/CountIndicator'
 import { useTopNavConfig } from '../../components/TopNav'
+import { RotateCw } from 'lucide-react'
 
 interface ClusterReturnState {
   promptId: number
@@ -54,7 +56,7 @@ export default function Cluster() {
     parseClusterReturnState,
   )
 
-  useTopNavConfig({ title: 'Prompt Variations', backHref })
+  useTopNavConfig({ title: `${entityLabel('prompt', { capitalize: true })} variations`, backHref })
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
@@ -77,11 +79,16 @@ export default function Cluster() {
   const cluster = clusterQuery.data?.cluster ?? null
   const prompts = clusterQuery.data?.prompts ?? []
 
-  const promptDiffs = useMemo(
+  const variations = useMemo(
     () => prompts.map((prompt, index) => {
       const previousPrompt = prompts[index - 1]
-      return previousPrompt ? diffPromptText(previousPrompt.text, prompt.text) : null
-    }),
+      return {
+        prompt,
+        diff: previousPrompt ? diffPromptText(previousPrompt.text, prompt.text) : null,
+        isLatest: index === prompts.length - 1,
+        version: index + 1,
+      }
+    }).reverse(),
     [prompts],
   )
 
@@ -122,53 +129,83 @@ export default function Cluster() {
       {prompts.length === 0 ? (
         <p className="text-ink-3 text-sm">No variations yet.</p>
       ) : (
-        <div className="flex flex-col gap-4">
-          {prompts.map((prompt, index) => {
-            const diff = promptDiffs[index]
+        <div className="divide-y divide-rose/20">
+          {variations.map(({ prompt, diff, isLatest, version }, index) => {
+            const isLast = index === variations.length - 1
 
             return (
               <section
                 key={prompt.id}
                 data-prompt-id={prompt.id}
-                className="overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_1px_0_rgba(26,18,16,0.02)]"
+                className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-3 py-7 first:pt-2 last:pb-2"
               >
-                <Link
-                  to={`/worlds/${id}/prompts/${prompt.id}`}
-                  onClick={event => savePromptReturnState(prompt.id, event)}
-                  className="block px-5 py-5 transition-colors hover:bg-paper-2/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink-4/35"
-                >
-                  <div className="flex items-center justify-between gap-4 text-xs leading-none text-ink-4">
-                    <RelativeTimeStatus timestamp={prompt.updated_at} emptyLabel="No pieces" />
-                    <PieceCountIndicator count={prompt.piece_count} className="shrink-0" />
-                  </div>
-                  <h2 className="mt-3 font-serif-zh text-sm font-normal leading-6 text-ink-2">
-                    {prompt.text}
-                  </h2>
-
-                  {diff && (
-                    <div className="mt-4 space-y-1 rounded-sm border border-paper-3 bg-paper-2 px-3 py-2 font-mono text-xs leading-5">
-                      {diff.removed && (
-                        <div className="text-red-800/70">
-                          <span className="select-none">- </span>
-                          {diff.removed}
-                        </div>
-                      )}
-                      {diff.added && (
-                        <div className="text-green-800/70">
-                          <span className="select-none">+ </span>
-                          {diff.added}
-                        </div>
-                      )}
-                    </div>
+                <div className="relative flex justify-center">
+                  {!isLast && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute bottom-0 left-1/2 top-12 w-px -translate-x-1/2 bg-rose/25"
+                    />
                   )}
-                </Link>
+                  <div
+                    className={[
+                      'relative z-10 grid h-12 w-12 place-items-center rounded-full border text-sm font-semibold',
+                      isLatest
+                        ? 'border-transparent bg-rose text-white'
+                        : 'border-rose/30 bg-paper text-rose-deep/70',
+                    ].join(' ')}
+                  >
+                    v{version}
+                  </div>
+                </div>
 
-                <Link
-                  to={`/worlds/${id}/generate?promptId=${prompt.id}`}
-                  className="block w-full border-t border-paper-3 text-paper-2 px-4 py-2 text-center text-xs font-medium bg-ink-3/80 transition-colors hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink-4/35"
-                >
-                  Use this prompt
-                </Link>
+                <div className="min-w-0">
+                  <Link
+                    to={`/worlds/${id}/prompts/${prompt.id}`}
+                    onClick={event => savePromptReturnState(prompt.id, event)}
+                    className="block rounded-sm transition-colors hover:bg-paper-2/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink-4/35"
+                  >
+                    <div className="flex items-center justify-between gap-3 text-xs leading-5 text-ink-4">
+                      <div className="flex min-w-0 items-center gap-2">
+                        {isLatest && (
+                          <span className="shrink-0 rounded-sm bg-rose px-2 py-1 text-[10px] font-semibold leading-none text-white">
+                            LATEST
+                          </span>
+                        )}
+                        <span className="truncate">{relativeTime(prompt.updated_at)}</span>
+                      </div>
+                      <CountIndicator count={prompt.piece_count} className="shrink-0 justify-end" />
+                    </div>
+
+                    <h2 className="mt-4 font-serif-zh text-[15px] font-normal leading-7 text-ink-2">
+                      {prompt.text}
+                    </h2>
+
+                    {diff && (
+                      <div className="mt-5 space-y-2 border-l-2 border-rose/30 pl-4 font-mono text-xs leading-5">
+                        {diff.removed && (
+                          <div className="text-red-800/70">
+                            <span className="select-none">- </span>
+                            {diff.removed}
+                          </div>
+                        )}
+                        {diff.added && (
+                          <div className="text-emerald-800/70">
+                            <span className="select-none">+ </span>
+                            {diff.added}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Link>
+
+                  <Link
+                    to={`/worlds/${id}/generate?promptId=${prompt.id}`}
+                    className="mt-5 inline-flex items-center gap-2 rounded-md border border-rose/80 bg-paper px-4 py-2 text-sm font-medium leading-none text-rose/80 transition-colors hover:border-ink-4 hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                  >
+                    <RotateCw aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                    <span>Another {entityLabel('piece')}</span>
+                  </Link>
+                </div>
               </section>
             )
           })}

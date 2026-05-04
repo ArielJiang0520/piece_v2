@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ArrowUpDown, Check, Ellipsis, GitBranch, Search, WandSparkles, X } from 'lucide-react'
+import { ArrowUp, ArrowUpDown, Check, GitBranch, Search, Plus, X, Ellipsis } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
+import { entityLabel } from '../../config'
 import { useScrollReturn } from '../../hooks/useScrollReturn'
-import PieceCountIndicator from '../../components/PieceCountIndicator'
+import CountIndicator from '../../components/CountIndicator'
 import RelativeTimeStatus from '../../components/RelativeTimeStatus'
+import TextField from '../../components/TextField'
 import { useTopNavConfig } from '../../components/TopNav'
 
 interface ClusterGroup {
@@ -13,6 +15,7 @@ interface ClusterGroup {
   title: string
   prompt_count: number
   piece_count: number
+  latest_prompt_id: number | null
   latest_piece_at: number | null
 }
 
@@ -46,8 +49,8 @@ const PAGE_SIZE = 20
 
 const SORT_OPTIONS = [
   { value: 'latest', label: 'Latest' },
-  { value: 'most_pieces', label: 'Most pieces' },
-  { value: 'most_variations', label: 'Most variations' },
+  { value: 'most_pieces', label: `Most ${entityLabel('piece', { plural: true })}` },
+  { value: 'most_variations', label: `Most ${entityLabel('prompt')} variations` },
   { value: 'oldest', label: 'Oldest' },
 ] as const
 
@@ -246,10 +249,10 @@ export default function World() {
   const worldName = worldQuery.data?.name ?? ''
   const firstPage = pages[0]
   const totalClusters = firstPage?.total ?? 0
-  const totalPieces = firstPage?.totalPieces ?? 0
+  // const totalPieces = firstPage?.totalPieces ?? 0
   const searchTotal = searchQuery.data?.items.length ?? 0
-  const worldTitle = worldName || 'World'
-  useTopNavConfig({ title: worldTitle, backHref: '/worlds' })
+  // const worldTitle = worldName || entityLabel('world', { capitalize: true })
+  useTopNavConfig({ title: entityLabel('prompt', { capitalize: true, plural: true }), backHref: '/worlds' })
 
   if (!worldQuery.data || (isSearching ? false : !clustersQuery.data)) {
     return (
@@ -269,36 +272,34 @@ export default function World() {
           <Link
             to={`/worlds/${id}/edit`}
             className="mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-4 transition-colors hover:bg-paper-2 hover:text-ink-3 focus:outline-none focus:ring-2 focus:ring-rose/30"
-            title="Edit world"
-            aria-label="Edit world"
+            title={`Edit ${entityLabel('world')}`}
+            aria-label={`Edit ${entityLabel('world')}`}
           >
             <Ellipsis aria-hidden="true" className="h-6 w-6" />
           </Link>
         </header>
 
         <div className="mt-4">
-          <div className="relative">
-            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={event => setSearchInput(event.target.value)}
-              placeholder="Search prompts by meaning..."
-              className="w-full rounded-md border border-paper-3 bg-paper py-2.5 pl-9 pr-9 text-sm text-ink placeholder:text-ink-4 focus:border-ink-4/40 focus:outline-none focus:ring-2 focus:ring-rose/20"
-              aria-label="Search prompts"
-            />
-            {searchInput && (
+          <TextField
+            type="text"
+            value={searchInput}
+            onChange={event => setSearchInput(event.target.value)}
+            placeholder={`Search ${entityLabel('prompt', { plural: true })} by meaning...`}
+            aria-label={`Search ${entityLabel('prompt', { plural: true })}`}
+            variant="search"
+            leadingAdornment={<Search aria-hidden="true" className="h-4 w-4 text-ink-4" />}
+            trailingAdornment={searchInput && (
               <button
                 type="button"
                 onClick={() => setSearchInput('')}
-                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-ink-4 hover:bg-paper-2 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
+                className="grid h-6 w-6 place-items-center rounded-full text-ink-4 hover:bg-paper-2 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
                 aria-label="Clear search"
                 title="Clear search"
               >
                 <X aria-hidden="true" className="h-3.5 w-3.5" />
               </button>
             )}
-          </div>
+          />
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-4">
@@ -309,9 +310,7 @@ export default function World() {
                 : `${countLabel(searchTotal, 'match')} for "${queryParam}"`
             ) : (
               <>
-                {countLabel(totalClusters, 'prompt')}
-                <span className="px-2">&middot;</span>
-                {countLabel(totalPieces, 'piece')}
+                {countLabel(totalClusters, entityLabel('prompt'))}
               </>
             )}
           </div>
@@ -358,7 +357,7 @@ export default function World() {
             <p className="mb-5 text-sm text-ink-3">
               {isSearching
                 ? (searchQuery.isLoading ? 'Searching...' : 'No matches.')
-                : 'No prompts yet.'}
+                : `No ${entityLabel('prompt', { plural: true })} yet.`}
             </p>
           </div>
         ) : (
@@ -371,22 +370,29 @@ export default function World() {
                   className="overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_1px_0_rgba(26,18,16,0.02)]"
                 >
                   <Link
-                    to={`/worlds/${id}/clusters/${group.id}`}
+                    to={
+                      group.prompt_count === 1 && group.latest_prompt_id
+                        ? `/worlds/${id}/prompts/${group.latest_prompt_id}`
+                        : `/worlds/${id}/clusters/${group.id}`
+                    }
+                    state={{ fromWorldList: true }}
                     onClick={event => saveClusterReturnState(group.id, event)}
                     className="block px-5 py-5 transition-colors hover:bg-paper-2/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink-4/35"
                   >
-                    <RelativeTimeStatus timestamp={group.latest_piece_at} emptyLabel="No pieces" />
+                    <RelativeTimeStatus timestamp={group.latest_piece_at} emptyLabel={`No ${entityLabel('piece', { plural: true })}`} />
                     <div className="font-serif-zh text-sm font-normal text-ink-2 line-clamp-4">
                       {group.title}
                     </div>
                   </Link>
 
                   <div className="flex items-center justify-between gap-4 border-t border-paper-3 bg-paper-2/70 px-7 py-4 text-xs leading-none text-ink-4">
-                    <PieceCountIndicator count={group.piece_count} />
-                    <div className="flex shrink-0 items-center gap-1.5 text-ink-4">
-                      <GitBranch aria-hidden="true" className="h-4 w-4" />
-                      <span>{countLabel(group.prompt_count, 'variation')}</span>
-                    </div>
+                    <CountIndicator count={group.piece_count} />
+                    {group.prompt_count > 1 && (
+                      <div className="flex shrink-0 items-center gap-1.5 text-ink-4">
+                        <GitBranch aria-hidden="true" className="h-4 w-4" />
+                        <span>{countLabel(group.prompt_count, `${entityLabel('prompt')} variation`)}</span>
+                      </div>
+                    )}
                   </div>
                 </section>
               ))}
@@ -398,7 +404,7 @@ export default function World() {
                   {isFetchingNextPage && 'Loading more...'}
                 </div>
                 {!hasNextPage && groups.length > PAGE_SIZE && (
-                  <div className="mt-2 text-center text-xs text-ink-4">End of prompts</div>
+                  <div className="mt-2 text-center text-xs text-ink-4">End of {entityLabel('prompt', { plural: true })}</div>
                 )}
               </>
             )}
@@ -410,7 +416,7 @@ export default function World() {
         <button
           type="button"
           onClick={scrollToTop}
-          className="fixed bottom-7 left-1/2 grid h-11 w-11 -translate-x-1/2 place-items-center rounded-full border border-paper-3 bg-white text-ink shadow-[0_10px_24px_rgba(26,18,16,0.14)] transition-all hover:-translate-y-0.5 hover:bg-paper-2 focus:outline-none focus:ring-4 focus:ring-ink-4/20"
+          className="fixed bottom-7 left-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] grid h-11 w-11 place-items-center rounded-full border border-paper-3 bg-white text-ink shadow-[0_10px_24px_rgba(26,18,16,0.14)] transition-all hover:-translate-y-0.5 hover:bg-paper-2 focus:outline-none focus:ring-4 focus:ring-ink-4/20"
           aria-label="Scroll to top"
           title="Scroll to top"
         >
@@ -420,11 +426,11 @@ export default function World() {
 
       <Link
         to={`/worlds/${id}/generate`}
-        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] grid h-18 w-18 place-items-center rounded-full border border-rose bg-rose text-white shadow-[0_16px_34px_rgba(205,83,106,0.34)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.42)] focus:outline-none focus:ring-4 focus:ring-rose/25"
-        aria-label="Generate piece"
-        title="Generate piece"
+        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] inline-flex items-center gap-2 rounded-full border border-rose bg-rose px-5 py-3 text-base font-medium text-white shadow-[0_16px_34px_rgba(205,83,106,0.34)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.42)] focus:outline-none focus:ring-4 focus:ring-rose/25"
+        aria-label={`New ${entityLabel('prompt', { capitalize: true })}`}
       >
-        <WandSparkles aria-hidden="true" className="h-6 w-6" />
+        <Plus aria-hidden="true" className="h-5 w-5" />
+        New {entityLabel('prompt', { capitalize: true })}
       </Link>
     </div>
   )

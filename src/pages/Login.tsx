@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
+import TextField from '../components/TextField'
 
 export default function Login() {
   const { login, signup } = useAuth()
@@ -25,15 +26,13 @@ export default function Login() {
       <div className="page-width">
         <h1 className="font-serif-zh text-2xl font-normal mb-8 text-ink">Piece</h1>
         <div className="flex flex-col gap-3">
-          <input
-            className="w-full bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink placeholder-ink-3 focus:outline-none focus:border-rose"
+          <TextField
             placeholder="Username"
             value={username}
             onChange={e => setUsername(e.target.value)}
             autoFocus
           />
-          <input
-            className="w-full bg-paper-2 border border-paper-3 rounded-sm px-3 py-2 text-ink placeholder-ink-3 focus:outline-none focus:border-rose"
+          <TextField
             type="password"
             placeholder="Password"
             value={password}

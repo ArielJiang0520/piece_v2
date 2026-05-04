@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, and, desc, inArray, sql } from 'drizzle-orm'
-import { db, pieces, promptClusters, worlds } from '../../db'
+import { db, pieces, promptClusters, registers, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import promptRoutes from './prompts'
 import generateRoutes from './generate'
@@ -9,16 +9,31 @@ import pieceRoutes from './pieces'
 
 const worldRoutes = new Hono<{ Variables: Variables }>()
 
+function originText(value: unknown) {
+  if (typeof value !== 'string') return 'original'
+  return value.trim() || 'original'
+}
+
+function registerIdValue(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10)
+  return Number.isFinite(n) ? n : null
+}
+
 worldRoutes.get('/', authMiddleware, (c) => {
   const userId = c.get('userId') as number
   const worldRows = db
     .select({
       id: worlds.id,
       name: worlds.name,
+      origin: worlds.origin,
       summary: worlds.summary,
       updated_at: worlds.updated_at,
+      register_id: worlds.register_id,
+      register_title: registers.title,
     })
     .from(worlds)
+    .leftJoin(registers, eq(worlds.register_id, registers.id))
     .where(eq(worlds.user_id, userId))
     .orderBy(desc(worlds.updated_at))
     .all()
@@ -66,11 +81,28 @@ worldRoutes.get('/', authMiddleware, (c) => {
 
 worldRoutes.post('/', authMiddleware, async (c) => {
   const userId = c.get('userId') as number
-  const { name } = await c.req.json()
+  const body = await c.req.json()
+  const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) return c.json({ error: 'Name required' }, 400)
   const now = Date.now()
-  const result = db.insert(worlds).values({ user_id: userId, name, summary: '', body: '', created_at: now, updated_at: now }).returning().get()
-  return c.json({ id: result.id, name: result.name })
+  const result = db.insert(worlds).values({
+    user_id: userId,
+    name,
+    origin: originText(body.origin),
+    summary: typeof body.summary === 'string' ? body.summary : '',
+    body: typeof body.body === 'string' ? body.body : '',
+    register_id: registerIdValue(body.register_id),
+    created_at: now,
+    updated_at: now,
+  }).returning().get()
+  return c.json({
+    id: result.id,
+    name: result.name,
+    origin: result.origin,
+    summary: result.summary,
+    body: result.body,
+    register_id: result.register_id,
+  })
 })
 
 worldRoutes.get('/:id', authMiddleware, (c) => {
@@ -78,7 +110,15 @@ worldRoutes.get('/:id', authMiddleware, (c) => {
   const id = parseInt(c.req.param('id'))
   const world = db.select().from(worlds).where(and(eq(worlds.id, id), eq(worlds.user_id, userId))).get()
   if (!world) return c.json({ error: 'Not found' }, 404)
-  return c.json({ id: world.id, name: world.name, summary: world.summary, body: world.body, updated_at: world.updated_at })
+  return c.json({
+    id: world.id,
+    name: world.name,
+    origin: world.origin,
+    summary: world.summary,
+    body: world.body,
+    register_id: world.register_id,
+    updated_at: world.updated_at,
+  })
 })
 
 worldRoutes.patch('/:id', authMiddleware, async (c) => {
@@ -89,9 +129,15 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
 
   const body = await c.req.json()
   const updates: Record<string, any> = { updated_at: Date.now() }
-  if (body.name !== undefined) updates.name = body.name
+  if (body.name !== undefined) {
+    const name = typeof body.name === 'string' ? body.name.trim() : ''
+    if (!name) return c.json({ error: 'Name required' }, 400)
+    updates.name = name
+  }
+  if (body.origin !== undefined) updates.origin = originText(body.origin)
   if (body.summary !== undefined) updates.summary = body.summary
   if (body.body !== undefined) updates.body = body.body
+  if (body.register_id !== undefined) updates.register_id = registerIdValue(body.register_id)
 
   db.update(worlds).set(updates).where(eq(worlds.id, id)).run()
   return c.json({ ok: true })
