@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react'
 import { apiFetch } from '../../../api'
 import { entityLabel } from '../../../config'
 import ConfirmDialog from '../../../components/ConfirmDialog'
+import Skeleton, { SkeletonText } from '../../../components/Skeleton'
 import { useTopNavConfig } from '../../../components/TopNav'
 import { useWorldForm, type WorldFormValues } from './state'
 import WorldFormFields from './Fields'
@@ -103,7 +104,36 @@ export default function WorldEdit() {
     deleteMutation.mutate()
   }
 
-  if (!initialized) return <div className="page-width p-6 text-ink-3">Loading...</div>
+  if (!initialized) {
+    return (
+      <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
+        <div className="mb-6">
+          <Skeleton className="mb-2 h-4 w-28" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+        <div className="mb-6">
+          <Skeleton className="mb-2 h-4 w-16" />
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-20" />
+            <Skeleton className="h-10 w-44" />
+          </div>
+        </div>
+        <div className="mb-6">
+          <Skeleton className="mb-2 h-4 w-12" />
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="rounded-sm border border-paper-3 bg-paper-2 px-3 py-2">
+                <Skeleton className="h-4 w-1/2" />
+                <SkeletonText className="mt-2" lineClassName="h-3" lines={1} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <Skeleton className="mb-2 h-4 w-20" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
+  }
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">

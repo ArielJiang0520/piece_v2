@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { apiFetch } from '../api'
 import { entityLabel } from '../config'
+import Skeleton from './Skeleton'
 
 interface World {
   id: number
@@ -155,7 +156,15 @@ export default function TopNav() {
               <span>Your {entityLabel('world', { plural: true, capitalize: true })}</span>
               <ChevronRight aria-hidden="true" className="h-4 w-4" />
             </button>
-            {recentWorlds.length === 0 ? (
+            {worldsQuery.isLoading ? (
+              <ul className="flex flex-col gap-1">
+                {Array.from({ length: 3 }, (_, index) => (
+                  <li key={index} className="px-2 py-2">
+                    <Skeleton className="h-5 w-full" />
+                  </li>
+                ))}
+              </ul>
+            ) : recentWorlds.length === 0 ? (
               <p className="text-sm text-ink-3">No {entityLabel('world', { plural: true })} yet.</p>
             ) : (
               <ul className="flex flex-col gap-1">

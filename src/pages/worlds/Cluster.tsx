@@ -7,6 +7,7 @@ import { useScrollReturn } from '../../hooks/useScrollReturn'
 import { diffPromptText } from '../../utils/promptDiff'
 import { relativeTime } from '../../utils/time'
 import CountIndicator from '../../components/CountIndicator'
+import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import { useTopNavConfig } from '../../components/TopNav'
 import { RotateCw } from 'lucide-react'
 
@@ -120,7 +121,36 @@ export default function Cluster() {
   }
 
   if (!worldQuery.data || !clusterQuery.data) {
-    return <div className="page-width p-6 text-ink-3">Loading...</div>
+    return (
+      <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
+        <div className="divide-y divide-rose/20">
+          {Array.from({ length: 4 }, (_, index) => (
+            <section
+              key={index}
+              className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-3 py-7 first:pt-2 last:pb-2"
+            >
+              <div className="relative flex justify-center">
+                {index < 3 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute bottom-0 left-1/2 top-12 w-px -translate-x-1/2 bg-rose/15"
+                  />
+                )}
+                <Skeleton className="relative z-10 h-12 w-12 rounded-full" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+                <SkeletonText className="mt-4" lineClassName="h-4" lines={3} />
+                <Skeleton className="mt-5 h-9 w-32 rounded-md" />
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+    )
   }
   if (!cluster) return null
 

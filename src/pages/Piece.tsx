@@ -6,6 +6,7 @@ import { apiFetch } from '../api'
 import { entityLabel } from '../config'
 import { relativeTime } from '../utils/time'
 import ConfirmDialog from '../components/ConfirmDialog'
+import Skeleton, { SkeletonText } from '../components/Skeleton'
 import { useTopNavConfig } from '../components/TopNav'
 
 interface Piece {
@@ -86,7 +87,21 @@ export default function Piece() {
     deleteMutation.mutate()
   }
 
-  if (!piece) return <div className="page-width p-6 text-ink-3">Loading...</div>
+  if (!piece) {
+    return (
+      <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
+        <SkeletonText className="mb-8" lineClassName="h-4" lines={2} />
+        <div className="mb-12 space-y-5">
+          <SkeletonText lines={5} lineClassName="h-4" />
+          <SkeletonText lines={4} lineClassName="h-4" />
+          <SkeletonText lines={3} lineClassName="h-4" />
+        </div>
+        <div className="border-t border-paper-3 pt-6">
+          <Skeleton className="h-3 w-24" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">

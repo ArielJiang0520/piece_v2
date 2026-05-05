@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from './api'
+import Skeleton, { SkeletonText } from './components/Skeleton'
 
 interface User {
   username: string
@@ -52,7 +53,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
   }
 
-  if (loading) return null
+  if (loading) {
+    return (
+      <div className="page-width min-h-screen px-4 py-12">
+        <Skeleton className="mb-8 h-9 w-40" />
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="rounded-md border border-paper-3 bg-paper px-5 py-4">
+              <Skeleton className="mb-3 h-3 w-24" />
+              <Skeleton className="h-6 w-2/3" />
+              <SkeletonText className="mt-4" lineClassName="h-3" lines={2} />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <AuthContext.Provider value={{ user, loading, login, signup, logout }}>

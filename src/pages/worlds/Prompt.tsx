@@ -6,6 +6,7 @@ import { apiFetch } from '../../api'
 import { entityLabel } from '../../config'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import RelativeTimeStatus from '../../components/RelativeTimeStatus'
+import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import { useTopNavConfig } from '../../components/TopNav'
 
 interface Prompt {
@@ -130,7 +131,36 @@ export default function Prompt() {
   }
 
   if (!worldQuery.data || !promptQuery.data) {
-    return <div className="page-width p-6 text-ink-3">Loading...</div>
+    return (
+      <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-8">
+        <header className="relative mb-12 pt-8 text-center">
+          <SkeletonText className="mx-auto max-w-88" lineClassName="mx-auto h-4" lines={3} />
+          <Skeleton className="mx-auto mt-16 h-14 w-full max-w-104 rounded-lg" />
+        </header>
+        <section>
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div className="flex items-baseline gap-3">
+              <Skeleton className="h-8 w-10" />
+              <Skeleton className="h-4 w-14" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div
+                key={index}
+                className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 rounded-md border border-paper-3 bg-paper px-4 py-4"
+              >
+                <Skeleton className="mt-0.5 h-4 w-8" />
+                <div className="min-w-0">
+                  <SkeletonText lines={2} />
+                  <Skeleton className="mt-3 h-3 w-24" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    )
   }
   if (!prompt) return null
 

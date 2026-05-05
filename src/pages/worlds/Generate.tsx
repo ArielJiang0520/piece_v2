@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { apiFetch } from '../../api'
+import Skeleton from '../../components/Skeleton'
 import TextField from '../../components/TextField'
 import { MODELS, DEFAULT_MODEL_ID, entityLabel } from '../../config'
 import { useGeneration } from '../../hooks/useGeneration'
@@ -73,7 +74,6 @@ export default function Generate() {
     queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string }>,
     enabled: !!id,
   })
-  const worldName = worldQuery.data?.name ?? ''
 
   useEffect(() => {
     if (worldQuery.isError) navigate('/')
@@ -212,16 +212,23 @@ export default function Generate() {
         <span className="text-xs font-medium text-ink-3">Thinking</span>
       </div>
 
-      <TextField
-        containerClassName="mb-4"
-        label={entityLabel('prompt', { capitalize: true })}
-        multiline
-        rows={4}
-        placeholder={loadingPrompt ? `Loading ${entityLabel('prompt')}...` : `Enter your ${entityLabel('prompt')}...`}
-        value={prompt}
-        onChange={e => setPrompt(e.target.value)}
-        disabled={streaming || loadingPrompt}
-      />
+      {loadingPrompt ? (
+        <div className="mb-4">
+          <Skeleton className="mb-2 h-4 w-20" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      ) : (
+        <TextField
+          containerClassName="mb-4"
+          label={entityLabel('prompt', { capitalize: true })}
+          multiline
+          rows={4}
+          placeholder={`Enter your ${entityLabel('prompt')}...`}
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          disabled={streaming}
+        />
+      )}
 
       {error && <p className="text-rose-deep text-sm mb-4">{error}</p>}
 

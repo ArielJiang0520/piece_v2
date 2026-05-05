@@ -3,6 +3,7 @@ import { Plus, Trash2, Pencil, Check, X } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import TextField from '../../components/TextField'
+import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import { useTopNavConfig } from '../../components/TopNav'
 import { useToast } from '../../components/Toast'
 
@@ -148,7 +149,24 @@ export default function EditRegisters() {
       </div>
 
       {registersQuery.isLoading ? (
-        <p className="text-sm text-ink-3">Loading...</p>
+        <ul className="flex flex-col gap-3">
+          {Array.from({ length: 3 }, (_, index) => (
+            <li
+              key={index}
+              className="rounded-md border border-paper-3 bg-paper px-4 py-3"
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <Skeleton className="h-3 w-14" />
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                </div>
+              </div>
+              <Skeleton className="h-5 w-1/2" />
+              <SkeletonText className="mt-3" lines={3} />
+            </li>
+          ))}
+        </ul>
       ) : registers.length === 0 ? (
         <p className="text-sm text-ink-3">No registers yet.</p>
       ) : (

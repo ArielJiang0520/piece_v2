@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../../api'
 import { entityLabel } from '../../../config'
+import Skeleton, { SkeletonText } from '../../../components/Skeleton'
 import TextField from '../../../components/TextField'
 import type { WorldFormValues } from './state'
 
@@ -71,7 +72,17 @@ export default function WorldFormFields({ values, setField, autoFocusName }: Pro
       <div className="mb-6">
         <label className="mb-1 block text-sm uppercase tracking-wide text-ink-3">Vibe</label>
         {registersQuery.isLoading ? (
-          <p className="text-sm text-ink-3">Loading registers...</p>
+          <ul className="flex flex-col gap-2">
+            {Array.from({ length: 3 }, (_, index) => (
+              <li
+                key={index}
+                className="rounded-sm border border-paper-3 bg-paper-2 px-3 py-2"
+              >
+                <Skeleton className="h-4 w-1/2" />
+                <SkeletonText className="mt-2" lineClassName="h-3" lines={1} />
+              </li>
+            ))}
+          </ul>
         ) : registers.length === 0 ? (
           <p className="text-sm text-ink-3">No registers available.</p>
         ) : (

@@ -5,6 +5,7 @@ import { apiFetch } from '../../api'
 import { entityLabel } from '../../config'
 import CountIndicator from '../../components/CountIndicator'
 import RelativeTimeStatus from '../../components/RelativeTimeStatus'
+import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import { useTopNavConfig } from '../../components/TopNav'
 
 interface World {
@@ -34,12 +35,33 @@ export default function WorldList() {
     <div className="min-h-screen page-width">
       <main className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-3 px-6 pb-4 pt-2">
-          <div className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
-            {worlds.length} {entityLabel('world', { plural: true, capitalize: true })}
-          </div>
+          {worldsQuery.isLoading ? (
+            <Skeleton className="h-3 w-24" />
+          ) : (
+            <div className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
+              {worlds.length} {entityLabel('world', { plural: true, capitalize: true })}
+            </div>
+          )}
         </div>
 
-        {worlds.length === 0 ? (
+        {worldsQuery.isLoading ? (
+          <div className="flex flex-col gap-3 px-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div
+                key={index}
+                className="rounded-md border border-paper-3 bg-paper px-5 py-4"
+              >
+                <Skeleton className="mb-3 h-3 w-24" />
+                <Skeleton className="h-6 w-2/3" />
+                <div className="mt-2 flex items-center gap-1.5">
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-5 w-20" />
+                </div>
+                <SkeletonText className="mt-4" lineClassName="h-3" lines={1} />
+              </div>
+            ))}
+          </div>
+        ) : worlds.length === 0 ? (
           <p className="px-6 text-sm text-ink-3">No {entityLabel('world', { plural: true })} yet. Create one to get started.</p>
         ) : (
           <div className="flex flex-col gap-3 px-4">

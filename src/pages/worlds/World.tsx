@@ -7,6 +7,7 @@ import { entityLabel } from '../../config'
 import { useScrollReturn } from '../../hooks/useScrollReturn'
 import CountIndicator from '../../components/CountIndicator'
 import RelativeTimeStatus from '../../components/RelativeTimeStatus'
+import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import TextField from '../../components/TextField'
 import { useTopNavConfig } from '../../components/TopNav'
 
@@ -55,6 +56,28 @@ const SORT_OPTIONS = [
 ] as const
 
 type SortKey = typeof SORT_OPTIONS[number]['value']
+
+function ClusterCardSkeletons({ count = 4 }: { count?: number }) {
+  return (
+    <div className="mt-8 flex flex-col gap-4">
+      {Array.from({ length: count }, (_, index) => (
+        <section
+          key={index}
+          className="overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_1px_0_rgba(26,18,16,0.02)]"
+        >
+          <div className="px-5 py-5">
+            <Skeleton className="mb-3 h-3 w-24" />
+            <SkeletonText lineClassName="h-4" lines={3} />
+          </div>
+          <div className="flex items-center justify-between gap-4 border-t border-paper-3 bg-paper-2/70 px-7 py-4">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
 
 function parseWorldReturnState(value: unknown) {
   const parsed = value as Partial<WorldReturnState>
@@ -197,6 +220,7 @@ export default function World() {
   const groups = isSearching ? (searchQuery.data?.items ?? []) : listGroups
 
   const activeData = isSearching ? searchQuery.data : clustersQuery.data
+  const loadingSearch = isSearching && searchQuery.isLoading
 
   useEffect(() => {
     const restoreState = restoreStateRef.current
@@ -256,8 +280,19 @@ export default function World() {
 
   if (!worldQuery.data || (isSearching ? false : !clustersQuery.data)) {
     return (
-      <div className="page-width min-h-screen bg-paper px-7 py-12 text-sm text-ink-4">
-        Loading...
+      <div className="min-h-screen bg-paper">
+        <div className="page-width min-h-screen px-4 pb-32 pt-12">
+          <header className="flex items-start justify-between gap-5">
+            <Skeleton className="h-11 w-52" />
+            <Skeleton className="mt-1 h-10 w-10 rounded-full" />
+          </header>
+          <Skeleton className="mt-4 h-11 w-full rounded-md" />
+          <div className="mt-5 flex items-center justify-between gap-4">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-6 w-20" />
+          </div>
+          <ClusterCardSkeletons />
+        </div>
       </div>
     )
   }
@@ -304,10 +339,10 @@ export default function World() {
 
         <div className="mt-5 flex items-center justify-between gap-4">
           <div className="text-xs text-ink-4">
-            {isSearching ? (
-              searchQuery.isLoading
-                ? 'Searching...'
-                : `${countLabel(searchTotal, 'match')} for "${queryParam}"`
+            {loadingSearch ? (
+              <Skeleton className="h-3 w-24" />
+            ) : isSearching ? (
+              `${countLabel(searchTotal, 'match')} for "${queryParam}"`
             ) : (
               <>
                 {countLabel(totalClusters, entityLabel('prompt'))}
@@ -352,11 +387,13 @@ export default function World() {
           )}
         </div>
 
-        {groups.length === 0 ? (
+        {loadingSearch ? (
+          <ClusterCardSkeletons count={3} />
+        ) : groups.length === 0 ? (
           <div className="pt-16 text-center">
             <p className="mb-5 text-sm text-ink-3">
               {isSearching
-                ? (searchQuery.isLoading ? 'Searching...' : 'No matches.')
+                ? 'No matches.'
                 : `No ${entityLabel('prompt', { plural: true })} yet.`}
             </p>
           </div>
@@ -401,7 +438,11 @@ export default function World() {
             {!isSearching && (
               <>
                 <div ref={loadMoreRef} className="mt-7 min-h-8 text-center text-sm text-ink-4">
-                  {isFetchingNextPage && 'Loading more...'}
+                  {isFetchingNextPage && (
+                    <div className="-mt-8">
+                      <ClusterCardSkeletons count={1} />
+                    </div>
+                  )}
                 </div>
                 {!hasNextPage && groups.length > PAGE_SIZE && (
                   <div className="mt-2 text-center text-xs text-ink-4">End of {entityLabel('prompt', { plural: true })}</div>
