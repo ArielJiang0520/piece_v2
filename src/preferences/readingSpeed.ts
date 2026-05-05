@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react'
 export const READING_SPEED_OPTIONS = [
   { id: 'slow', label: 'slow', unitsPerSecond: 30 },
   { id: 'normal', label: 'normal', unitsPerSecond: 50 },
-  { id: 'fast', label: 'fast', unitsPerSecond: 70 },
+  { id: 'fast', label: 'fast', unitsPerSecond: 80 },
 ] as const
 
 export type ReadingSpeedId = (typeof READING_SPEED_OPTIONS)[number]['id']

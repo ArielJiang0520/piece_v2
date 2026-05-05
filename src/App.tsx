@@ -12,7 +12,8 @@ import World from './pages/worlds/World'
 import WorldEdit from './pages/worlds/worldForm/WorldEdit'
 import Cluster from './pages/worlds/Cluster'
 import Prompt from './pages/worlds/Prompt'
-import Generate from './pages/worlds/Generate'
+import Generate from './pages/worlds/generate/Generate'
+import AdminTools from './pages/admin/AdminTools'
 import EditRegisters from './pages/admin/EditRegisters'
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/worlds/:id/prompts/:promptId" element={<ProtectedLayout><Prompt /></ProtectedLayout>} />
           <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />
           <Route path="/pieces/:id" element={<ProtectedLayout><Piece /></ProtectedLayout>} />
+          <Route path="/admin" element={<ProtectedLayout><AdminTools /></ProtectedLayout>} />
           <Route path="/admin/registers" element={<ProtectedLayout><EditRegisters /></ProtectedLayout>} />
         </Routes>
       </TopNavProvider>

@@ -72,7 +72,7 @@ export default function Piece() {
   }, [deleteMutation.isPending, piece])
 
   useTopNavConfig({
-    title: entityLabel('piece', { capitalize: true }),
+    secondaryTitle: entityLabel('piece', { capitalize: true }),
     backHref,
     rightAction: navRightAction,
   })

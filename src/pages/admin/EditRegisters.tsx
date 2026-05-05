@@ -17,7 +17,7 @@ interface Register {
 export default function EditRegisters() {
   const queryClient = useQueryClient()
   const toast = useToast()
-  useTopNavConfig({ title: 'Edit Registers', backHref: '/worlds' })
+  useTopNavConfig({ mainTitle: 'Admin Tools', secondaryTitle: 'Edit Registers', backHref: '/admin' })
 
   const registersQuery = useQuery({
     queryKey: ['registers'],

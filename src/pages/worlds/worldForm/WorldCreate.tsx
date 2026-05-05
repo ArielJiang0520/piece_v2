@@ -19,7 +19,7 @@ export default function WorldCreate() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { values, setField } = useWorldForm()
-  useTopNavConfig({ title: `Create ${entityLabel('world', { capitalize: true })}`, backHref: '/worlds' })
+  useTopNavConfig({ secondaryTitle: `Create ${entityLabel('world', { capitalize: true })}`, backHref: '/worlds' })
 
   const createMutation = useMutation({
     mutationFn: () =>

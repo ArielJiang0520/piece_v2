@@ -57,7 +57,7 @@ export default function Cluster() {
     parseClusterReturnState,
   )
 
-  useTopNavConfig({ title: `${entityLabel('prompt', { capitalize: true })} variations`, backHref })
+  useTopNavConfig({ secondaryTitle: `${entityLabel('prompt', { capitalize: true })} variations`, backHref })
 
   const worldQuery = useQuery({
     queryKey: ['world', id],

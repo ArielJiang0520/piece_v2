@@ -119,7 +119,7 @@ export default function Prompt() {
     )
   }, [deleteMutation.isPending, prompt])
   useTopNavConfig({
-    title: entityLabel('prompt', { capitalize: true }),
+    secondaryTitle: entityLabel('prompt', { capitalize: true }),
     backHref: navBackHref,
     rightAction: navRightAction,
   })

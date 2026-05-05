@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, Menu, X } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Menu, Moon, Sun, Wrench, X } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { apiFetch } from '../api'
 import { entityLabel } from '../config'
 import { READING_SPEED_OPTIONS, setReadingSpeedId, useReadingSpeedId } from '../preferences/readingSpeed'
+import { THEME_OPTIONS, setThemeId, useThemeId } from '../preferences/theme'
 import { useCurrentTopNavConfig } from './topNavConfig'
 import Skeleton from './Skeleton'
 
@@ -22,6 +23,7 @@ export default function TopNav() {
   const location = useLocation()
   const config = useCurrentTopNavConfig()
   const readingSpeedId = useReadingSpeedId()
+  const themeId = useThemeId()
 
   const worldId = useMemo(() => {
     const pathWorldId = location.pathname.match(/^\/worlds\/(\d+)/)?.[1]
@@ -34,8 +36,8 @@ export default function TopNav() {
     queryFn: () => apiFetch(`/api/worlds/${worldId}`) as Promise<World>,
     enabled: !!worldId,
   })
-  const mainTitle = currentWorldQuery.data?.name ?? (worldId ? '' : 'Home')
-  const secondaryTitle = config.hideSecondaryTitle ? '' : config.title
+  const mainTitle = currentWorldQuery.data?.name ?? (worldId ? '' : config.mainTitle ?? 'Home')
+  const secondaryTitle = config.secondaryTitle ?? ''
 
   const worldsQuery = useQuery({
     queryKey: ['worlds'],
@@ -65,9 +67,9 @@ export default function TopNav() {
     navigate('/worlds')
   }
 
-  function goToEditRegisters() {
+  function goToAdminTools() {
     closeMenu()
-    navigate('/admin/registers')
+    navigate('/admin')
   }
 
   return (
@@ -95,7 +97,7 @@ export default function TopNav() {
             {config.rightAction}
             <button
               type="button"
-              className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+              className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
               aria-label="Open menu"
               title="Open menu"
               ref={menuButtonRef}
@@ -115,7 +117,7 @@ export default function TopNav() {
       </div>
 
       <div
-        className={`fixed inset-0 z-30 bg-ink/30 transition-opacity duration-200 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'
+        className={`fixed inset-0 z-30 bg-ink/30 transition-opacity duration-200 dark:bg-black/40 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         onClick={closeMenu}
         aria-hidden="true"
@@ -123,15 +125,24 @@ export default function TopNav() {
 
       <div className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
         <aside
-          className={`pointer-events-auto absolute right-0 top-0 flex h-dvh w-2/3 max-w-sm flex-col bg-paper shadow-[-12px_0_28px_rgba(26,18,16,0.12)] transition-transform duration-200 ease-out ${open ? 'translate-x-0' : 'translate-x-full'
+          className={`pointer-events-auto absolute right-0 top-0 flex h-dvh w-2/3 max-w-sm flex-col bg-paper shadow-[-12px_0_28px_rgba(26,18,16,0.12)] transition-transform duration-200 ease-out dark:shadow-[-12px_0_28px_rgba(0,0,0,0.35)] ${open ? 'translate-x-0' : 'translate-x-full'
             }`}
           aria-hidden={!open}
         >
-          <div className="flex items-center justify-between border-b border-paper-3 px-5 py-4">
+          <div className="flex items-center gap-2 border-b border-paper-3 px-5 py-4">
             <span className="font-serif-zh text-base text-ink">{user?.username ?? ''}</span>
             <button
               type="button"
-              className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+              className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+              aria-label="Admin tools"
+              title="Admin tools"
+              onClick={goToAdminTools}
+            >
+              <Wrench aria-hidden="true" className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              className="ml-auto grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
               aria-label="Close menu"
               onClick={closeMenu}
             >
@@ -175,10 +186,9 @@ export default function TopNav() {
             )}
 
             <div className="mb-3 mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
-              Preferences
+              Reading Speed
             </div>
             <div className="px-2">
-              <div className="mb-2 text-xs text-ink-4">Reading speed</div>
               <div
                 className="grid overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5"
                 style={{
@@ -204,19 +214,30 @@ export default function TopNav() {
             </div>
 
             <div className="mb-3 mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
-              Admin Tools
+              Theme
             </div>
-            <ul className="flex flex-col gap-1">
-              <li>
-                <button
-                  type="button"
-                  className="w-full truncate rounded-sm px-2 py-2 text-left font-serif-zh text-[15px] text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
-                  onClick={goToEditRegisters}
-                >
-                  Edit registers
-                </button>
-              </li>
-            </ul>
+            <div className="px-2">
+              <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5">
+                {THEME_OPTIONS.map(option => {
+                  const selected = option.id === themeId
+                  const Icon = option.id === 'dark' ? Moon : Sun
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xs px-1.5 py-1.5 text-center text-[11px] font-medium transition-colors ${selected ? 'bg-paper text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
+                        }`}
+                      aria-pressed={selected}
+                      onClick={() => setThemeId(option.id)}
+                    >
+                      <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                      {option.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
           </div>
 
           <div className="border-t border-paper-3 px-5 py-4">

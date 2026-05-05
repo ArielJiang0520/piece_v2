@@ -88,7 +88,7 @@ export default function WorldEdit() {
   }, [deleteMutation.isPending, initialized])
 
   useTopNavConfig({
-    title: `Edit ${entityLabel('world', { capitalize: true })}`,
+    secondaryTitle: `Edit ${entityLabel('world', { capitalize: true })}`,
     backHref,
     rightAction: navRightAction,
   })

@@ -74,6 +74,28 @@ html {
   color-scheme: light;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
+:root.dark {
+  --color-ink: #f5eee9;
+  --color-ink-2: #dfd0c8;
+  --color-ink-3: #b99f94;
+  --color-ink-4: #7f665d;
+
+  --color-paper: #171210;
+  --color-paper-2: #231b18;
+  --color-paper-3: #372a25;
+
+  --color-rose: oklch(68% 0.14 12);
+  --color-rose-deep: oklch(76% 0.11 12);
+  --color-rose-pale: oklch(28% 0.06 12);
+
+  --color-accent: oklch(68% 0.14 12);
+  --color-accent-hover: oklch(76% 0.11 12);
+}
+
 body {
   background-color: var(--color-paper);
   color: var(--color-ink);
