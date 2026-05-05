@@ -1,10 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ChevronRight, Menu, X } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { apiFetch } from '../api'
 import { entityLabel } from '../config'
+import { READING_SPEED_OPTIONS, setReadingSpeedId, useReadingSpeedId } from '../preferences/readingSpeed'
+import { useCurrentTopNavConfig } from './topNavConfig'
 import Skeleton from './Skeleton'
 
 interface World {
@@ -12,41 +14,28 @@ interface World {
   name: string
 }
 
-interface TopNavConfig {
-  title?: string
-  backHref?: string
-  rightAction?: React.ReactNode
-}
-
-const TopNavConfigContext = createContext<TopNavConfig>({})
-const TopNavSetConfigContext = createContext<(config: TopNavConfig) => void>(() => {})
-
-export function TopNavProvider({ children }: { children: React.ReactNode }) {
-  const [config, setConfig] = useState<TopNavConfig>({})
-  return (
-    <TopNavSetConfigContext.Provider value={setConfig}>
-      <TopNavConfigContext.Provider value={config}>
-        {children}
-      </TopNavConfigContext.Provider>
-    </TopNavSetConfigContext.Provider>
-  )
-}
-
-export function useTopNavConfig(config: TopNavConfig) {
-  const setConfig = useContext(TopNavSetConfigContext)
-  const { title, backHref, rightAction } = config
-  useEffect(() => {
-    setConfig({ title, backHref, rightAction })
-    return () => setConfig({})
-  }, [setConfig, title, backHref, rightAction])
-}
-
 export default function TopNav() {
   const [open, setOpen] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const config = useContext(TopNavConfigContext)
+  const location = useLocation()
+  const config = useCurrentTopNavConfig()
+  const readingSpeedId = useReadingSpeedId()
+
+  const worldId = useMemo(() => {
+    const pathWorldId = location.pathname.match(/^\/worlds\/(\d+)/)?.[1]
+    const backHrefWorldId = config.backHref?.match(/^\/worlds\/(\d+)/)?.[1]
+    return pathWorldId ?? backHrefWorldId ?? null
+  }, [config.backHref, location.pathname])
+
+  const currentWorldQuery = useQuery({
+    queryKey: ['world', worldId],
+    queryFn: () => apiFetch(`/api/worlds/${worldId}`) as Promise<World>,
+    enabled: !!worldId,
+  })
+  const mainTitle = currentWorldQuery.data?.name ?? (worldId ? '' : 'Home')
+  const secondaryTitle = config.hideSecondaryTitle ? '' : config.title
 
   const worldsQuery = useQuery({
     queryKey: ['worlds'],
@@ -98,11 +87,9 @@ export default function TopNav() {
             <span className="h-9 w-9" aria-hidden="true" />
           )}
 
-          {config.title && (
-            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-sm font-medium text-ink-2">
-              {config.title}
-            </h1>
-          )}
+          <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-8rem)] -translate-x-1/2 truncate text-sm font-medium text-ink-2">
+            {mainTitle}
+          </h1>
 
           <div className="ml-auto flex h-9 items-center gap-1">
             {config.rightAction}
@@ -118,21 +105,26 @@ export default function TopNav() {
             </button>
           </div>
         </div>
+        {secondaryTitle && (
+          <div className="page-width flex h-5 items-start justify-center px-4 ">
+            <div className="max-w-full truncate text-[11px] font-medium leading-4 text-ink-4">
+              {secondaryTitle}
+            </div>
+          </div>
+        )}
       </div>
 
       <div
-        className={`fixed inset-0 z-30 bg-ink/30 transition-opacity duration-200 ${
-          open ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
+        className={`fixed inset-0 z-30 bg-ink/30 transition-opacity duration-200 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
         onClick={closeMenu}
         aria-hidden="true"
       />
 
       <div className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
         <aside
-          className={`pointer-events-auto absolute right-0 top-0 flex h-dvh w-2/3 max-w-sm flex-col bg-paper shadow-[-12px_0_28px_rgba(26,18,16,0.12)] transition-transform duration-200 ease-out ${
-            open ? 'translate-x-0' : 'translate-x-full'
-          }`}
+          className={`pointer-events-auto absolute right-0 top-0 flex h-dvh w-2/3 max-w-sm flex-col bg-paper shadow-[-12px_0_28px_rgba(26,18,16,0.12)] transition-transform duration-200 ease-out ${open ? 'translate-x-0' : 'translate-x-full'
+            }`}
           aria-hidden={!open}
         >
           <div className="flex items-center justify-between border-b border-paper-3 px-5 py-4">
@@ -165,14 +157,14 @@ export default function TopNav() {
                 ))}
               </ul>
             ) : recentWorlds.length === 0 ? (
-              <p className="text-sm text-ink-3">No {entityLabel('world', { plural: true })} yet.</p>
+              <p className="text-xs text-ink-3">No {entityLabel('world', { plural: true })} yet.</p>
             ) : (
               <ul className="flex flex-col gap-1">
                 {recentWorlds.map(w => (
                   <li key={w.id}>
                     <button
                       type="button"
-                      className="w-full truncate rounded-sm px-2 py-2 text-left font-serif-zh text-[15px] text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+                      className="w-full truncate rounded-sm px-1 py-1 text-left font-serif-zh text-sm text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
                       onClick={() => goToWorld(w.id)}
                     >
                       {w.name}
@@ -181,6 +173,35 @@ export default function TopNav() {
                 ))}
               </ul>
             )}
+
+            <div className="mb-3 mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
+              Preferences
+            </div>
+            <div className="px-2">
+              <div className="mb-2 text-xs text-ink-4">Reading speed</div>
+              <div
+                className="grid overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5"
+                style={{
+                  gridTemplateColumns: `repeat(${READING_SPEED_OPTIONS.length}, minmax(0, 1fr))`,
+                }}
+              >
+                {READING_SPEED_OPTIONS.map(option => {
+                  const selected = option.id === readingSpeedId
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center text-[11px] font-medium transition-colors ${selected ? 'bg-paper text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
+                        }`}
+                      aria-pressed={selected}
+                      onClick={() => setReadingSpeedId(option.id)}
+                    >
+                      {option.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
             <div className="mb-3 mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
               Admin Tools

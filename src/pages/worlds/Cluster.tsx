@@ -8,7 +8,7 @@ import { diffPromptText } from '../../utils/promptDiff'
 import { relativeTime } from '../../utils/time'
 import CountIndicator from '../../components/CountIndicator'
 import Skeleton, { SkeletonText } from '../../components/Skeleton'
-import { useTopNavConfig } from '../../components/TopNav'
+import { useTopNavConfig } from '../../components/topNavConfig'
 import { RotateCw } from 'lucide-react'
 
 interface ClusterReturnState {
@@ -230,10 +230,10 @@ export default function Cluster() {
 
                   <Link
                     to={`/worlds/${id}/generate?promptId=${prompt.id}`}
-                    className="mt-5 inline-flex items-center gap-2 rounded-md border border-rose/80 bg-paper px-4 py-2 text-sm font-medium leading-none text-rose/80 transition-colors hover:border-ink-4 hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-md border border-rose/80 bg-paper px-4 py-2 text-sm font-medium leading-none text-rose/80 transition-colors hover:border-ink-4 hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
                   >
                     <RotateCw aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                    <span>Another {entityLabel('piece')}</span>
+                    <span>Another {entityLabel('piece')} on this</span>
                   </Link>
                 </div>
               </section>

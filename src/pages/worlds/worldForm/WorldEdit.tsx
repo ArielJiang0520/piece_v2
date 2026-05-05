@@ -6,7 +6,7 @@ import { apiFetch } from '../../../api'
 import { entityLabel } from '../../../config'
 import ConfirmDialog from '../../../components/ConfirmDialog'
 import Skeleton, { SkeletonText } from '../../../components/Skeleton'
-import { useTopNavConfig } from '../../../components/TopNav'
+import { useTopNavConfig } from '../../../components/topNavConfig'
 import { useWorldForm, type WorldFormValues } from './state'
 import WorldFormFields from './Fields'
 

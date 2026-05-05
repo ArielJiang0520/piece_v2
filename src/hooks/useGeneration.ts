@@ -1,7 +1,9 @@
 import { useEffect, useReducer, useRef } from 'react'
+import { useReadingSpeedUnitsPerSecond } from '../preferences/readingSpeed'
 import { createRandomId } from '../utils/id'
 
 export type GenerationPhase = 'idle' | 'waiting_provider' | 'thinking' | 'writing'
+export type GenerationCompletion = 'none' | 'completed' | 'cancelled' | 'error'
 
 export interface GenerateInput {
   prompt: string
@@ -15,6 +17,8 @@ interface State {
   phase: GenerationPhase
   output: string
   error: string
+  completion: GenerationCompletion
+  lastCompletedOutput: string
 }
 
 type Action =
@@ -25,16 +29,15 @@ type Action =
   | { type: 'done' }
   | { type: 'stop' }
 
-const initialState: State = { phase: 'idle', output: '', error: '' }
+const initialState: State = { phase: 'idle', output: '', error: '', completion: 'none', lastCompletedOutput: '' }
 const DISPLAY_FLUSH_MS = 80
-const MAX_DISPLAY_UNITS_PER_SECOND = 100
 const MAX_DISPLAY_UNITS_PER_FLUSH = 10
 const DENSE_SCRIPT_PATTERN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'start':
-      return { phase: 'waiting_provider', output: '', error: '' }
+      return { ...state, phase: 'waiting_provider', output: '', error: '', completion: 'none' }
     case 'phase':
       // 'thinking' must not downgrade an already-writing stream
       if (action.phase === 'thinking' && state.phase === 'writing') return state
@@ -42,11 +45,11 @@ function reducer(state: State, action: Action): State {
     case 'chunk':
       return { ...state, phase: 'writing', output: state.output + action.content }
     case 'error':
-      return { ...state, phase: 'idle', error: action.message }
+      return { ...state, phase: 'idle', error: action.message, completion: 'error' }
     case 'done':
-      return { ...state, phase: 'idle' }
+      return { ...state, phase: 'idle', completion: 'completed', lastCompletedOutput: state.output }
     case 'stop':
-      return { phase: 'idle', output: '', error: '' }
+      return { ...state, phase: 'idle', output: state.lastCompletedOutput, error: '', completion: 'cancelled' }
   }
 }
 
@@ -79,16 +82,19 @@ interface UseGenerationOptions {
 
 export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
   const [state, dispatch] = useReducer(reducer, initialState)
+  const maxDisplayUnitsPerSecond = useReadingSpeedUnitsPerSecond()
   const activeGenerationIdRef = useRef<string | null>(null)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
   const pendingChunkRef = useRef('')
   const chunkFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const displayUnitBudgetRef = useRef(0)
+  const maxDisplayUnitsPerSecondRef = useRef(maxDisplayUnitsPerSecond)
   const lastChunkFlushAtRef = useRef(0)
   const pendingCompletionRef = useRef<Extract<Action, { type: 'done' | 'error' }> | null>(null)
   const stopRequestedRef = useRef(false)
   const onDoneRef = useRef(onDone)
   onDoneRef.current = onDone
+  maxDisplayUnitsPerSecondRef.current = maxDisplayUnitsPerSecond
 
   function clearChunkFlushTimer() {
     if (!chunkFlushTimerRef.current) return
@@ -123,7 +129,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     lastChunkFlushAtRef.current = now
 
     const budget = Math.min(
-      displayUnitBudgetRef.current + (MAX_DISPLAY_UNITS_PER_SECOND * elapsed) / 1000,
+      displayUnitBudgetRef.current + (maxDisplayUnitsPerSecondRef.current * elapsed) / 1000,
       MAX_DISPLAY_UNITS_PER_FLUSH,
     )
     const allowance = Math.max(1, Math.floor(budget))
@@ -204,7 +210,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
       if (!res.ok || !res.body) {
         streamSettled = true
         if (!stopRequestedRef.current) dispatch({ type: 'error', message: 'Request failed' })
-        else dispatch({ type: 'done' })
+        else dispatch({ type: 'stop' })
         return
       }
 
@@ -252,26 +258,29 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
       if (activeGenerationIdRef.current === generationId) {
         activeGenerationIdRef.current = null
         activeRequestControllerRef.current = null
-        if (!streamSettled && !stopRequestedRef.current) completeAfterDisplay({ type: 'done' })
+        if (!streamSettled && !stopRequestedRef.current) {
+          completeAfterDisplay({ type: 'error', message: 'Generation ended before completion' })
+        }
       }
     }
   }
 
   function stop() {
     const generationId = activeGenerationIdRef.current
-    if (!generationId || !worldId) return
 
     stopRequestedRef.current = true
     pendingCompletionRef.current = null
     pendingChunkRef.current = ''
     clearChunkFlushTimer()
     dispatch({ type: 'stop' })
-    void fetch(`/api/worlds/${worldId}/generate/stop`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ generationId }),
-    }).catch(() => { })
+    if (generationId && worldId) {
+      void fetch(`/api/worlds/${worldId}/generate/stop`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generationId }),
+      }).catch(() => { })
+    }
 
     activeRequestControllerRef.current?.abort()
     activeGenerationIdRef.current = null
@@ -282,6 +291,8 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     phase: state.phase,
     output: state.output,
     error: state.error,
+    completion: state.completion,
+    displayComplete: state.phase === 'idle' && state.completion === 'completed',
     streaming,
     generate,
     stop,

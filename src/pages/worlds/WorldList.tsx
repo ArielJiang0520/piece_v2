@@ -6,7 +6,7 @@ import { entityLabel } from '../../config'
 import CountIndicator from '../../components/CountIndicator'
 import RelativeTimeStatus from '../../components/RelativeTimeStatus'
 import Skeleton, { SkeletonText } from '../../components/Skeleton'
-import { useTopNavConfig } from '../../components/TopNav'
+import { useTopNavConfig } from '../../components/topNavConfig'
 
 interface World {
   id: number
@@ -23,7 +23,7 @@ interface World {
 
 export default function WorldList() {
   const navigate = useNavigate()
-  useTopNavConfig({ title: `Your ${entityLabel('world', { plural: true, capitalize: true })}` })
+  useTopNavConfig({})
 
   const worldsQuery = useQuery({
     queryKey: ['worlds'],

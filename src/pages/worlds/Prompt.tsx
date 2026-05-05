@@ -7,7 +7,7 @@ import { entityLabel } from '../../config'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import RelativeTimeStatus from '../../components/RelativeTimeStatus'
 import Skeleton, { SkeletonText } from '../../components/Skeleton'
-import { useTopNavConfig } from '../../components/TopNav'
+import { useTopNavConfig } from '../../components/topNavConfig'
 
 interface Prompt {
   id: number

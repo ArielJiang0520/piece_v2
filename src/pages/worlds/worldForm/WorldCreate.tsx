@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../../api'
 import { entityLabel } from '../../../config'
-import { useTopNavConfig } from '../../../components/TopNav'
+import { useTopNavConfig } from '../../../components/topNavConfig'
 import { useWorldForm } from './state'
 import WorldFormFields from './Fields'
 

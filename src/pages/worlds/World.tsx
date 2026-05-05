@@ -9,7 +9,7 @@ import CountIndicator from '../../components/CountIndicator'
 import RelativeTimeStatus from '../../components/RelativeTimeStatus'
 import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import TextField from '../../components/TextField'
-import { useTopNavConfig } from '../../components/TopNav'
+import { useTopNavConfig } from '../../components/topNavConfig'
 
 interface ClusterGroup {
   id: number
@@ -273,10 +273,8 @@ export default function World() {
   const worldName = worldQuery.data?.name ?? ''
   const firstPage = pages[0]
   const totalClusters = firstPage?.total ?? 0
-  // const totalPieces = firstPage?.totalPieces ?? 0
   const searchTotal = searchQuery.data?.items.length ?? 0
-  // const worldTitle = worldName || entityLabel('world', { capitalize: true })
-  useTopNavConfig({ title: entityLabel('prompt', { capitalize: true, plural: true }), backHref: '/worlds' })
+  useTopNavConfig({ backHref: '/worlds' })
 
   if (!worldQuery.data || (isSearching ? false : !clustersQuery.data)) {
     return (
@@ -427,7 +425,7 @@ export default function World() {
                     {group.prompt_count > 1 && (
                       <div className="flex shrink-0 items-center gap-1.5 text-ink-4">
                         <GitBranch aria-hidden="true" className="h-4 w-4" />
-                        <span>{countLabel(group.prompt_count, `${entityLabel('prompt')} variation`)}</span>
+                        <span>{countLabel(group.prompt_count, `variation`)}</span>
                       </div>
                     )}
                   </div>

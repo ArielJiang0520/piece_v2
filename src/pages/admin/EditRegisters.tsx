@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import TextField from '../../components/TextField'
 import Skeleton, { SkeletonText } from '../../components/Skeleton'
-import { useTopNavConfig } from '../../components/TopNav'
+import { useTopNavConfig } from '../../components/topNavConfig'
 import { useToast } from '../../components/Toast'
 
 interface Register {

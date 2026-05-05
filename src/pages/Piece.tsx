@@ -7,7 +7,7 @@ import { entityLabel } from '../config'
 import { relativeTime } from '../utils/time'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Skeleton, { SkeletonText } from '../components/Skeleton'
-import { useTopNavConfig } from '../components/TopNav'
+import { useTopNavConfig } from '../components/topNavConfig'
 
 interface Piece {
   id: number

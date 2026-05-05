@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './auth'
-import TopNav, { TopNavProvider } from './components/TopNav'
+import TopNav from './components/TopNav'
+import TopNavProvider from './components/TopNavProvider'
 import RouteScrollManager from './components/RouteScrollManager'
 import { ToastProvider } from './components/Toast'
 import Login from './pages/Login'
