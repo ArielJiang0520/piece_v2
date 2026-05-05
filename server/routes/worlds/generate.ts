@@ -27,7 +27,7 @@ function buildSystemPrompt(worldOrigin: string, worldBody: string, registerDetai
   }
 
   sections.push(
-    `# Task\nThe user will give you a prompt. Using the world setting above, write a one-shot piece (a single, self-contained passage) that responds to the user's prompt while staying faithful to the world.`,
+    `# Task\nThe user will give you a prompt. Using the world setting above, write a story that responds to the user's prompt while staying faithful to the world.`,
   )
 
   if (registerDetails && registerDetails.trim()) {

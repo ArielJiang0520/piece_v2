@@ -79,6 +79,29 @@ promptRoutes.post('/', authMiddleware, async (c: any) => {
   })
 })
 
+promptRoutes.get('/match', authMiddleware, (c: any) => {
+  const userId = c.get('userId') as number
+  const worldId = parseInt(c.req.param('id'))
+  const world = requireWorld(userId, worldId)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const text = normalizePromptInput(c.req.query('text'))
+  if (!text) return c.json({ prompt: null })
+
+  const prompt = db
+    .select({
+      id: prompts.id,
+      text: prompts.text,
+      piece_count: prompts.piece_count,
+    })
+    .from(prompts)
+    .where(and(promptTextMatchesNormalized(prompts.text, text), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+    .orderBy(desc(prompts.updated_at), desc(prompts.id))
+    .get()
+
+  return c.json({ prompt: prompt ?? null })
+})
+
 promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
   const userId = c.get('userId') as number
   const worldId = parseInt(c.req.param('id'))

@@ -99,7 +99,18 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     }
   }
 
-  return c.json({ promptId: promptRow.id, pieceId: piece.id, isNewPrompt })
+  const savedPrompt = db
+    .select({ piece_count: prompts.piece_count })
+    .from(prompts)
+    .where(and(eq(prompts.id, promptRow.id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+    .get()
+
+  return c.json({
+    promptId: promptRow.id,
+    pieceId: piece.id,
+    pieceCount: savedPrompt?.piece_count ?? (isNewPrompt ? 1 : 0),
+    isNewPrompt,
+  })
 })
 
 export default pieceRoutes

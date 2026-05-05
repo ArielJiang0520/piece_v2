@@ -233,7 +233,7 @@ export default function Cluster() {
                     className="mt-5 flex w-full items-center justify-center gap-2 rounded-md border border-rose/80 bg-paper px-4 py-2 text-sm font-medium leading-none text-rose/80 transition-colors hover:border-ink-4 hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
                   >
                     <RotateCw aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                    <span>Another {entityLabel('piece')} on this</span>
+                    <span>Another {entityLabel('piece')} of this</span>
                   </Link>
                 </div>
               </section>
