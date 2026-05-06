@@ -38,10 +38,6 @@ function buildSystemPrompt(worldOrigin: string, worldBody: string, registerDetai
     `# Language\nRegardless of the language of these instructions, always reply in the same language as the user's prompt.`,
   )
 
-  sections.push(
-    `# Response length\nKeep your story a reasonable, enjoyable length. The story should feel like a compact 2-minute read. Aim for 550–700 words.`,
-  )
-
   return sections.join('\n\n')
 }
 
