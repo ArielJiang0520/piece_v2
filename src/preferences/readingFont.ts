@@ -1,48 +1,36 @@
-import { useSyncExternalStore } from 'react'
+import { createPreference } from './createPreference'
 
-export type ReadingFont = 'serif' | 'mono'
+export const READING_FONT_OPTIONS = [
+  {
+    id: 'serif',
+    label: 'Serif',
+    outputClass: 'prose',
+  },
+  {
+    id: 'mono',
+    label: 'Mono',
+    outputClass: 'font-mono text-ink',
+  },
+] as const
 
-const STORAGE_KEY = 'piece:reading-font'
+export type ReadingFont = (typeof READING_FONT_OPTIONS)[number]['id']
+export type ReadingFontOption = (typeof READING_FONT_OPTIONS)[number]
+
+export const READING_FONT_BY_ID = Object.fromEntries(
+  READING_FONT_OPTIONS.map(option => [option.id, option]),
+) as Record<ReadingFont, ReadingFontOption>
+
 const DEFAULT_READING_FONT: ReadingFont = 'serif'
-const listeners = new Set<() => void>()
 
-function isReadingFont(value: string | null): value is ReadingFont {
-  return value === 'serif' || value === 'mono'
+function isReadingFont(value: unknown): value is ReadingFont {
+  return READING_FONT_OPTIONS.some(option => option.id === value)
 }
 
-function getReadingFontSnapshot() {
-  if (typeof window === 'undefined') return DEFAULT_READING_FONT
+const readingFontPreference = createPreference<ReadingFont>({
+  key: 'piece:reading-font',
+  defaultValue: DEFAULT_READING_FONT,
+  parse: raw => (isReadingFont(raw) ? raw : DEFAULT_READING_FONT),
+})
 
-  const stored = window.localStorage.getItem(STORAGE_KEY)
-  return isReadingFont(stored) ? stored : DEFAULT_READING_FONT
-}
-
-function subscribeToReadingFont(callback: () => void) {
-  listeners.add(callback)
-
-  function handleStorage(event: StorageEvent) {
-    if (event.key === STORAGE_KEY || event.key === null) callback()
-  }
-
-  if (typeof window !== 'undefined') window.addEventListener('storage', handleStorage)
-
-  return () => {
-    listeners.delete(callback)
-    if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorage)
-  }
-}
-
-export function setReadingFont(font: ReadingFont) {
-  if (typeof window === 'undefined') return
-
-  window.localStorage.setItem(STORAGE_KEY, font)
-  listeners.forEach(listener => listener())
-}
-
-export function useReadingFont() {
-  return useSyncExternalStore(
-    subscribeToReadingFont,
-    getReadingFontSnapshot,
-    () => DEFAULT_READING_FONT,
-  )
-}
+export const setReadingFont = readingFontPreference.set
+export const useReadingFont = readingFontPreference.use

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { eq, asc } from 'drizzle-orm'
 import { db, registers } from '../db'
 import { type Variables, authMiddleware } from '../middleware'
+import { paramInt } from '../route-helpers'
 
 const registerRoutes = new Hono<{ Variables: Variables }>()
 
@@ -21,7 +22,7 @@ registerRoutes.post('/', authMiddleware, async (c) => {
 })
 
 registerRoutes.patch('/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = paramInt(c, 'id')
   const existing = db.select().from(registers).where(eq(registers.id, id)).get()
   if (!existing) return c.json({ error: 'Not found' }, 404)
   const body = await c.req.json()
@@ -45,7 +46,7 @@ registerRoutes.patch('/:id', authMiddleware, async (c) => {
 })
 
 registerRoutes.delete('/:id', authMiddleware, (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = paramInt(c, 'id')
   const existing = db.select().from(registers).where(eq(registers.id, id)).get()
   if (!existing) return c.json({ error: 'Not found' }, 404)
   db.delete(registers).where(eq(registers.id, id)).run()

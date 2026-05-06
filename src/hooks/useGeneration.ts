@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef } from 'react'
 import { useReadingSpeedUnitsPerSecond } from '../preferences/readingSpeed'
 import { createRandomId } from '../utils/id'
+import { readServerSentEvents } from '../utils/sse'
 
 export type GenerationPhase = 'idle' | 'waiting_provider' | 'thinking' | 'writing'
 export type GenerationCompletion = 'none' | 'completed' | 'cancelled' | 'error'
@@ -214,40 +215,25 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
         return
       }
 
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const events = buffer.split('\n\n')
-        buffer = events.pop() ?? ''
-
-        for (const event of events) {
-          const line = event.trim()
-          if (!line.startsWith('data: ')) continue
-          try {
-            const msg = JSON.parse(line.slice(6))
-            if (msg.type === 'status' && msg.status === 'waiting_provider') {
-              dispatch({ type: 'phase', phase: 'waiting_provider' })
-            } else if (msg.type === 'thinking') {
-              dispatch({ type: 'phase', phase: 'thinking' })
-            } else if (msg.type === 'chunk') {
-              if (typeof msg.content === 'string') queueChunk(msg.content)
-            } else if (msg.type === 'done') {
-              streamSettled = true
-              completeAfterDisplay({ type: 'done' })
-              return
-            } else if (msg.type === 'error') {
-              streamSettled = true
-              completeAfterDisplay({ type: 'error', message: msg.message })
-              return
-            }
-          } catch { }
-        }
+      for await (const data of readServerSentEvents(res.body)) {
+        try {
+          const msg = JSON.parse(data)
+          if (msg.type === 'status' && msg.status === 'waiting_provider') {
+            dispatch({ type: 'phase', phase: 'waiting_provider' })
+          } else if (msg.type === 'thinking') {
+            dispatch({ type: 'phase', phase: 'thinking' })
+          } else if (msg.type === 'chunk') {
+            if (typeof msg.content === 'string') queueChunk(msg.content)
+          } else if (msg.type === 'done') {
+            streamSettled = true
+            completeAfterDisplay({ type: 'done' })
+            return
+          } else if (msg.type === 'error') {
+            streamSettled = true
+            completeAfterDisplay({ type: 'error', message: msg.message })
+            return
+          }
+        } catch { }
       }
     } catch (e) {
       if (!stopRequestedRef.current) {

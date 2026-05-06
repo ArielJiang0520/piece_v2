@@ -1,8 +1,11 @@
+import type { Context, Next } from 'hono'
 import { getCookie, setCookie } from 'hono/cookie'
 import { eq } from 'drizzle-orm'
 import { db, sessions } from './db'
 
 export type Variables = { userId: number }
+
+export const SESSION_TTL_MS = 30 * 86400 * 1000
 
 export function generateSessionId(): string {
   const bytes = new Uint8Array(32)
@@ -10,18 +13,18 @@ export function generateSessionId(): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-export function setSessionCookie(c: any, sid: string) {
+export function setSessionCookie(c: Context, sid: string) {
   const isProd = process.env.NODE_ENV === 'production'
   setCookie(c, 'sid', sid, {
     httpOnly: true,
     sameSite: 'Lax',
     path: '/',
-    maxAge: 2592000,
+    maxAge: SESSION_TTL_MS / 1000,
     secure: isProd,
   })
 }
 
-export async function authMiddleware(c: any, next: any) {
+export async function authMiddleware(c: Context, next: Next) {
   const sid = getCookie(c, 'sid')
   if (!sid) return c.json({ error: 'Unauthorized' }, 401)
 

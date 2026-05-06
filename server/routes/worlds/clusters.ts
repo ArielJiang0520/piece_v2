@@ -1,24 +1,11 @@
 import { Hono } from 'hono'
 import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
-import { db, pieces, promptClusters, prompts, worlds } from '../../db'
+import { db, pieces, promptClusters, prompts } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
+import { findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
 import { cosineSimilarity, embedPrompt, parseEmbedding } from '../../prompt-clustering'
 
 const clusterRoutes = new Hono<{ Variables: Variables }>()
-
-function requireWorld(userId: number, worldId: number) {
-  return db
-    .select()
-    .from(worlds)
-    .where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId)))
-    .get()
-}
-
-function pagination(c: any, fallbackLimit = 20) {
-  const page = Math.max(1, parseInt(c.req.query('page') || '1') || 1)
-  const limit = Math.min(50, Math.max(1, parseInt(c.req.query('limit') || String(fallbackLimit)) || fallbackLimit))
-  return { page, limit, offset: (page - 1) * limit }
-}
 
 const SORT_ORDERS = {
   latest_updated: [desc(promptClusters.updated_at), desc(promptClusters.id)],
@@ -101,10 +88,9 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
 const SEARCH_LIMIT = 50
 
 clusterRoutes.get('/search', authMiddleware, async (c: any) => {
-  const userId = c.get('userId') as number
-  const worldId = parseInt(c.req.param('id'))
-  const world = requireWorld(userId, worldId)
-  if (!world) return c.json({ error: 'Not found' }, 404)
+  const userId = getUserId(c)
+  const worldId = paramInt(c, 'id')
+  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
 
   const query = (c.req.query('q') ?? '').trim()
   if (!query) return c.json({ items: [], total: 0, query, hasMore: false })
@@ -154,10 +140,9 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
 })
 
 clusterRoutes.get('/', authMiddleware, (c: any) => {
-  const userId = c.get('userId') as number
-  const worldId = parseInt(c.req.param('id'))
-  const world = requireWorld(userId, worldId)
-  if (!world) return c.json({ error: 'Not found' }, 404)
+  const userId = getUserId(c)
+  const worldId = paramInt(c, 'id')
+  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
 
   const { page, limit, offset } = pagination(c)
   const sortParam = c.req.query('sort') as string | undefined
@@ -194,11 +179,10 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
 })
 
 clusterRoutes.get('/:clusterId', authMiddleware, (c: any) => {
-  const userId = c.get('userId') as number
-  const worldId = parseInt(c.req.param('id'))
-  const clusterId = parseInt(c.req.param('clusterId'))
-  const world = requireWorld(userId, worldId)
-  if (!world) return c.json({ error: 'Not found' }, 404)
+  const userId = getUserId(c)
+  const worldId = paramInt(c, 'id')
+  const clusterId = paramInt(c, 'clusterId')
+  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
 
   const cluster = db
     .select({

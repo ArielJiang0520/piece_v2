@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Trash2 } from 'lucide-react'
 import { apiFetch } from '../../../api'
 import { entityLabel } from '../../../config'
 import ConfirmDialog from '../../../components/ConfirmDialog'
+import DeleteIconButton from '../../../components/DeleteIconButton'
 import Skeleton, { SkeletonText } from '../../../components/Skeleton'
 import { useTopNavConfig } from '../../../components/topNavConfig'
 import { useWorldForm, type WorldFormValues } from './state'
@@ -74,16 +74,11 @@ export default function WorldEdit() {
     if (!initialized) return undefined
 
     return (
-      <button
-        type="button"
-        className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-paper-2 hover:text-rose-deep focus:outline-none focus:ring-2 focus:ring-rose/30 disabled:opacity-50"
+      <DeleteIconButton
+        label={`Delete ${entityLabel('world')}`}
         onClick={() => setConfirmDelete(true)}
         disabled={deleteMutation.isPending}
-        aria-label={`Delete ${entityLabel('world')}`}
-        title={`Delete ${entityLabel('world')}`}
-      >
-        <Trash2 aria-hidden="true" className="h-5 w-5" />
-      </button>
+      />
     )
   }, [deleteMutation.isPending, initialized])
 

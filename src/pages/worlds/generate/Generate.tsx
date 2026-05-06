@@ -45,6 +45,7 @@ export default function Generate() {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [promptCompact, setPromptCompact] = useState(false)
   const [saveResult, setSaveResult] = useState<SaveResponse | null>(null)
+  const [lastSavedPiece, setLastSavedPiece] = useState<{ output: string; result: SaveResponse } | null>(null)
   const [hasGeneratedOnScreen, setHasGeneratedOnScreen] = useState(false)
   const readingSpeed = useReadingSpeedUnitsPerSecond()
   const readingFont = useReadingFont()
@@ -90,6 +91,12 @@ export default function Generate() {
   }, [worldQuery.isError, navigate])
 
   const pieceNumber = saveState === 'saved' ? promptPieceCount : promptPieceCount + 1
+  const restoredSavedResult =
+    completion === 'cancelled' && output && lastSavedPiece?.output === output ? lastSavedPiece.result : null
+  const displayedSaveResult = restoredSavedResult ?? saveResult
+  const displayedSaveState: SaveState = restoredSavedResult ? 'saved' : saveState
+  const displayedPieceNumber = restoredSavedResult ? restoredSavedResult.pieceCount : pieceNumber
+  const outputDisplayComplete = displayComplete || !!restoredSavedResult
   const generateButtonLabel =
     phase === 'waiting_provider' ? 'Waiting...'
       : phase === 'thinking' ? 'Thinking...'
@@ -147,6 +154,7 @@ export default function Generate() {
 
       setSaveState('saved')
       setSaveResult(result)
+      setLastSavedPiece({ output, result })
       applyPromptSaved({
         id: result.promptId,
         text: normalizedPrompt,
@@ -257,11 +265,12 @@ export default function Generate() {
         <OutputPanel
           output={output}
           streaming={streaming}
-          displayComplete={displayComplete}
-          pieceNumber={pieceNumber}
+          displayComplete={outputDisplayComplete}
+          pieceNumber={displayedPieceNumber}
           isFirstTake={promptPieceCount === 0}
-          saveState={saveState}
-          saveResult={saveResult}
+          saveState={displayedSaveState}
+          saveResult={displayedSaveResult}
+          restoredSavedDisplay={!!restoredSavedResult}
           readingFont={readingFont}
           readingFontSize={readingFontSize}
         />

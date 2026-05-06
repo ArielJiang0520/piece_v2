@@ -14,6 +14,11 @@ interface World {
   name: string
 }
 
+const themeIconByName = {
+  moon: Moon,
+  sun: Sun,
+} as const
+
 export default function TopNav() {
   const [open, setOpen] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
@@ -188,7 +193,7 @@ export default function TopNav() {
             >
               {THEME_OPTIONS.map(option => {
                 const selected = option.id === themeId
-                const Icon = option.id === 'dark' ? Moon : Sun
+                const Icon = themeIconByName[option.icon]
                 return (
                   <button
                     key={option.id}

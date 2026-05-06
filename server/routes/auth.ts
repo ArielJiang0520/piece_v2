@@ -3,9 +3,22 @@ import { getCookie, deleteCookie } from 'hono/cookie'
 import * as argon2 from '@node-rs/argon2'
 import { eq } from 'drizzle-orm'
 import { db, users, sessions } from '../db'
-import { type Variables, generateSessionId, setSessionCookie, authMiddleware } from '../middleware'
+import {
+  type Variables,
+  SESSION_TTL_MS,
+  authMiddleware,
+  generateSessionId,
+  setSessionCookie,
+} from '../middleware'
+import { getUserId } from '../route-helpers'
 
 const auth = new Hono<{ Variables: Variables }>()
+
+function startSession(c: any, userId: number, now = Date.now()) {
+  const sid = generateSessionId()
+  db.insert(sessions).values({ id: sid, user_id: userId, expires_at: now + SESSION_TTL_MS }).run()
+  setSessionCookie(c, sid)
+}
 
 auth.post('/auth/signup', async (c) => {
   const { username, password } = await c.req.json()
@@ -19,10 +32,7 @@ auth.post('/auth/signup', async (c) => {
   const now = Date.now()
   const result = db.insert(users).values({ username, password_hash: hash, created_at: now }).returning().get()
 
-  const sid = generateSessionId()
-  db.insert(sessions).values({ id: sid, user_id: result.id, expires_at: now + 30 * 86400 * 1000 }).run()
-
-  setSessionCookie(c, sid)
+  startSession(c, result.id, now)
   return c.json({ username: result.username })
 })
 
@@ -36,11 +46,7 @@ auth.post('/auth/login', async (c) => {
   const valid = await argon2.verify(user.password_hash, password)
   if (!valid) return c.json({ error: 'Invalid credentials' }, 401)
 
-  const sid = generateSessionId()
-  const now = Date.now()
-  db.insert(sessions).values({ id: sid, user_id: user.id, expires_at: now + 30 * 86400 * 1000 }).run()
-
-  setSessionCookie(c, sid)
+  startSession(c, user.id)
   return c.json({ username: user.username })
 })
 
@@ -52,7 +58,7 @@ auth.post('/auth/logout', async (c) => {
 })
 
 auth.get('/me', authMiddleware, (c) => {
-  const userId = c.get('userId') as number
+  const userId = getUserId(c)
   const user = db.select({ username: users.username }).from(users).where(eq(users.id, userId)).get()
   if (!user) return c.json({ error: 'Not found' }, 404)
   return c.json({ username: user.username })

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { eq, and, desc, inArray, sql } from 'drizzle-orm'
 import { db, pieces, promptClusters, registers, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
+import { findUserWorld, getUserId, paramInt } from '../../route-helpers'
 import promptRoutes from './prompts'
 import generateRoutes from './generate'
 import clusterRoutes from './clusters'
@@ -21,7 +22,7 @@ function registerIdValue(value: unknown): number | null {
 }
 
 worldRoutes.get('/', authMiddleware, (c) => {
-  const userId = c.get('userId') as number
+  const userId = getUserId(c)
   const worldRows = db
     .select({
       id: worlds.id,
@@ -80,7 +81,7 @@ worldRoutes.get('/', authMiddleware, (c) => {
 })
 
 worldRoutes.post('/', authMiddleware, async (c) => {
-  const userId = c.get('userId') as number
+  const userId = getUserId(c)
   const body = await c.req.json()
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) return c.json({ error: 'Name required' }, 400)
@@ -106,9 +107,7 @@ worldRoutes.post('/', authMiddleware, async (c) => {
 })
 
 worldRoutes.get('/:id', authMiddleware, (c) => {
-  const userId = c.get('userId') as number
-  const id = parseInt(c.req.param('id'))
-  const world = db.select().from(worlds).where(and(eq(worlds.id, id), eq(worlds.user_id, userId))).get()
+  const world = findUserWorld(getUserId(c), paramInt(c, 'id'))
   if (!world) return c.json({ error: 'Not found' }, 404)
   return c.json({
     id: world.id,
@@ -122,9 +121,8 @@ worldRoutes.get('/:id', authMiddleware, (c) => {
 })
 
 worldRoutes.patch('/:id', authMiddleware, async (c) => {
-  const userId = c.get('userId') as number
-  const id = parseInt(c.req.param('id'))
-  const world = db.select().from(worlds).where(and(eq(worlds.id, id), eq(worlds.user_id, userId))).get()
+  const id = paramInt(c, 'id')
+  const world = findUserWorld(getUserId(c), id)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
   const body = await c.req.json()
@@ -144,9 +142,8 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
 })
 
 worldRoutes.delete('/:id', authMiddleware, (c) => {
-  const userId = c.get('userId') as number
-  const id = parseInt(c.req.param('id'))
-  const world = db.select().from(worlds).where(and(eq(worlds.id, id), eq(worlds.user_id, userId))).get()
+  const id = paramInt(c, 'id')
+  const world = findUserWorld(getUserId(c), id)
   if (!world) return c.json({ error: 'Not found' }, 404)
   db.delete(worlds).where(eq(worlds.id, id)).run()
   return c.json({ ok: true })

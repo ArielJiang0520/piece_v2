@@ -1,23 +1,17 @@
 import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
-import { db, worlds, prompts, pieces } from '../../db'
+import { db, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { MODELS } from '../../../src/config'
+import { findUserWorldId, getUserId, isValidModelId, paramInt } from '../../route-helpers'
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
-const modelIds = new Set(MODELS.map(model => model.id))
 
 pieceRoutes.post('/', authMiddleware, async (c: any) => {
-  const userId = c.get('userId') as number
-  const worldId = parseInt(c.req.param('id'))
-  const world = db
-    .select({ id: worlds.id })
-    .from(worlds)
-    .where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId)))
-    .get()
-  if (!world) return c.json({ error: 'Not found' }, 404)
+  const userId = getUserId(c)
+  const worldId = paramInt(c, 'id')
+  if (!findUserWorldId(userId, worldId)) return c.json({ error: 'Not found' }, 404)
 
   const body = await c.req.json()
   const promptText = normalizePromptInput(body.prompt)
@@ -26,8 +20,8 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   const pieceBody = typeof body.body === 'string' ? body.body : ''
   if (!pieceBody.trim()) return c.json({ error: 'Piece body required' }, 400)
 
-  const model = typeof body.model === 'string' && modelIds.has(body.model) ? body.model : null
-  if (!model) return c.json({ error: 'Invalid model' }, 400)
+  if (!isValidModelId(body.model)) return c.json({ error: 'Invalid model' }, 400)
+  const model = body.model
 
   let existingPromptId: number | undefined
   let existingPromptClusterId: number | null = null

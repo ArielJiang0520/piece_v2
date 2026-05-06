@@ -1,4 +1,5 @@
 import type { ReadingFont } from '../../../preferences/readingFont'
+import { READING_FONT_OPTIONS } from '../../../preferences/readingFont'
 import type { ReadingFontSize } from '../../../preferences/readingFontSize'
 import { READING_FONT_SIZE_OPTIONS } from '../../../preferences/readingFontSize'
 import {
@@ -17,11 +18,6 @@ interface ReadingSettingsPanelProps {
   readingFontSize: ReadingFontSize
   onReadingFontSizeChange: (readingFontSize: ReadingFontSize) => void
 }
-
-const fontOptions: { id: ReadingFont; label: string }[] = [
-  { id: 'serif', label: 'Serif' },
-  { id: 'mono', label: 'Mono' },
-]
 
 export default function ReadingSettingsPanel({
   open,
@@ -47,7 +43,7 @@ export default function ReadingSettingsPanel({
         <div className="rounded-sm border border-paper-3 bg-paper-2 px-3 py-2">
           <div className="flex items-center justify-between gap-3">
             <label htmlFor="reading-speed" className="text-xs font-medium text-ink-3">
-              Speed
+              Reading Speed
             </label>
             <span className="min-w-8 text-right text-sm tabular-nums text-ink">
               {readingSpeed}
@@ -68,7 +64,7 @@ export default function ReadingSettingsPanel({
         </div>
 
         <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5">
-          {fontOptions.map(option => {
+          {READING_FONT_OPTIONS.map(option => {
             const selected = option.id === readingFont
             return (
               <button
@@ -86,7 +82,7 @@ export default function ReadingSettingsPanel({
           })}
         </div>
 
-        <div className="grid grid-cols-3 overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5">
+        <div className="grid grid-cols-5 overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5">
           {READING_FONT_SIZE_OPTIONS.map(option => {
             const selected = option.id === readingFontSize
             return (
@@ -94,12 +90,18 @@ export default function ReadingSettingsPanel({
                 key={option.id}
                 type="button"
                 className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center text-xs font-medium transition-colors disabled:opacity-50 ${selected ? 'bg-paper text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
-                  }`}
+                }`}
                 aria-pressed={selected}
+                aria-label={`${option.label} font size`}
                 onClick={() => onReadingFontSizeChange(option.id)}
                 disabled={inputDisabled}
               >
-                {option.label}
+                <span
+                  aria-hidden="true"
+                  className={`inline-flex h-7 items-center justify-center font-serif font-semibold leading-none ${option.iconClass}`}
+                >
+                  A
+                </span>
               </button>
             )
           })}

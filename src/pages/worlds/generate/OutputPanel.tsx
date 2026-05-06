@@ -2,7 +2,9 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { entityLabel } from '../../../config'
 import type { ReadingFont } from '../../../preferences/readingFont'
+import { READING_FONT_BY_ID } from '../../../preferences/readingFont'
 import type { ReadingFontSize } from '../../../preferences/readingFontSize'
+import { READING_FONT_SIZE_BY_ID } from '../../../preferences/readingFontSize'
 
 const END_REVEAL_DELAY_MS = 900
 const OUTPUT_TOKEN_RE = /\s+|[^\s]+/g
@@ -26,14 +28,9 @@ interface OutputPanelProps {
   isFirstTake: boolean
   saveState: SaveState
   saveResult: SaveResponse | null
+  restoredSavedDisplay?: boolean
   readingFont: ReadingFont
   readingFontSize: ReadingFontSize
-}
-
-const outputFontSizeStyles: Record<ReadingFontSize, CSSProperties> = {
-  small: { fontSize: '14px', lineHeight: 1.85 },
-  medium: { fontSize: '15px', lineHeight: 1.85 },
-  large: { fontSize: '17px', lineHeight: 1.8 },
 }
 
 export default function OutputPanel({
@@ -44,6 +41,7 @@ export default function OutputPanel({
   isFirstTake,
   saveState,
   saveResult,
+  restoredSavedDisplay = false,
   readingFont,
   readingFontSize,
 }: OutputPanelProps) {
@@ -53,6 +51,7 @@ export default function OutputPanel({
   const previousOutputRef = useRef('')
   const previousTokenCountRef = useRef(0)
   const displayStartedAtRef = useRef<number | null>(null)
+  const lastRecordedElapsedMsRef = useRef<{ pieceId: number; elapsedMs: number } | null>(null)
   const outputTokens = useMemo(() => output.match(OUTPUT_TOKEN_RE) ?? [], [output])
 
   useEffect(() => {
@@ -88,6 +87,11 @@ export default function OutputPanel({
     return () => clearTimeout(timer)
   }, [displayComplete])
 
+  useEffect(() => {
+    if (restoredSavedDisplay || saveState !== 'saved' || !saveResult || displayElapsedMs === null) return
+    lastRecordedElapsedMsRef.current = { pieceId: saveResult.pieceId, elapsedMs: displayElapsedMs }
+  }, [displayElapsedMs, restoredSavedDisplay, saveResult, saveState])
+
   const wrapperClass = [
     'min-h-[55vh] rounded-md px-1 pt-2 text-sm transition-[padding-bottom] duration-200 ease-out',
     streaming ? 'pb-[45vh]' : 'pb-2',
@@ -95,13 +99,17 @@ export default function OutputPanel({
   const previousTokenCount = previousTokenCountRef.current
   const outputTextClass = [
     'whitespace-pre-wrap',
-    readingFont === 'mono' ? 'font-mono text-ink' : 'prose',
+    READING_FONT_BY_ID[readingFont].outputClass,
   ].join(' ')
-  const outputTextStyle = outputFontSizeStyles[readingFontSize]
+  const outputTextStyle = READING_FONT_SIZE_BY_ID[readingFontSize].outputStyle
   const placeholderTextStyle: CSSProperties = { ...outputTextStyle, color: 'var(--color-ink-4)' }
   const recordedTextCount = getRecordedTextCount(output)
   const recordedTextCountDisplay = recordedTextCount.count.toLocaleString('en-US')
-  const recordedElapsed = formatElapsedTime(displayElapsedMs)
+  const restoredElapsedMs =
+    restoredSavedDisplay && saveResult && lastRecordedElapsedMsRef.current?.pieceId === saveResult.pieceId
+      ? lastRecordedElapsedMsRef.current.elapsedMs
+      : null
+  const recordedElapsed = formatElapsedTime(restoredElapsedMs ?? displayElapsedMs)
 
   if (!output) {
     return (

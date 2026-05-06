@@ -2,13 +2,14 @@ import { Hono } from 'hono'
 import { eq, and } from 'drizzle-orm'
 import { db, prompts, pieces } from '../db'
 import { type Variables, authMiddleware } from '../middleware'
+import { getUserId, paramInt } from '../route-helpers'
 import { recomputePromptCluster, recomputePromptPieceCount } from '../prompt-clustering'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
 
 pieceRoutes.get('/:id', authMiddleware, (c) => {
-  const userId = c.get('userId') as number
-  const id = parseInt(c.req.param('id'))
+  const userId = getUserId(c)
+  const id = paramInt(c, 'id')
   const piece = db
     .select({
       id: pieces.id,
@@ -29,8 +30,8 @@ pieceRoutes.get('/:id', authMiddleware, (c) => {
 })
 
 pieceRoutes.delete('/:id', authMiddleware, (c) => {
-  const userId = c.get('userId') as number
-  const id = parseInt(c.req.param('id'))
+  const userId = getUserId(c)
+  const id = paramInt(c, 'id')
   const piece = db.select().from(pieces).where(and(eq(pieces.id, id), eq(pieces.user_id, userId))).get()
   if (!piece) return c.json({ error: 'Not found' }, 404)
   const prompt = db

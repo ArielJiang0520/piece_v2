@@ -1,13 +1,13 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { eq, and } from 'drizzle-orm'
-import { db, registers, worlds } from '../../db'
+import { eq } from 'drizzle-orm'
+import { db, registers } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { MODELS } from '../../../src/config'
+import { findUserWorld, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { normalizePromptInput } from '../../prompt-text'
+import { readServerSentEvents } from '../../../src/utils/sse'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
-const modelsById = new Map(MODELS.map(model => [model.id, model]))
 const activeGenerations = new Map<string, AbortController>()
 
 function generationKey(userId: number, worldId: number, generationId: string) {
@@ -42,9 +42,9 @@ function buildSystemPrompt(worldOrigin: string, worldBody: string, registerDetai
 }
 
 generateRoutes.post('/', authMiddleware, async (c: any) => {
-  const userId = c.get('userId') as number
-  const worldId = parseInt(c.req.param('id'))
-  const world = db.select().from(worlds).where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId))).get()
+  const userId = getUserId(c)
+  const worldId = paramInt(c, 'id')
+  const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
   const register = world.register_id
@@ -62,11 +62,8 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
 
-  const modelOption = typeof requestedModel === 'string' ? modelsById.get(requestedModel) : undefined
-  if (!modelOption) {
-    return c.json({ error: 'Invalid model requested' }, 400)
-  }
-  const model = modelOption.id
+  const modelOption = getModelById(requestedModel)
+  if (!modelOption) return c.json({ error: 'Invalid model requested' }, 400)
 
   const parsedTemperature = Number(requestedTemperature)
   const temperature = Number.isFinite(parsedTemperature)
@@ -93,13 +90,11 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model,
+          model: modelOption.id,
           temperature,
           reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
           stream: true,
-          provider: {
-            sort: 'throughput'
-          },
+          provider: { sort: 'throughput' },
           require_parameters: true,
           messages: [
             { role: 'system', content: systemPrompt },
@@ -119,43 +114,27 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
         return
       }
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const events = buffer.split('\n\n')
-        buffer = events.pop() ?? ''
-
-        for (const event of events) {
-          const line = event.trim()
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6)
-          if (data === '[DONE]') {
-            await stream.writeSSE({ data: JSON.stringify({ type: 'done' }) })
-            return
+      for await (const data of readServerSentEvents(response.body)) {
+        if (data === '[DONE]') {
+          await stream.writeSSE({ data: JSON.stringify({ type: 'done' }) })
+          return
+        }
+        try {
+          const parsed = JSON.parse(data)
+          const delta = parsed?.choices?.[0]?.delta
+          const reasoning = delta?.reasoning
+            ?? delta?.reasoning_content
+            ?? delta?.reasoning_details?.map((detail: any) => detail?.text ?? detail?.summary ?? '').join('')
+          if (reasoning) {
+            await stream.writeSSE({ data: JSON.stringify({ type: 'thinking', content: String(reasoning) }) })
           }
-          try {
-            const parsed = JSON.parse(data)
-            const delta = parsed?.choices?.[0]?.delta
-            const reasoning = delta?.reasoning
-              ?? delta?.reasoning_content
-              ?? delta?.reasoning_details?.map((detail: any) => detail?.text ?? detail?.summary ?? '').join('')
-            if (reasoning) {
-              await stream.writeSSE({ data: JSON.stringify({ type: 'thinking', content: String(reasoning) }) })
-            }
 
-            const content = delta?.content
-            if (content) {
-              await stream.writeSSE({ data: JSON.stringify({ type: 'chunk', content }) })
-            }
-          } catch {
-            // ignore malformed chunks
+          const content = delta?.content
+          if (content) {
+            await stream.writeSSE({ data: JSON.stringify({ type: 'chunk', content }) })
           }
+        } catch {
+          // ignore malformed chunks
         }
       }
     } catch (err) {
@@ -173,10 +152,9 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 })
 
 generateRoutes.post('/stop', authMiddleware, async (c: any) => {
-  const userId = c.get('userId') as number
-  const worldId = parseInt(c.req.param('id'))
-  const world = db.select({ id: worlds.id }).from(worlds).where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId))).get()
-  if (!world) return c.json({ error: 'Not found' }, 404)
+  const userId = getUserId(c)
+  const worldId = paramInt(c, 'id')
+  if (!findUserWorldId(userId, worldId)) return c.json({ error: 'Not found' }, 404)
 
   let body: any = {}
   try {
