@@ -11,6 +11,7 @@ import {
   setSessionCookie,
 } from '../middleware'
 import { getUserId } from '../route-helpers'
+import { createExampleWorldsForUser } from '../example-worlds'
 
 const auth = new Hono<{ Variables: Variables }>()
 
@@ -30,7 +31,11 @@ auth.post('/auth/signup', async (c) => {
 
   const hash = await argon2.hash(password)
   const now = Date.now()
-  const result = db.insert(users).values({ username, password_hash: hash, created_at: now }).returning().get()
+  const result = db.transaction((tx) => {
+    const user = tx.insert(users).values({ username, password_hash: hash, created_at: now }).returning().get()
+    createExampleWorldsForUser(tx, user.id, now)
+    return user
+  })
 
   startSession(c, result.id, now)
   return c.json({ username: result.username })

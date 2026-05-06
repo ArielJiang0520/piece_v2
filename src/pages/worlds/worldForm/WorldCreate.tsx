@@ -11,6 +11,7 @@ interface CreatedWorld {
   id: number
   name: string
   origin: string
+  is_example: boolean
   summary: string
   body: string
   register_id: number | null

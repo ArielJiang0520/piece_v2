@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react'
 export interface WorldFormValues {
   name: string
   origin: string
+  is_example: boolean
   summary: string
   body: string
   register_id: number | null
@@ -11,6 +12,7 @@ export interface WorldFormValues {
 export const emptyWorldForm: WorldFormValues = {
   name: '',
   origin: 'original',
+  is_example: false,
   summary: '',
   body: '',
   register_id: 1,

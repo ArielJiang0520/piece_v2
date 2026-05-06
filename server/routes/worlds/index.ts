@@ -21,6 +21,10 @@ function registerIdValue(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+function booleanInt(value: unknown) {
+  return value === true || value === 1 || value === '1' ? 1 : 0
+}
+
 worldRoutes.get('/', authMiddleware, (c) => {
   const userId = getUserId(c)
   const worldRows = db
@@ -28,6 +32,7 @@ worldRoutes.get('/', authMiddleware, (c) => {
       id: worlds.id,
       name: worlds.name,
       origin: worlds.origin,
+      is_example: worlds.is_example,
       summary: worlds.summary,
       updated_at: worlds.updated_at,
       register_id: worlds.register_id,
@@ -70,6 +75,7 @@ worldRoutes.get('/', authMiddleware, (c) => {
       const clusterStat = clustersByWorld.get(world.id)
       return {
         ...world,
+        is_example: Boolean(world.is_example),
         latest_piece_at: pieceStat?.latest_piece_at ?? null,
         prompt_cluster_count: Number(clusterStat?.prompt_cluster_count ?? 0),
         piece_count: Number(pieceStat?.piece_count ?? 0),
@@ -90,6 +96,7 @@ worldRoutes.post('/', authMiddleware, async (c) => {
     user_id: userId,
     name,
     origin: originText(body.origin),
+    is_example: booleanInt(body.is_example),
     summary: typeof body.summary === 'string' ? body.summary : '',
     body: typeof body.body === 'string' ? body.body : '',
     register_id: registerIdValue(body.register_id),
@@ -100,6 +107,7 @@ worldRoutes.post('/', authMiddleware, async (c) => {
     id: result.id,
     name: result.name,
     origin: result.origin,
+    is_example: Boolean(result.is_example),
     summary: result.summary,
     body: result.body,
     register_id: result.register_id,
@@ -113,6 +121,7 @@ worldRoutes.get('/:id', authMiddleware, (c) => {
     id: world.id,
     name: world.name,
     origin: world.origin,
+    is_example: Boolean(world.is_example),
     summary: world.summary,
     body: world.body,
     register_id: world.register_id,
@@ -133,6 +142,7 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
     updates.name = name
   }
   if (body.origin !== undefined) updates.origin = originText(body.origin)
+  if (body.is_example !== undefined) updates.is_example = booleanInt(body.is_example)
   if (body.summary !== undefined) updates.summary = body.summary
   if (body.body !== undefined) updates.body = body.body
   if (body.register_id !== undefined) updates.register_id = registerIdValue(body.register_id)

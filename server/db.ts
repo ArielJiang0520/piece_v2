@@ -25,6 +25,7 @@ sqlite.run(`
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     origin TEXT NOT NULL DEFAULT 'original',
+    is_example INTEGER NOT NULL DEFAULT 0,
     summary TEXT NOT NULL DEFAULT '',
     body TEXT NOT NULL DEFAULT '',
     register_id INTEGER REFERENCES registers(id) ON DELETE SET NULL,
@@ -90,6 +91,7 @@ function dropColumnIfPresent(table: string, column: string) {
 }
 
 addColumnIfMissing('worlds', 'origin', "origin TEXT NOT NULL DEFAULT 'original'")
+addColumnIfMissing('worlds', 'is_example', 'is_example INTEGER NOT NULL DEFAULT 0')
 dropColumnIfPresent('worlds', 'language')
 addColumnIfMissing('registers', 'summary', "summary TEXT NOT NULL DEFAULT ''")
 addColumnIfMissing('worlds', 'register_id', 'register_id INTEGER REFERENCES registers(id) ON DELETE SET NULL')
@@ -136,6 +138,7 @@ export const worlds = sqliteTable('worlds', {
   user_id: integer('user_id').notNull().references(() => users.id),
   name: text('name').notNull(),
   origin: text('origin').notNull().default('original'),
+  is_example: integer('is_example').notNull().default(0),
   summary: text('summary').notNull().default(''),
   body: text('body').notNull().default(''),
   register_id: integer('register_id').references(() => registers.id),

@@ -13,6 +13,7 @@ interface World {
   name: string
   summary: string
   origin: string
+  is_example: boolean
   register_id: number | null
   register_title: string | null
   updated_at: number
@@ -60,7 +61,7 @@ export default function WorldList() {
           <ul className="hairline-list flex flex-col px-6">
             {worlds.map((w, index) => {
               const timestamp = w.latest_piece_at ?? w.updated_at
-              const tags = [w.origin, w.register_title].filter(Boolean) as string[]
+              const tags = [w.is_example ? 'Example' : null, w.origin, w.register_title].filter(Boolean) as string[]
 
               return (
                 <li
