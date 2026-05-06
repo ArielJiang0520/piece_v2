@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Check } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../../api'
 import { entityLabel } from '../../../config'
@@ -101,52 +102,71 @@ export default function WorldEdit() {
 
   if (!initialized) {
     return (
-      <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-        <div className="mb-6">
-          <Skeleton className="mb-2 h-4 w-28" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-        <div className="mb-6">
-          <Skeleton className="mb-2 h-4 w-16" />
-          <div className="flex gap-2">
-            <Skeleton className="h-10 w-20" />
-            <Skeleton className="h-10 w-44" />
+      <div className="page-fade-in min-h-svh bg-paper">
+        <div className="page-width min-h-svh px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-12">
+          <header className="mb-10">
+            <Skeleton className="mb-4 h-3 w-20" />
+            <Skeleton className="h-12 w-52" />
+          </header>
+          <div className="mb-10">
+            <Skeleton className="mb-4 h-3 w-28" />
+            <Skeleton className="h-10 w-full" />
           </div>
-        </div>
-        <div className="mb-6">
-          <Skeleton className="mb-2 h-4 w-12" />
-          <div className="flex flex-col gap-2">
-            {Array.from({ length: 3 }, (_, index) => (
-              <div key={index} className="rounded-sm border border-paper-3 bg-paper-2 px-3 py-2">
-                <Skeleton className="h-4 w-1/2" />
-                <SkeletonText className="mt-2" lineClassName="h-3" lines={1} />
-              </div>
-            ))}
+          <div className="mb-10">
+            <Skeleton className="mb-4 h-3 w-16" />
+            <div className="flex gap-2">
+              <Skeleton className="h-10 w-24 rounded-full" />
+              <Skeleton className="h-10 w-52 rounded-full" />
+            </div>
           </div>
+          <div className="mb-10">
+            <Skeleton className="mb-4 h-3 w-12" />
+            <div className="hairline-list flex flex-col">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="py-5">
+                  <Skeleton className="h-5 w-1/2" />
+                  <SkeletonText className="mt-2" lineClassName="h-3" lines={1} />
+                </div>
+              ))}
+            </div>
+          </div>
+          <Skeleton className="mb-4 h-3 w-20" />
+          <Skeleton className="h-96 w-full" />
         </div>
-        <Skeleton className="mb-2 h-4 w-20" />
-        <Skeleton className="h-96 w-full" />
       </div>
     )
   }
 
   return (
-    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-      <WorldFormFields values={values} setField={setField} />
+    <div className="page-fade-in min-h-svh bg-paper">
+      <div className="page-width min-h-svh px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-12">
+        {/* <header className="mb-10">
+          <div className="mb-4">
+            <span className="t-eyebrow eyebrow-rule">Revise</span>
+          </div>
+          <h1 className="t-display">Edit {entityLabel('world', { capitalize: true })}</h1>
+        </header> */}
 
-      <div className="mb-12 flex items-center gap-3">
-        <button
-          className="rounded-sm bg-rose px-4 py-2 font-medium text-white transition-colors hover:bg-rose-deep disabled:opacity-50"
-          onClick={saveWorld}
-          disabled={!values.name.trim() || saveMutation.isPending}
-        >
-          {saveMutation.isPending ? 'Saving...' : 'Save'}
-        </button>
-        {saveMutation.isError && (
-          <span className="text-sm text-rose-deep">
-            {saveMutation.error instanceof Error ? saveMutation.error.message : `Could not save ${entityLabel('world')}`}
-          </span>
-        )}
+        <WorldFormFields values={values} setField={setField} />
+
+        <div className="mb-12 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex items-center gap-3 rounded-full bg-rose py-2.5 pl-2.5 pr-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
+            onClick={saveWorld}
+            disabled={!values.name.trim() || saveMutation.isPending}
+          >
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-white/15">
+              <Check aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
+            </span>
+            {saveMutation.isPending ? 'Saving...' : 'Save'}
+          </button>
+          {saveMutation.isError && (
+            <span className="font-serif-zh text-[13px] italic leading-normal text-signal-red">
+              {saveMutation.error instanceof Error ? saveMutation.error.message : `Could not save ${entityLabel('world')}`}
+            </span>
+          )}
+        </div>
       </div>
 
       <ConfirmDialog

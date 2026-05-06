@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { Check } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../../api'
 import { entityLabel } from '../../../config'
@@ -40,22 +41,35 @@ export default function WorldCreate() {
   }
 
   return (
-    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-      <WorldFormFields values={values} setField={setField} autoFocusName />
+    <div className="page-fade-in min-h-svh bg-paper">
+      <div className="page-width min-h-svh px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-12">
+        {/* <header className="mb-10">
+          <div className="mb-4">
+            <span className="t-eyebrow eyebrow-rule">New</span>
+          </div>
+          <h1 className="t-display">Create {entityLabel('world', { capitalize: true })}</h1>
+        </header> */}
 
-      <div className="mb-12 flex items-center gap-3">
-        <button
-          className="rounded-sm bg-rose px-4 py-2 font-medium text-white transition-colors hover:bg-rose-deep disabled:opacity-50"
-          onClick={saveWorld}
-          disabled={!values.name.trim() || createMutation.isPending}
-        >
-          {createMutation.isPending ? 'Saving...' : 'Save'}
-        </button>
-        {createMutation.isError && (
-          <span className="text-sm text-rose-deep">
-            {createMutation.error instanceof Error ? createMutation.error.message : `Could not save ${entityLabel('world')}`}
-          </span>
-        )}
+        <WorldFormFields values={values} setField={setField} autoFocusName />
+
+        <div className="mb-12 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex items-center gap-3 rounded-full bg-rose py-2.5 pl-2.5 pr-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
+            onClick={saveWorld}
+            disabled={!values.name.trim() || createMutation.isPending}
+          >
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-white/15">
+              <Check aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
+            </span>
+            {createMutation.isPending ? 'Saving...' : 'Save'}
+          </button>
+          {createMutation.isError && (
+            <span className="font-serif-zh text-[13px] italic leading-normal text-signal-red">
+              {createMutation.error instanceof Error ? createMutation.error.message : `Could not save ${entityLabel('world')}`}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

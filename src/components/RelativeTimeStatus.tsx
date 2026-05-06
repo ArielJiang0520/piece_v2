@@ -3,12 +3,11 @@ import { relativeTime } from '../utils/time'
 const ONE_HOUR_MS = 60 * 60 * 1e3
 
 function recencyClasses(timestamp: number | null | undefined) {
-  if (!timestamp) return { text: 'text-ink-4', dot: 'bg-ink-4/60' }
+  if (!timestamp) return { dot: 'bg-ink-4/50' }
 
   const age = Date.now() - timestamp
-  if (age < ONE_HOUR_MS) return { text: 'text-signal-green', dot: 'bg-signal-green' }
-  // if (age < SEVEN_DAYS_MS) return { text: 'text-amber-800/65', dot: 'bg-amber-600/45' }
-  return { text: 'text-ink-4', dot: 'bg-ink-4/60' }
+  if (age < ONE_HOUR_MS) return { dot: 'bg-rose' }
+  return { dot: 'bg-ink-4/50' }
 }
 
 interface RelativeTimeStatusProps {
@@ -28,8 +27,8 @@ export default function RelativeTimeStatus({
   const label = timestamp ? `${prefix}${relativeTime(timestamp)}` : emptyLabel
 
   return (
-    <div className={`${className} flex items-center gap-2.5 text-xs font-normal leading-none ${classes.text}`}>
-      <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${classes.dot}`} />
+    <div className={`${className} t-meta flex items-center gap-2.5 leading-none`}>
+      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${classes.dot}`} />
       <span>{label}</span>
     </div>
   )

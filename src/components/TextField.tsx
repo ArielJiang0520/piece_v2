@@ -30,12 +30,13 @@ type TextareaTextFieldProps = SharedTextFieldProps &
 
 type TextFieldProps = InputTextFieldProps | TextareaTextFieldProps
 
-const labelBaseClass = 'mb-1 block text-sm uppercase tracking-wide text-ink-3'
+const labelBaseClass = 't-eyebrow eyebrow-rule'
 const inputBaseClass =
-  'w-full rounded-sm border border-paper-3 bg-paper-2 px-3 py-2 text-base sm:text-sm text-ink placeholder-ink-3 focus:border-rose focus:outline-none disabled:opacity-50'
+  'w-full border-b border-rose-line bg-transparent px-0 py-2.5 text-xl leading-snug text-ink placeholder:text-ink-4 focus:border-rose focus:outline-none disabled:opacity-50'
 const searchInputBaseClass =
-  'w-full rounded-md border border-paper-3 bg-paper py-2.5 pl-9 pr-9 text-base sm:text-sm text-ink placeholder:text-ink-4 focus:border-ink-4/40 focus:outline-none focus:ring-2 focus:ring-rose/20 disabled:opacity-50'
-const textareaBaseClass = `${inputBaseClass} resize-y`
+  'w-full rounded-full border border-rose-line bg-paper py-2.5 pl-9 pr-9 italic text-[15px] text-ink placeholder:text-ink-4 placeholder:italic focus:border-rose/40 focus:outline-none focus:ring-2 focus:ring-rose/15 disabled:opacity-50'
+const textareaBaseClass =
+  'w-full resize-y border-y border-rose-line bg-transparent px-0 py-4 text-[16px] leading-8 text-ink placeholder:text-ink-4 focus:border-rose focus:outline-none disabled:opacity-50'
 
 export default function TextField({
   id,
@@ -54,7 +55,7 @@ export default function TextField({
 }: TextFieldProps) {
   const generatedId = useId()
   const fieldId = id ?? generatedId
-  const fontClass = mono ? 'font-mono' : ''
+  const fontClass = mono ? 'font-mono' : 'font-serif-zh'
   const className = [
     multiline ? textareaBaseClass : variant === 'search' ? searchInputBaseClass : inputBaseClass,
     fontClass,
@@ -65,9 +66,11 @@ export default function TextField({
   return (
     <div className={containerClassName}>
       {label && (
-        <label htmlFor={fieldId} className={labelClassName ?? labelBaseClass}>
-          {label}
-        </label>
+        <div className="mb-3">
+          <label htmlFor={fieldId} className={labelClassName ?? labelBaseClass}>
+            {label}
+          </label>
+        </div>
       )}
       {multiline ? (
         <textarea

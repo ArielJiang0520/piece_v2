@@ -32,84 +32,88 @@ export default function WorldList() {
   const worlds = worldsQuery.data ?? []
 
   return (
-    <div className="min-h-screen page-width">
+    <div className="page-fade-in min-h-screen page-width">
       <main className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
-        <div className="flex items-center gap-3 px-6 pb-4 pt-2">
+        <div className="px-6 pb-6 pt-4">
           {worldsQuery.isLoading ? (
             <Skeleton className="h-3 w-24" />
           ) : (
-            <div className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
-              {worlds.length} {entityLabel('world', { plural: true, capitalize: true })}
+            <div className="t-eyebrow eyebrow-rule">
+              <span>{worlds.length} {entityLabel('world', { plural: true, capitalize: true })}</span>
             </div>
           )}
         </div>
 
         {worldsQuery.isLoading ? (
-          <div className="flex flex-col gap-3 px-4">
+          <div className="hairline-list flex flex-col px-6">
             {Array.from({ length: 4 }, (_, index) => (
-              <div
-                key={index}
-                className="rounded-md border border-paper-3 bg-paper px-5 py-4"
-              >
-                <Skeleton className="mb-3 h-3 w-24" />
-                <Skeleton className="h-6 w-2/3" />
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Skeleton className="h-5 w-16" />
-                  <Skeleton className="h-5 w-20" />
-                </div>
-                <SkeletonText className="mt-4" lineClassName="h-3" lines={1} />
+              <div key={index} className="py-7">
+                <Skeleton className="mb-4 h-3 w-32" />
+                <Skeleton className="h-7 w-2/3" />
+                <SkeletonText className="mt-3" lineClassName="h-3" lines={1} />
               </div>
             ))}
           </div>
         ) : worlds.length === 0 ? (
-          <p className="px-6 text-sm text-ink-3">No {entityLabel('world', { plural: true })} yet. Create one to get started.</p>
+          <p className="t-meta px-6">No {entityLabel('world', { plural: true })} yet. Create one to get started.</p>
         ) : (
-          <div className="flex flex-col gap-3 px-4">
-            {worlds.map(w => {
+          <ul className="hairline-list flex flex-col px-6">
+            {worlds.map((w, index) => {
               const timestamp = w.latest_piece_at ?? w.updated_at
+              const tags = [w.origin, w.register_title].filter(Boolean) as string[]
 
               return (
-                <button
+                <li
                   key={w.id}
-                  className="relative overflow-hidden rounded-md border border-paper-3 bg-paper px-5 py-4 text-left transition-colors before:absolute before:bottom-6 before:left-0 before:top-6 before:w-0.5 before:rounded-r-sm before:bg-rose before:opacity-0 before:transition-opacity hover:border-ink-4 hover:bg-paper-2 hover:before:opacity-100"
-                  onClick={() => navigate(`/worlds/${w.id}`)}
+                  className="list-item-reveal"
+                  style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
                 >
-                  <RelativeTimeStatus timestamp={timestamp} prefix="Updated " />
-                  <div className="font-serif-zh text-[21px] font-normal leading-snug text-ink">{w.name}</div>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    {w.origin && (
-                      <span className="rounded-sm bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-3">
-                        {w.origin}
-                      </span>
+                  <button
+                    className="group block w-full py-7 text-left transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
+                    onClick={() => navigate(`/worlds/${w.id}`)}
+                  >
+                    <RelativeTimeStatus className="mb-4" timestamp={timestamp} prefix="Updated " />
+
+                    <div className="t-headline">
+                      {w.name}
+                    </div>
+
+                    {tags.length > 0 && (
+                      <div className="t-meta mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {tags.map((tag, i) => (
+                          <span key={tag} className="flex items-center gap-2 capitalize">
+                            {i > 0 && <span aria-hidden="true" className="text-ink-4">—</span>}
+                            <span>{tag}</span>
+                          </span>
+                        ))}
+                      </div>
                     )}
-                    {w.register_title && (
-                      <span className="rounded-sm bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-3">
-                        {w.register_title}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-4 text-xs text-ink-4">
-                    <CountIndicator
-                      count={w.prompt_cluster_count}
-                      entity="prompt"
-                      maxDots={20}
-                      unitsPerDot={25}
-                    />
-                  </div>
-                </button>
+
+                    <div className="mt-5 transition-opacity duration-200 group-hover:opacity-90">
+                      <CountIndicator
+                        count={w.prompt_cluster_count}
+                        entity="prompt"
+                        maxDots={20}
+                        unitsPerDot={25}
+                      />
+                    </div>
+                  </button>
+                </li>
               )
             })}
-          </div>
+          </ul>
         )}
       </main>
 
       <button
         type="button"
         onClick={() => navigate('/worlds/new')}
-        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] inline-flex items-center gap-2 rounded-full border border-rose bg-rose px-5 py-3 text-base font-medium text-white shadow-[0_16px_34px_rgba(205,83,106,0.34)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.42)] focus:outline-none focus:ring-4 focus:ring-rose/25"
+        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] inline-flex items-center gap-3 rounded-full bg-rose py-2.5 pl-2.5 pr-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
         aria-label={`New ${entityLabel('world', { capitalize: true })}`}
       >
-        <Plus aria-hidden="true" className="h-5 w-5" />
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-white/15">
+          <Plus aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
+        </span>
         New {entityLabel('world', { capitalize: true })}
       </button>
     </div>

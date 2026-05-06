@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { RotateCw } from 'lucide-react'
-import { apiFetch } from '../../api'
-import { entityLabel } from '../../config'
-import ConfirmDialog from '../../components/ConfirmDialog'
-import DeleteIconButton from '../../components/DeleteIconButton'
-import RelativeTimeStatus from '../../components/RelativeTimeStatus'
-import Skeleton, { SkeletonText } from '../../components/Skeleton'
-import { useTopNavConfig } from '../../components/topNavConfig'
+import { apiFetch } from '../../../api'
+import { entityLabel } from '../../../config'
+import ConfirmDialog from '../../../components/ConfirmDialog'
+import DeleteIconButton from '../../../components/DeleteIconButton'
+import RelativeTimeStatus from '../../../components/RelativeTimeStatus'
+import Skeleton, { SkeletonText } from '../../../components/Skeleton'
+import { useTopNavConfig } from '../../../components/topNavConfig'
 
 interface Prompt {
   id: number
@@ -128,23 +127,20 @@ export default function Prompt() {
 
   if (!worldQuery.data || !promptQuery.data) {
     return (
-      <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-8">
-        <header className="relative mb-12 pt-8 text-center">
-          <SkeletonText className="mx-auto max-w-88" lineClassName="mx-auto h-4" lines={3} />
-          <Skeleton className="mx-auto mt-16 h-14 w-full max-w-104 rounded-lg" />
+      <div className="page-width min-h-svh px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-10">
+        <header className="relative mb-14 pt-6">
+          <SkeletonText lineClassName="h-5" lines={4} />
+          <Skeleton className="mt-12 h-12 w-44 rounded-full" />
         </header>
         <section>
-          <div className="mb-5 flex items-end justify-between gap-4">
-            <div className="flex items-baseline gap-3">
-              <Skeleton className="h-8 w-10" />
-              <Skeleton className="h-4 w-14" />
-            </div>
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <Skeleton className="h-3 w-28" />
           </div>
-          <div className="flex flex-col gap-3">
+          <div className="hairline-list">
             {Array.from({ length: 4 }, (_, index) => (
               <div
                 key={index}
-                className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 rounded-md border border-paper-3 bg-paper px-4 py-4"
+                className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 py-6"
               >
                 <Skeleton className="mt-0.5 h-4 w-8" />
                 <div className="min-w-0">
@@ -161,18 +157,17 @@ export default function Prompt() {
   if (!prompt) return null
 
   return (
-    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-8">
-      <header className="relative mb-12 pt-8 text-center">
-        <h1 className="mx-auto max-w-88 font-serif-zh text-[18px] font-normal leading-[1.55] text-ink">
+    <div className="page-fade-in page-width min-h-svh px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-10">
+      <header className="relative mb-14 pt-6">
+        <p className="drop-cap font-serif-zh text-[18px] leading-[1.7] text-ink">
           {prompt.text}
-        </h1>
+        </p>
 
         <Link
           to={`/worlds/${id}/generate?promptId=${prompt.id}`}
-          className="text-sm  mx-auto mt-16 flex min-h-10 w-full max-w-104 items-center justify-center gap-3 rounded-lg border border-rose bg-rose px-6 py-4 font-semibold text-white shadow-[0_16px_34px_rgba(205,83,106,0.24)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.34)] focus:outline-none focus:ring-4 focus:ring-rose/25"
+          className="mt-12 inline-flex items-center gap-3 rounded-full bg-rose px-6 py-3.5 font-serif-zh text-[15px] italic text-white shadow-(--shadow-cta) transition-all hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus:ring-4 focus:ring-rose/25"
         >
-          <RotateCw aria-hidden="true" className="h-4 w-4" />
-          <span>Another {entityLabel('piece')}</span>
+          <span>Another take</span>
         </Link>
       </header>
 
@@ -189,60 +184,61 @@ export default function Prompt() {
       />
 
       {pieces.length === 0 ? (
-        <p className="text-center text-sm text-ink-3">No {entityLabel('piece', { plural: true })} yet.</p>
+        <p className="t-meta text-center">No {entityLabel('piece', { plural: true })} yet.</p>
       ) : (
         <section>
-          <div className="mb-5 flex items-end justify-between gap-4">
-            <div className="flex items-baseline gap-3">
-              <span className="font-serif-zh text-[28px] leading-none text-ink">
-                {prompt.piece_count}
-              </span>
-              <span className="pb-1 text-sm text-ink-3">
-                {entityLabel('piece', { plural: prompt.piece_count !== 1 })}
-              </span>
-            </div>
+          <div className="t-eyebrow eyebrow-rule mb-6">
+            <span>
+              <span className="text-rose">{prompt.piece_count}</span>{' '}
+              {entityLabel('piece', { plural: prompt.piece_count !== 1 })}
+            </span>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <ul className="hairline-list flex flex-col">
             {pieces.map((piece, index) => {
               const pieceNumber = Math.max(1, prompt.piece_count - ((page - 1) * PAGE_SIZE) - index)
 
               return (
-                <Link
+                <li
                   key={piece.id}
-                  to={`/pieces/${piece.id}`}
-                  className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 rounded-md border border-paper-3 bg-paper px-4 py-4 transition-colors hover:border-ink-4/35 hover:bg-paper-2/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose/25"
+                  className="list-item-reveal"
+                  style={{ animationDelay: `${Math.min(index, 8) * 30}ms` }}
                 >
-                  <span className="pt-0.5 text-sm font-medium text-ink-4">#{pieceNumber}</span>
-                  <span className="min-w-0">
-                    <span className="text-[14px] leading-6 text-ink-2 line-clamp-3">
-                      {piece.preview}
+                  <Link
+                    to={`/pieces/${piece.id}`}
+                    className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 py-6 transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
+                  >
+                    <span className="font-serif-zh text-sm italic text-rose">#{pieceNumber}</span>
+                    <span className="min-w-0">
+                      <span className="block font-serif-zh text-[15px] leading-7 text-ink-2 line-clamp-3">
+                        {piece.preview}
+                      </span>
+                      <RelativeTimeStatus timestamp={piece.created_at} className="mt-3" />
                     </span>
-                    <RelativeTimeStatus timestamp={piece.created_at} className="mt-2" />
-                  </span>
-                </Link>
+                  </Link>
+                </li>
               )
             })}
-          </div>
+          </ul>
         </section>
       )}
 
       {pieces.length > 0 && (
-        <div className="mt-7 flex items-center justify-between">
+        <div className="mt-10 flex items-center justify-between">
           <button
-            className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
+            className="t-meta transition-colors hover:text-ink disabled:opacity-30 disabled:hover:text-ink-3"
             onClick={() => setPage(prev => Math.max(1, prev - 1))}
             disabled={page === 1}
           >
-            Previous
+            ← Previous
           </button>
-          <span className="text-ink-3 text-xs">Page {page}</span>
+          <span className="t-eyebrow">Page {page}</span>
           <button
-            className="border border-paper-3 text-ink-3 rounded-sm px-3 py-1.5 text-sm transition-colors hover:border-ink-4 hover:text-ink disabled:opacity-40 disabled:hover:border-paper-3"
+            className="t-meta transition-colors hover:text-ink disabled:opacity-30 disabled:hover:text-ink-3"
             onClick={() => setPage(prev => prev + 1)}
             disabled={!hasMore}
           >
-            Next
+            Next →
           </button>
         </div>
       )}

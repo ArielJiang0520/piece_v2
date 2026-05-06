@@ -84,14 +84,14 @@ export default function Piece() {
 
   if (!piece) {
     return (
-      <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-        <SkeletonText className="mb-8" lineClassName="h-4" lines={2} />
-        <div className="mb-12 space-y-5">
+      <div className="page-width min-h-svh px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-8">
+        <SkeletonText className="mb-10" lineClassName="h-4" lines={2} />
+        <div className="mb-14 space-y-5">
           <SkeletonText lines={5} lineClassName="h-4" />
           <SkeletonText lines={4} lineClassName="h-4" />
           <SkeletonText lines={3} lineClassName="h-4" />
         </div>
-        <div className="border-t border-paper-3 pt-6">
+        <div className="border-t border-rose-line pt-6">
           <Skeleton className="h-3 w-24" />
         </div>
       </div>
@@ -99,15 +99,15 @@ export default function Piece() {
   }
 
   return (
-    <div className="page-width min-h-svh px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
-      <p className="font-serif-zh text-ink-2 text-sm mb-8 italic">"{piece.prompt}"</p>
+    <div className="page-fade-in page-width min-h-svh px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-8">
+      <p className="t-meta mb-10">"{piece.prompt}"</p>
 
-      <div className="mb-12">
+      <div className="mb-14">
         <p className="prose whitespace-pre-wrap">{piece.body}</p>
       </div>
 
-      <div className="border-t border-paper-3 pt-6">
-        <span className="text-ink-3 text-xs">{relativeTime(piece.created_at)}</span>
+      <div className="border-t border-rose-line pt-6">
+        <span className="t-meta">{relativeTime(piece.created_at)}</span>
       </div>
 
       <ConfirmDialog

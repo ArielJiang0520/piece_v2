@@ -7,7 +7,7 @@ export const THEME_OPTIONS = [
 
 export type ThemeId = (typeof THEME_OPTIONS)[number]['id']
 
-const DEFAULT_THEME_ID: ThemeId = 'light'
+const DEFAULT_THEME_ID: ThemeId = 'dark'
 
 function isThemeId(value: unknown): value is ThemeId {
   return THEME_OPTIONS.some(option => option.id === value)

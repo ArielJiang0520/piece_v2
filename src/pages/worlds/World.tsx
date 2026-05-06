@@ -42,10 +42,6 @@ interface WorldReturnState {
   cardTop: number
 }
 
-function countLabel(count: number, singular: string) {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`
-}
-
 const PAGE_SIZE = 20
 
 const SORT_OPTIONS = [
@@ -59,20 +55,12 @@ type SortKey = typeof SORT_OPTIONS[number]['value']
 
 function ClusterCardSkeletons({ count = 4 }: { count?: number }) {
   return (
-    <div className="mt-8 flex flex-col gap-4">
+    <div className="hairline-list mt-8 flex flex-col">
       {Array.from({ length: count }, (_, index) => (
-        <section
-          key={index}
-          className="overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_1px_0_rgba(26,18,16,0.02)]"
-        >
-          <div className="px-5 py-5">
-            <Skeleton className="mb-3 h-3 w-24" />
-            <SkeletonText lineClassName="h-4" lines={3} />
-          </div>
-          <div className="flex items-center justify-between gap-4 border-t border-paper-3 bg-paper-2/70 px-7 py-4">
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-3 w-20" />
-          </div>
+        <section key={index} className="py-7">
+          <Skeleton className="mb-3 h-3 w-24" />
+          <SkeletonText lineClassName="h-4" lines={3} />
+          <Skeleton className="mt-4 h-3 w-32" />
         </section>
       ))}
     </div>
@@ -279,12 +267,12 @@ export default function World() {
   if (!worldQuery.data || (isSearching ? false : !clustersQuery.data)) {
     return (
       <div className="min-h-screen bg-paper">
-        <div className="page-width min-h-screen px-4 pb-32 pt-12">
+        <div className="page-width min-h-screen px-6 pb-32 pt-12">
           <header className="flex items-start justify-between gap-5">
             <Skeleton className="h-11 w-52" />
             <Skeleton className="mt-1 h-10 w-10 rounded-full" />
           </header>
-          <Skeleton className="mt-4 h-11 w-full rounded-md" />
+          <Skeleton className="mt-6 h-11 w-full rounded-md" />
           <div className="mt-5 flex items-center justify-between gap-4">
             <Skeleton className="h-3 w-24" />
             <Skeleton className="h-6 w-20" />
@@ -296,15 +284,15 @@ export default function World() {
   }
 
   return (
-    <div className="min-h-screen bg-paper">
-      <div className="page-width min-h-screen px-4 pb-32 pt-12">
+    <div className="page-fade-in min-h-screen bg-paper">
+      <div className="page-width min-h-screen px-6 pb-32 pt-12">
         <header className="flex items-start justify-between gap-5">
-          <h1 className="min-w-0 font-serif-zh text-[38px] font-normal leading-[1.12] text-ink">
+          <h1 className="t-display min-w-0">
             {worldName}
           </h1>
           <Link
             to={`/worlds/${id}/edit`}
-            className="mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-4 transition-colors hover:bg-paper-2 hover:text-ink-3 focus:outline-none focus:ring-2 focus:ring-rose/30"
+            className="mt-2 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-4 transition-colors hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
             title={`Edit ${entityLabel('world')}`}
             aria-label={`Edit ${entityLabel('world')}`}
           >
@@ -312,7 +300,7 @@ export default function World() {
           </Link>
         </header>
 
-        <div className="mt-4">
+        <div className="mt-6">
           <TextField
             type="text"
             value={searchInput}
@@ -325,7 +313,7 @@ export default function World() {
               <button
                 type="button"
                 onClick={() => setSearchInput('')}
-                className="grid h-6 w-6 place-items-center rounded-full text-ink-4 hover:bg-paper-2 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
+                className="grid h-6 w-6 place-items-center rounded-full text-ink-4 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
                 aria-label="Clear search"
                 title="Clear search"
               >
@@ -335,15 +323,19 @@ export default function World() {
           />
         </div>
 
-        <div className="mt-5 flex items-center justify-between gap-4">
-          <div className="text-xs text-ink-4">
+        <div className="mt-6 flex items-baseline justify-between gap-4">
+          <div className="t-eyebrow">
             {loadingSearch ? (
               <Skeleton className="h-3 w-24" />
             ) : isSearching ? (
-              `${countLabel(searchTotal, 'match')} for "${queryParam}"`
+              <>
+                <span className="text-rose">{searchTotal}</span>{' '}
+                {searchTotal === 1 ? 'match' : 'matches'}
+              </>
             ) : (
               <>
-                {countLabel(totalClusters, entityLabel('prompt'))}
+                <span className="text-rose">{totalClusters}</span>{' '}
+                {entityLabel('prompt', { plural: totalClusters !== 1 })}
               </>
             )}
           </div>
@@ -352,7 +344,7 @@ export default function World() {
               <button
                 type="button"
                 onClick={() => setSortOpen(open => !open)}
-                className="flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+                className="t-meta flex items-center gap-1.5 transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
                 aria-haspopup="menu"
                 aria-expanded={sortOpen}
               >
@@ -362,7 +354,7 @@ export default function World() {
               {sortOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 top-full z-10 mt-1 w-48 overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_8px_24px_rgba(26,18,16,0.12)]"
+                  className="absolute right-0 top-full z-10 mt-2 w-52 overflow-hidden rounded-md bg-paper shadow-(--shadow-menu)"
                 >
                   {SORT_OPTIONS.map(option => (
                     <button
@@ -371,11 +363,11 @@ export default function World() {
                       role="menuitemradio"
                       aria-checked={sort === option.value}
                       onClick={() => handleSortChange(option.value)}
-                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs text-ink-2 transition-colors hover:bg-paper-2 focus:outline-none focus:bg-paper-2"
+                      className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left font-serif-zh text-sm italic text-ink-2 transition-colors hover:text-ink focus:outline-none focus:bg-rose-tint"
                     >
                       <span>{option.label}</span>
                       {sort === option.value && (
-                        <Check aria-hidden="true" className="h-3.5 w-3.5 text-ink-3" />
+                        <Check aria-hidden="true" className="h-3.5 w-3.5 text-rose" />
                       )}
                     </button>
                   ))}
@@ -389,7 +381,7 @@ export default function World() {
           <ClusterCardSkeletons count={3} />
         ) : groups.length === 0 ? (
           <div className="pt-16 text-center">
-            <p className="mb-5 text-sm text-ink-3">
+            <p className="t-meta mb-5">
               {isSearching
                 ? 'No matches.'
                 : `No ${entityLabel('prompt', { plural: true })} yet.`}
@@ -397,12 +389,13 @@ export default function World() {
           </div>
         ) : (
           <>
-            <div className="mt-8 flex flex-col gap-4">
-              {groups.map(group => (
-                <section
+            <ul className="hairline-list mt-6 flex flex-col">
+              {groups.map((group, index) => (
+                <li
                   key={group.id}
                   data-cluster-id={group.id}
-                  className="overflow-hidden rounded-md border border-paper-3 bg-paper shadow-[0_1px_0_rgba(26,18,16,0.02)]"
+                  className="list-item-reveal"
+                  style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
                 >
                   <Link
                     to={
@@ -412,26 +405,31 @@ export default function World() {
                     }
                     state={{ fromWorldList: true }}
                     onClick={event => saveClusterReturnState(group.id, event)}
-                    className="block px-5 py-5 transition-colors hover:bg-paper-2/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink-4/35"
+                    className="block py-7 transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
                   >
-                    <RelativeTimeStatus timestamp={group.latest_piece_at} emptyLabel={`No ${entityLabel('piece', { plural: true })}`} />
-                    <div className="font-serif-zh text-sm font-normal text-ink-2 line-clamp-4">
+                    <RelativeTimeStatus
+                      className="mb-3"
+                      timestamp={group.latest_piece_at}
+                      emptyLabel={`No ${entityLabel('piece', { plural: true })}`}
+                    />
+                    <p className="font-serif-zh text-[16px] leading-7 text-ink-2 line-clamp-4">
                       {group.title}
+                    </p>
+                    <div className="t-meta mt-4 flex items-center justify-between gap-4">
+                      <CountIndicator count={group.piece_count} />
+                      {group.prompt_count > 1 && (
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
+                          <span>
+                            {group.prompt_count} {group.prompt_count === 1 ? 'variation' : 'variations'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </Link>
-
-                  <div className="flex items-center justify-between gap-4 border-t border-paper-3 bg-paper-2/70 px-7 py-4 text-xs leading-none text-ink-4">
-                    <CountIndicator count={group.piece_count} />
-                    {group.prompt_count > 1 && (
-                      <div className="flex shrink-0 items-center gap-1.5 text-ink-4">
-                        <GitBranch aria-hidden="true" className="h-4 w-4" />
-                        <span>{countLabel(group.prompt_count, `variation`)}</span>
-                      </div>
-                    )}
-                  </div>
-                </section>
+                </li>
               ))}
-            </div>
+            </ul>
 
             {!isSearching && (
               <>
@@ -455,7 +453,7 @@ export default function World() {
         <button
           type="button"
           onClick={scrollToTop}
-          className="fixed bottom-7 left-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] grid h-14 w-14 place-items-center rounded-full border border-paper-3 bg-paper text-ink shadow-[0_10px_24px_rgba(26,18,16,0.14)] transition-all hover:-translate-y-0.5 hover:bg-paper-2 focus:outline-none focus:ring-4 focus:ring-ink-4/20 dark:shadow-[0_10px_24px_rgba(0,0,0,0.32)]"
+          className="fixed bottom-7 left-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] grid h-14 w-14 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20"
           aria-label="Scroll to top"
           title="Scroll to top"
         >
@@ -465,10 +463,12 @@ export default function World() {
 
       <Link
         to={`/worlds/${id}/generate`}
-        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] inline-flex items-center gap-2 rounded-full border border-rose bg-rose px-5 py-3 text-base font-medium text-white shadow-[0_16px_34px_rgba(205,83,106,0.34)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_18px_38px_rgba(205,83,106,0.42)] focus:outline-none focus:ring-4 focus:ring-rose/25"
+        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] inline-flex items-center gap-3 rounded-full bg-rose py-2.5 pl-2.5 pr-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
         aria-label={`New ${entityLabel('prompt', { capitalize: true })}`}
       >
-        <Plus aria-hidden="true" className="h-5 w-5" />
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-white/15">
+          <Plus aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
+        </span>
         New {entityLabel('prompt', { capitalize: true })}
       </Link>
     </div>
