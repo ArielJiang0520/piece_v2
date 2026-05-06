@@ -455,7 +455,7 @@ export default function World() {
         <button
           type="button"
           onClick={scrollToTop}
-          className="fixed bottom-7 left-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] grid h-14 w-14 place-items-center rounded-full border border-paper-3 bg-white text-ink shadow-[0_10px_24px_rgba(26,18,16,0.14)] transition-all hover:-translate-y-0.5 hover:bg-paper-2 focus:outline-none focus:ring-4 focus:ring-ink-4/20"
+          className="fixed bottom-7 left-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] grid h-14 w-14 place-items-center rounded-full border border-paper-3 bg-paper text-ink shadow-[0_10px_24px_rgba(26,18,16,0.14)] transition-all hover:-translate-y-0.5 hover:bg-paper-2 focus:outline-none focus:ring-4 focus:ring-ink-4/20 dark:shadow-[0_10px_24px_rgba(0,0,0,0.32)]"
           aria-label="Scroll to top"
           title="Scroll to top"
         >

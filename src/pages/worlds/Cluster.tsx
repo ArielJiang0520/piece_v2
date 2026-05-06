@@ -213,13 +213,13 @@ export default function Cluster() {
                     {diff && (
                       <div className="mt-5 space-y-2 border-l-2 border-rose/30 pl-4 font-mono text-xs leading-5">
                         {diff.removed && (
-                          <div className="text-red-800/70">
+                          <div className="text-signal-red">
                             <span className="select-none">- </span>
                             {diff.removed}
                           </div>
                         )}
                         {diff.added && (
-                          <div className="text-emerald-800/70">
+                          <div className="text-signal-green">
                             <span className="select-none">+ </span>
                             {diff.added}
                           </div>

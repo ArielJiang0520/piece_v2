@@ -1,21 +1,4 @@
 :root {
-  --color-ink: #1a1210;
-  --color-ink-2: #3d2c26;
-  --color-ink-3: #6b4c44;
-  --color-ink-4: #c4a89e;
-
-  --color-paper: #faf7f4;
-  --color-paper-2: #f2ece6;
-  --color-paper-3: #e6dbd3;
-
-  --color-rose: oklch(62% 0.14 12);
-  --color-rose-deep: oklch(50% 0.16 12);
-  --color-rose-pale: oklch(93% 0.05 12);
-
-  --font-serif: 'Domine', 'Noto Serif SC', Georgia, serif;
-  --font-serif-zh: 'Domine', 'Noto Serif SC', Georgia, serif;
-  --font-sans: 'Noto Sans SC', system-ui, sans-serif;
-  --font-mono: 'Montserrat', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-serif-zh-weight: 400;
 
   --text-display: 3rem;
@@ -49,7 +32,7 @@
   --radius-lg: 16px;
 }
 
-@theme {
+@theme static {
   --color-ink: #1a1210;
   --color-ink-2: #3d2c26;
   --color-ink-3: #6b4c44;
@@ -60,6 +43,8 @@
   --color-rose: oklch(62% 0.14 12);
   --color-rose-deep: oklch(50% 0.16 12);
   --color-rose-pale: oklch(93% 0.05 12);
+  --color-signal-green: rgb(6 95 70 / 0.65);
+  --color-signal-red: rgb(153 27 27 / 0.7);
 
   --color-accent: oklch(62% 0.14 12);
   --color-accent-hover: oklch(50% 0.16 12);
@@ -91,6 +76,8 @@ html.dark {
   --color-rose: oklch(68% 0.14 12);
   --color-rose-deep: oklch(76% 0.11 12);
   --color-rose-pale: oklch(28% 0.06 12);
+  --color-signal-green: oklch(74% 0.11 155 / 0.8);
+  --color-signal-red: oklch(72% 0.13 28 / 0.8);
 
   --color-accent: oklch(68% 0.14 12);
   --color-accent-hover: oklch(76% 0.11 12);
@@ -138,4 +125,22 @@ body {
 
 .fade-in-up {
   animation: fadeInUp 600ms ease-out both;
+}
+
+@keyframes streamedWordFade {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.streamed-word-fade {
+  display: inline-block;
+  animation: streamedWordFade 520ms ease-out both;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streamed-word-fade {
+    animation: none;
+    will-change: auto;
+  }
 }

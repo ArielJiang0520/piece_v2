@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { X } from 'lucide-react'
+import { Languages, Settings, X } from 'lucide-react'
 import { apiFetch } from '../../../api'
-import { DEFAULT_MODEL_ID } from '../../../config'
 import { useGeneration } from '../../../hooks/useGeneration'
 import { usePromptMatch } from '../../../hooks/usePromptMatch'
 import { useTopNavConfig } from '../../../components/topNavConfig'
 import { useToast } from '../../../components/Toast'
+import { setGenerationModel, useGenerationModel } from '../../../preferences/generationModel'
+import { setReadingFont, useReadingFont } from '../../../preferences/readingFont'
+import { setReadingFontSize, useReadingFontSize } from '../../../preferences/readingFontSize'
+import {
+  setReadingSpeedUnitsPerSecond,
+  useReadingSpeedUnitsPerSecond,
+} from '../../../preferences/readingSpeed'
 import PromptCard from './PromptCard'
+import ReadingSettingsPanel from './ReadingSettingsPanel'
 import SettingsPanel from './SettingsPanel'
 import OutputPanel, { type SaveResponse, type SaveState } from './OutputPanel'
 
@@ -31,13 +38,18 @@ export default function Generate() {
     promptError,
     applyPromptSaved,
   } = usePromptMatch({ worldId: id, queryPromptId })
-  const [model, setModel] = useState(DEFAULT_MODEL_ID)
-  const [temperature, setTemperature] = useState(1)
-  const [useThinking, setUseThinking] = useState(false)
+  const [temperature] = useState(1)
+  const [useThinking] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [readingSettingsOpen, setReadingSettingsOpen] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [promptCompact, setPromptCompact] = useState(false)
   const [saveResult, setSaveResult] = useState<SaveResponse | null>(null)
+  const [hasGeneratedOnScreen, setHasGeneratedOnScreen] = useState(false)
+  const readingSpeed = useReadingSpeedUnitsPerSecond()
+  const readingFont = useReadingFont()
+  const readingFontSize = useReadingFontSize()
+  const model = useGenerationModel()
   const backHref = id ? `/worlds/${id}` : '/worlds'
   useTopNavConfig({ backHref })
 
@@ -61,6 +73,7 @@ export default function Generate() {
 
   useEffect(() => {
     if (!displayComplete || completion !== 'completed' || !output || generationError || saveState !== 'idle') return
+    setHasGeneratedOnScreen(true)
     void handleSave()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayComplete, completion])
@@ -81,7 +94,8 @@ export default function Generate() {
     phase === 'waiting_provider' ? 'Waiting...'
       : phase === 'thinking' ? 'Thinking...'
         : phase === 'writing' ? 'Writing...'
-          : promptPieceCount === 0 ? 'First take' : 'Another take'
+          : hasGeneratedOnScreen ? 'Another take' : 'Take it'
+  const panelOpen = settingsOpen || readingSettingsOpen
 
   useEffect(() => {
     let ticking = false
@@ -166,42 +180,77 @@ export default function Generate() {
             compact={promptCompact}
             promptPieceCount={promptPieceCount}
             error={error}
-            settingsOpen={settingsOpen}
-            onSettingsToggle={() => setSettingsOpen(open => !open)}
-            settings={
+          />
+
+          <div className="mt-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="min-h-11 min-w-0 flex-1 rounded-full border border-rose bg-rose px-5 py-2 text-sm font-medium text-white shadow-[0_14px_28px_rgba(205,83,106,0.30)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_16px_32px_rgba(205,83,106,0.38)] focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
+                onClick={handleGenerate}
+                disabled={streaming || loadingPrompt || !prompt.trim() || panelOpen}
+              >
+                {generateButtonLabel}
+              </button>
+              <button
+                type="button"
+                className={`flex size-11 shrink-0 items-center justify-center rounded-full border border-paper-3 bg-paper-2 text-ink shadow-[0_12px_24px_rgba(54,44,38,0.14)] transition-all hover:-translate-y-0.5 hover:border-rose hover:text-rose-deep focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-50 ${readingSettingsOpen ? 'border-rose text-rose-deep ring-4 ring-rose/15' : ''}`}
+                onClick={() => {
+                  setSettingsOpen(false)
+                  setReadingSettingsOpen(open => !open)
+                }}
+                disabled={streaming}
+                aria-label={readingSettingsOpen ? 'Close reading settings' : 'Open reading settings'}
+                title={readingSettingsOpen ? 'Close reading settings' : 'Open reading settings'}
+                aria-expanded={readingSettingsOpen}
+              >
+                <Languages className="size-5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={`flex size-11 shrink-0 items-center justify-center rounded-full border border-paper-3 bg-paper-2 text-ink shadow-[0_12px_24px_rgba(54,44,38,0.14)] transition-all hover:-translate-y-0.5 hover:border-rose hover:text-rose-deep focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-50 ${settingsOpen ? 'border-rose text-rose-deep ring-4 ring-rose/15' : ''}`}
+                onClick={() => {
+                  setReadingSettingsOpen(false)
+                  setSettingsOpen(open => !open)
+                }}
+                disabled={streaming}
+                aria-label={settingsOpen ? 'Close generation settings' : 'Open generation settings'}
+                title={settingsOpen ? 'Close generation settings' : 'Open generation settings'}
+                aria-expanded={settingsOpen}
+              >
+                <Settings className="size-5" aria-hidden="true" />
+              </button>
+              {streaming && (
+                <button
+                  type="button"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full border border-paper-3 bg-paper-2 text-ink shadow-[0_12px_24px_rgba(54,44,38,0.14)] transition-all hover:-translate-y-0.5 hover:border-rose hover:text-rose-deep focus:outline-none focus:ring-4 focus:ring-rose/20"
+                  onClick={stop}
+                  aria-label="Stop generation"
+                  title="Stop generation"
+                >
+                  <X className="size-5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+
+            <div className="ml-auto w-full max-w-sm">
               <SettingsPanel
                 open={settingsOpen}
                 disabled={streaming}
                 model={model}
-                onModelChange={setModel}
-                temperature={temperature}
-                onTemperatureChange={setTemperature}
-                useThinking={useThinking}
-                onUseThinkingChange={setUseThinking}
+                onModelChange={setGenerationModel}
               />
-            }
-          />
-
-          <div className="mt-3 flex items-center gap-3">
-            <button
-              type="button"
-              className="min-h-11 min-w-0 flex-1 rounded-full border border-rose bg-rose px-5 py-2 text-sm font-medium text-white shadow-[0_14px_28px_rgba(205,83,106,0.30)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_16px_32px_rgba(205,83,106,0.38)] focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
-              onClick={handleGenerate}
-              disabled={streaming || loadingPrompt || !prompt.trim()}
-            >
-              {generateButtonLabel}
-            </button>
-            {streaming && (
-              <button
-                type="button"
-                className="flex size-11 items-center justify-center rounded-full border border-paper-3 bg-paper-2 text-ink shadow-[0_12px_24px_rgba(54,44,38,0.14)] transition-all hover:-translate-y-0.5 hover:border-rose hover:text-rose-deep focus:outline-none focus:ring-4 focus:ring-rose/20"
-                onClick={stop}
-                aria-label="Stop generation"
-                title="Stop generation"
-              >
-                <X className="size-5" aria-hidden="true" />
-              </button>
-            )}
+              <ReadingSettingsPanel
+                open={readingSettingsOpen}
+                disabled={streaming}
+                readingSpeed={readingSpeed}
+                onReadingSpeedChange={setReadingSpeedUnitsPerSecond}
+                readingFont={readingFont}
+                onReadingFontChange={setReadingFont}
+                readingFontSize={readingFontSize}
+                onReadingFontSizeChange={setReadingFontSize}
+              />
+            </div>
           </div>
         </div>
 
@@ -213,8 +262,8 @@ export default function Generate() {
           isFirstTake={promptPieceCount === 0}
           saveState={saveState}
           saveResult={saveResult}
-          hasMatchedPrompt={!!matchedPrompt}
-          worldId={id}
+          readingFont={readingFont}
+          readingFontSize={readingFontSize}
         />
 
       </div>

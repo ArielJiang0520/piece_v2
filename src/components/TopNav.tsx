@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { apiFetch } from '../api'
 import { entityLabel } from '../config'
-import { READING_SPEED_OPTIONS, setReadingSpeedId, useReadingSpeedId } from '../preferences/readingSpeed'
 import { THEME_OPTIONS, setThemeId, useThemeId } from '../preferences/theme'
 import { useCurrentTopNavConfig } from './topNavConfig'
 import Skeleton from './Skeleton'
@@ -22,7 +21,6 @@ export default function TopNav() {
   const navigate = useNavigate()
   const location = useLocation()
   const config = useCurrentTopNavConfig()
-  const readingSpeedId = useReadingSpeedId()
   const themeId = useThemeId()
 
   const worldId = useMemo(() => {
@@ -150,7 +148,7 @@ export default function TopNav() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-5 py-5">
+          <div className="flex flex-1 flex-col overflow-y-auto px-5 py-5">
             <button
               type="button"
               className="mb-3 flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4 transition-colors hover:text-ink"
@@ -184,60 +182,28 @@ export default function TopNav() {
                 ))}
               </ul>
             )}
-
-            <div className="mb-3 mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
-              Reading Speed
+            <div
+              className="mt-auto grid w-24 grid-cols-2 self-end overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5"
+              aria-label="Color mode"
+            >
+              {THEME_OPTIONS.map(option => {
+                const selected = option.id === themeId
+                const Icon = option.id === 'dark' ? Moon : Sun
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`grid h-8 place-items-center rounded-xs transition-colors ${selected ? 'bg-paper text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
+                      }`}
+                    aria-label={`${option.label} mode`}
+                    aria-pressed={selected}
+                    onClick={() => setThemeId(option.id)}
+                  >
+                    <Icon aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                )
+              })}
             </div>
-            <div className="px-2">
-              <div
-                className="grid overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5"
-                style={{
-                  gridTemplateColumns: `repeat(${READING_SPEED_OPTIONS.length}, minmax(0, 1fr))`,
-                }}
-              >
-                {READING_SPEED_OPTIONS.map(option => {
-                  const selected = option.id === readingSpeedId
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center text-[11px] font-medium transition-colors ${selected ? 'bg-paper text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
-                        }`}
-                      aria-pressed={selected}
-                      onClick={() => setReadingSpeedId(option.id)}
-                    >
-                      {option.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="mb-3 mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-4">
-              Theme
-            </div>
-            <div className="px-2">
-              <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5">
-                {THEME_OPTIONS.map(option => {
-                  const selected = option.id === themeId
-                  const Icon = option.id === 'dark' ? Moon : Sun
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xs px-1.5 py-1.5 text-center text-[11px] font-medium transition-colors ${selected ? 'bg-paper text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
-                        }`}
-                      aria-pressed={selected}
-                      onClick={() => setThemeId(option.id)}
-                    >
-                      <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-                      {option.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
           </div>
 
           <div className="border-t border-paper-3 px-5 py-4">
