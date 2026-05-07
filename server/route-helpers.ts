@@ -1,6 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { MODELS, type ModelOption } from '../src/config'
+import { MODELS, type ModelOption } from '../src/preferences/generationModel'
 import { db, worldVersions, worlds } from './db'
 
 export function getUserId(c: Context): number {
