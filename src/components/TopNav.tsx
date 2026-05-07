@@ -1,11 +1,12 @@
-import { useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, CircleUserRound, Moon, Sun, Wrench, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, ChevronRight, CircleUserRound, Ellipsis, Moon, Sun, Trash2, Wrench, X } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth'
 import { apiFetch } from '../api'
 import { entityLabel } from '../config'
 import { THEME_OPTIONS, setThemeId, useThemeId } from '../preferences/theme'
+import ConfirmDialog from './ConfirmDialog'
 import { useCurrentTopNavConfig } from './topNavConfig'
 import Skeleton from './Skeleton'
 
@@ -21,8 +22,12 @@ const themeIconByName = {
 
 export default function TopNav() {
   const [open, setOpen] = useState(false)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
+  const [deleteAccountError, setDeleteAccountError] = useState('')
+  const [deleteAccountPending, setDeleteAccountPending] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
-  const { user, logout } = useAuth()
+  const { user, logout, deleteAccount } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const config = useCurrentTopNavConfig()
@@ -49,8 +54,13 @@ export default function TopNav() {
   })
   const recentWorlds = (worldsQuery.data ?? []).slice(0, 5)
 
+  useEffect(() => {
+    if (!open) setAccountMenuOpen(false)
+  }, [open])
+
   function closeMenu() {
     menuButtonRef.current?.focus({ preventScroll: true })
+    setAccountMenuOpen(false)
     setOpen(false)
   }
 
@@ -73,6 +83,28 @@ export default function TopNav() {
   function goToAdminTools() {
     closeMenu()
     navigate('/admin')
+  }
+
+  function openDeleteAccountDialog() {
+    setAccountMenuOpen(false)
+    setDeleteAccountError('')
+    setConfirmDeleteAccount(true)
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteAccountPending) return
+
+    setDeleteAccountError('')
+    setDeleteAccountPending(true)
+    try {
+      await deleteAccount()
+      setConfirmDeleteAccount(false)
+      setOpen(false)
+      navigate('/login')
+    } catch (error) {
+      setDeleteAccountError(error instanceof Error ? error.message : 'Could not delete account')
+      setDeleteAccountPending(false)
+    }
   }
 
   return (
@@ -211,17 +243,53 @@ export default function TopNav() {
             </div>
           </div>
 
-          <div className="border-t border-rose-line px-6 py-5">
+          <div className="relative flex items-center justify-between gap-4 border-t border-rose-line px-6 py-5">
             <button
               type="button"
-              className="t-meta w-full text-left transition-colors hover:text-ink"
+              className="t-meta text-left transition-colors hover:text-ink"
               onClick={handleLogout}
             >
               Log out
             </button>
+            <div className="relative">
+              <button
+                type="button"
+                className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+                aria-label="Account options"
+                aria-expanded={accountMenuOpen}
+                title="Account options"
+                onClick={() => setAccountMenuOpen(value => !value)}
+              >
+                <Ellipsis aria-hidden="true" className="h-5 w-5" />
+              </button>
+              {accountMenuOpen && (
+                <div className="absolute bottom-full right-0 mb-2 w-44 overflow-hidden rounded-md border border-rose-line bg-paper shadow-(--shadow-menu)">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-signal-red transition-colors hover:bg-paper-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
+                    onClick={openDeleteAccountDialog}
+                  >
+                    <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    <span>Delete account</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </aside>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteAccount}
+        title="Are you sure?"
+        description={`This will permanently delete your account and all associated ${entityLabel('world', { plural: true })}, ${entityLabel('prompt', { plural: true })}, and ${entityLabel('piece', { plural: true })}.`}
+        confirmLabel="Yes, delete account"
+        pendingLabel="Deleting..."
+        isPending={deleteAccountPending}
+        error={deleteAccountError}
+        onConfirm={handleDeleteAccount}
+        onClose={() => setConfirmDeleteAccount(false)}
+      />
     </>
   )
 }

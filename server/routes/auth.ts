@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { getCookie, deleteCookie } from 'hono/cookie'
 import * as argon2 from '@node-rs/argon2'
 import { eq } from 'drizzle-orm'
-import { db, users, sessions } from '../db'
+import { db, pieces, promptClusters, prompts, sessions, users, worlds } from '../db'
 import {
   type Variables,
   SESSION_TTL_MS,
@@ -58,6 +58,22 @@ auth.post('/auth/login', async (c) => {
 auth.post('/auth/logout', async (c) => {
   const sid = getCookie(c, 'sid')
   if (sid) db.delete(sessions).where(eq(sessions.id, sid)).run()
+  deleteCookie(c, 'sid', { path: '/' })
+  return new Response(null, { status: 204 })
+})
+
+auth.delete('/auth/account', authMiddleware, (c) => {
+  const userId = getUserId(c)
+
+  db.transaction((tx) => {
+    tx.delete(pieces).where(eq(pieces.user_id, userId)).run()
+    tx.delete(prompts).where(eq(prompts.user_id, userId)).run()
+    tx.delete(promptClusters).where(eq(promptClusters.user_id, userId)).run()
+    tx.delete(worlds).where(eq(worlds.user_id, userId)).run()
+    tx.delete(sessions).where(eq(sessions.user_id, userId)).run()
+    tx.delete(users).where(eq(users.id, userId)).run()
+  })
+
   deleteCookie(c, 'sid', { path: '/' })
   return new Response(null, { status: 204 })
 })

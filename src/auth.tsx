@@ -13,6 +13,7 @@ interface AuthCtx {
   login: (username: string, password: string) => Promise<void>
   signup: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  deleteAccount: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthCtx | null>(null)
@@ -53,6 +54,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
   }
 
+  async function deleteAccount() {
+    await apiFetch('/api/auth/account', { method: 'DELETE' })
+    queryClient.clear()
+    setUser(null)
+  }
+
   if (loading) {
     return (
       <div className="page-width min-h-screen px-4 py-12">
@@ -71,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )
