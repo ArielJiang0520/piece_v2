@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react'
-import { Check, ChevronDown, Trophy } from 'lucide-react'
+import { Check, ChevronDown, Gauge, Trophy } from 'lucide-react'
 import { MODELS, type ModelOption } from '../../../preferences/generationModel'
 
 interface SettingsPanelProps {
@@ -9,7 +9,7 @@ interface SettingsPanelProps {
   onModelChange: (model: string) => void
 }
 
-type AttributeKind = 'quality' | 'cost'
+type AttributeKind = 'quality' | 'speed'
 
 export default function SettingsPanel({
   open,
@@ -120,7 +120,7 @@ function ModelAttributes({
   return (
     <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
       <ModelAttribute label="QUALITY" value={model.attributes.quality} kind="quality" textClass={textClass} symbolClass={symbolClass} />
-      <ModelAttribute label="COST" value={model.attributes.cost} kind="cost" textClass={textClass} symbolClass={symbolClass} />
+      <ModelAttribute label="SPEED" value={model.attributes.speed} kind="speed" textClass={textClass} symbolClass={symbolClass} />
     </span>
   )
 }
@@ -154,5 +154,5 @@ function ModelAttribute({
 
 function AttributeSymbol({ kind }: { kind: AttributeKind }) {
   if (kind === 'quality') return <Trophy className="size-3 fill-current" aria-hidden="true" />
-  return <span className="font-serif-zh text-xs italic">$</span>
+  return <Gauge className="size-3" aria-hidden="true" />
 }

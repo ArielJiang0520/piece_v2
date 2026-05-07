@@ -29,19 +29,19 @@ export const MODELS: ModelOption[] = [
   {
     id: 'z-ai/glm-5',
     label: 'GLM 5',
-    attributes: { speed: 2, quality: 2, cost: 2 },
+    attributes: { speed: 3, quality: 2, cost: 2 },
     reasoning: { effort: 'none' },
   },
   {
     id: 'z-ai/glm-5.1',
     label: 'GLM 5.1',
-    attributes: { speed: 2, quality: 3, cost: 2 },
+    attributes: { speed: 1, quality: 3, cost: 2 },
     reasoning: { effort: 'none' },
   },
   {
     id: 'deepseek/deepseek-v3.2',
     label: 'DeepSeek V3.2',
-    attributes: { speed: 2, quality: 1, cost: 1 },
+    attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
   },
 ]
