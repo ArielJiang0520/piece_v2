@@ -207,7 +207,6 @@ export default function Generate() {
                   setSettingsOpen(false)
                   setReadingSettingsOpen(open => !open)
                 }}
-                disabled={streaming}
                 aria-label={readingSettingsOpen ? 'Close reading settings' : 'Open reading settings'}
                 title={readingSettingsOpen ? 'Close reading settings' : 'Open reading settings'}
                 aria-expanded={readingSettingsOpen}
@@ -250,7 +249,7 @@ export default function Generate() {
               />
               <ReadingSettingsPanel
                 open={readingSettingsOpen}
-                disabled={streaming}
+                disabled={false}
                 readingSpeed={readingSpeed}
                 onReadingSpeedChange={setReadingSpeedUnitsPerSecond}
                 readingFont={readingFont}
