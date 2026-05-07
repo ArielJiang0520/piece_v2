@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { pieces, promptClusters, prompts, worldVersions, worlds } from './db'
@@ -15,13 +15,17 @@ interface ExampleWorld {
   prompts?: ExamplePrompt[]
 }
 
-const EXAMPLE_FILES = ['w1.json', 'w2.json']
+const EXAMPLES_DIR = join(import.meta.dir, '..', 'examples')
 
 function readExampleWorlds() {
-  return EXAMPLE_FILES.map(file => {
-    const path = join(import.meta.dir, '..', 'examples', file)
-    return JSON.parse(readFileSync(path, 'utf8')) as ExampleWorld
-  })
+  return readdirSync(EXAMPLES_DIR, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.json'))
+    .map(entry => entry.name)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(file => {
+      const path = join(EXAMPLES_DIR, file)
+      return JSON.parse(readFileSync(path, 'utf8')) as ExampleWorld
+    })
 }
 
 const exampleWorlds = readExampleWorlds()
