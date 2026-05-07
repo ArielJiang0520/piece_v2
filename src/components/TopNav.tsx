@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, CircleUserRound, Ellipsis, Moon, Sun, Trash2, Wrench, X } from 'lucide-react'
+import { ArrowLeft, ChevronRight, CircleUserRound, Ellipsis, Moon, Sun, Trash2, X } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth'
@@ -78,11 +78,6 @@ export default function TopNav() {
   function goToWorldList() {
     closeMenu()
     navigate('/worlds')
-  }
-
-  function goToAdminTools() {
-    closeMenu()
-    navigate('/admin')
   }
 
   function openDeleteAccountDialog() {
@@ -166,15 +161,6 @@ export default function TopNav() {
         >
           <div className="flex items-center gap-2 border-b border-rose-line px-6 py-5">
             <span className="font-serif-zh text-lg text-ink">{user?.username ?? ''}</span>
-            <button
-              type="button"
-              className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
-              aria-label="Admin tools"
-              title="Admin tools"
-              onClick={goToAdminTools}
-            >
-              <Wrench aria-hidden="true" className="h-4 w-4" />
-            </button>
             <button
               type="button"
               className="ml-auto grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"

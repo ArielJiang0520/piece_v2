@@ -11,11 +11,8 @@ import { useTopNavConfig } from '../../components/topNavConfig'
 interface World {
   id: number
   name: string
-  summary: string
-  origin: string
+  body_summary: string
   is_example: boolean
-  register_id: number | null
-  register_title: string | null
   updated_at: number
   latest_piece_at: number | null
   prompt_cluster_count: number
@@ -60,8 +57,8 @@ export default function WorldList() {
         ) : (
           <ul className="hairline-list flex flex-col px-6">
             {worlds.map((w, index) => {
-              const timestamp = w.latest_piece_at ?? w.updated_at
-              const tags = [w.is_example ? 'Example' : null, w.origin, w.register_title].filter(Boolean) as string[]
+              const timestamp = Math.max(w.latest_piece_at ?? 0, w.updated_at)
+              const bodySummary = (w.body_summary ?? '').trim()
 
               return (
                 <li
@@ -79,7 +76,13 @@ export default function WorldList() {
                       {w.name}
                     </div>
 
-                    {tags.length > 0 && (
+                    {bodySummary && (
+                      <p className="mt-3 font-serif-zh text-[15px] leading-7 text-ink-2 whitespace-pre-line line-clamp-3">
+                        {bodySummary}
+                      </p>
+                    )}
+
+                    {/* {tags.length > 0 && (
                       <div className="t-meta mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                         {tags.map((tag, i) => (
                           <span key={tag} className="flex items-center gap-2 capitalize">
@@ -88,7 +91,7 @@ export default function WorldList() {
                           </span>
                         ))}
                       </div>
-                    )}
+                    )} */}
 
                     <div className="mt-5 transition-opacity duration-200 group-hover:opacity-90">
                       <CountIndicator

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ArrowUpDown, Check, GitBranch, Search, Plus, X, Ellipsis } from 'lucide-react'
+import { ArrowUp, ArrowUpDown, Check, GitBranch, Search, Plus, X } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
@@ -10,6 +10,7 @@ import RelativeTimeStatus from '../../components/RelativeTimeStatus'
 import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import TextField from '../../components/TextField'
 import { useTopNavConfig } from '../../components/topNavConfig'
+import WorldTabs from './WorldTabs'
 
 interface ClusterGroup {
   id: number
@@ -268,9 +269,9 @@ export default function World() {
     return (
       <div className="min-h-screen bg-paper">
         <div className="page-width min-h-screen px-6 pb-32 pt-12">
-          <header className="flex items-start justify-between gap-5">
+          <header>
             <Skeleton className="h-11 w-52" />
-            <Skeleton className="mt-1 h-10 w-10 rounded-full" />
+            <Skeleton className="mt-6 h-11 w-full rounded-full" />
           </header>
           <Skeleton className="mt-6 h-11 w-full rounded-md" />
           <div className="mt-5 flex items-center justify-between gap-4">
@@ -286,18 +287,11 @@ export default function World() {
   return (
     <div className="page-fade-in min-h-screen bg-paper">
       <div className="page-width min-h-screen px-6 pb-32 pt-12">
-        <header className="flex items-start justify-between gap-5">
+        <header>
           <h1 className="t-display min-w-0">
             {worldName}
           </h1>
-          <Link
-            to={`/worlds/${id}/edit`}
-            className="mt-2 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-4 transition-colors hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
-            title={`Edit ${entityLabel('world')}`}
-            aria-label={`Edit ${entityLabel('world')}`}
-          >
-            <Ellipsis aria-hidden="true" className="h-6 w-6" />
-          </Link>
+          <WorldTabs active="scenes" worldId={id} />
         </header>
 
         <div className="mt-6">

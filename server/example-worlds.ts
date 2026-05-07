@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
-import { pieces, promptClusters, prompts, registers, worlds } from './db'
+import { pieces, promptClusters, prompts, worldVersions, worlds } from './db'
 import { normalizePromptInput } from './prompt-text'
 
 interface ExamplePrompt {
@@ -11,8 +11,6 @@ interface ExamplePrompt {
 
 interface ExampleWorld {
   name: string
-  origin?: string
-  register?: number | null
   body?: string
   prompts?: ExamplePrompt[]
 }
@@ -30,22 +28,25 @@ const exampleWorlds = readExampleWorlds()
 
 export function createExampleWorldsForUser(tx: any, userId: number, now = Date.now()) {
   let timestamp = now
-  const registerIds = new Set(tx.select({ id: registers.id }).from(registers).all().map((register: { id: number }) => register.id))
 
   for (const example of exampleWorlds) {
-    const registerId = example.register && registerIds.has(example.register) ? example.register : null
     timestamp += 1
+    const worldBody = example.body ?? ''
     const world = tx.insert(worlds).values({
       user_id: userId,
       name: example.name.trim(),
-      origin: example.origin?.trim() || 'original',
       is_example: 1,
-      summary: '',
-      body: example.body ?? '',
-      register_id: registerId,
+      body: worldBody,
       created_at: timestamp,
       updated_at: timestamp,
     }).returning({ id: worlds.id }).get()
+
+    tx.insert(worldVersions).values({
+      world_id: world.id,
+      name: example.name.trim(),
+      body: worldBody,
+      created_at: timestamp,
+    }).run()
 
     for (const examplePrompt of example.prompts ?? []) {
       const text = normalizePromptInput(examplePrompt.text)

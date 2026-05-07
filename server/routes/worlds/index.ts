@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { eq, and, desc, inArray, sql } from 'drizzle-orm'
-import { db, pieces, promptClusters, registers, worlds } from '../../db'
+import { db, pieces, promptClusters, worldVersions, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { findUserWorld, getUserId, paramInt } from '../../route-helpers'
+import { findUserWorld, findUserWorldId, getUserId, paramInt } from '../../route-helpers'
 import promptRoutes from './prompts'
 import generateRoutes from './generate'
 import clusterRoutes from './clusters'
@@ -10,19 +10,14 @@ import pieceRoutes from './pieces'
 
 const worldRoutes = new Hono<{ Variables: Variables }>()
 
-function originText(value: unknown) {
-  if (typeof value !== 'string') return 'original'
-  return value.trim() || 'original'
-}
-
-function registerIdValue(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const n = typeof value === 'number' ? value : parseInt(String(value), 10)
-  return Number.isFinite(n) ? n : null
-}
-
-function booleanInt(value: unknown) {
-  return value === true || value === 1 || value === '1' ? 1 : 0
+function bodySummary(value: string) {
+  return value
+    .trim()
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n[ \t]*\n+/g, '\n')
+    .split('\n')
+    .slice(0, 3)
+    .join('\n')
 }
 
 worldRoutes.get('/', authMiddleware, (c) => {
@@ -31,15 +26,11 @@ worldRoutes.get('/', authMiddleware, (c) => {
     .select({
       id: worlds.id,
       name: worlds.name,
-      origin: worlds.origin,
       is_example: worlds.is_example,
-      summary: worlds.summary,
+      body: worlds.body,
       updated_at: worlds.updated_at,
-      register_id: worlds.register_id,
-      register_title: registers.title,
     })
     .from(worlds)
-    .leftJoin(registers, eq(worlds.register_id, registers.id))
     .where(eq(worlds.user_id, userId))
     .orderBy(desc(worlds.updated_at))
     .all()
@@ -71,17 +62,19 @@ worldRoutes.get('/', authMiddleware, (c) => {
   const clustersByWorld = new Map(clusterStats.map(stat => [stat.world_id, stat]))
   const rows = worldRows
     .map(world => {
+      const { body, ...worldFields } = world
       const pieceStat = piecesByWorld.get(world.id)
       const clusterStat = clustersByWorld.get(world.id)
       return {
-        ...world,
+        ...worldFields,
         is_example: Boolean(world.is_example),
+        body_summary: bodySummary(body),
         latest_piece_at: pieceStat?.latest_piece_at ?? null,
         prompt_cluster_count: Number(clusterStat?.prompt_cluster_count ?? 0),
         piece_count: Number(pieceStat?.piece_count ?? 0),
       }
     })
-    .sort((a, b) => (b.latest_piece_at ?? b.updated_at) - (a.latest_piece_at ?? a.updated_at))
+    .sort((a, b) => Math.max(b.latest_piece_at ?? 0, b.updated_at) - Math.max(a.latest_piece_at ?? 0, a.updated_at))
 
   return c.json(rows)
 })
@@ -92,26 +85,73 @@ worldRoutes.post('/', authMiddleware, async (c) => {
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) return c.json({ error: 'Name required' }, 400)
   const now = Date.now()
-  const result = db.insert(worlds).values({
-    user_id: userId,
-    name,
-    origin: originText(body.origin),
-    is_example: booleanInt(body.is_example),
-    summary: typeof body.summary === 'string' ? body.summary : '',
-    body: typeof body.body === 'string' ? body.body : '',
-    register_id: registerIdValue(body.register_id),
-    created_at: now,
-    updated_at: now,
-  }).returning().get()
+  const worldBody = typeof body.body === 'string' ? body.body : ''
+  const result = db.transaction(tx => {
+    const world = tx.insert(worlds).values({
+      user_id: userId,
+      name,
+      is_example: 0,
+      body: worldBody,
+      created_at: now,
+      updated_at: now,
+    }).returning().get()
+
+    tx.insert(worldVersions).values({
+      world_id: world.id,
+      name: world.name,
+      body: world.body,
+      created_at: now,
+    }).run()
+
+    return world
+  })
+
   return c.json({
     id: result.id,
     name: result.name,
-    origin: result.origin,
     is_example: Boolean(result.is_example),
-    summary: result.summary,
     body: result.body,
-    register_id: result.register_id,
+    updated_at: result.updated_at,
   })
+})
+
+worldRoutes.get('/:id/versions', authMiddleware, (c) => {
+  const id = paramInt(c, 'id')
+  const world = findUserWorldId(getUserId(c), id)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const rows = db
+    .select({
+      id: worldVersions.id,
+      name: worldVersions.name,
+      created_at: worldVersions.created_at,
+    })
+    .from(worldVersions)
+    .where(eq(worldVersions.world_id, id))
+    .orderBy(desc(worldVersions.created_at))
+    .all()
+
+  return c.json(rows)
+})
+
+worldRoutes.get('/:id/versions/:versionId', authMiddleware, (c) => {
+  const id = paramInt(c, 'id')
+  const world = findUserWorldId(getUserId(c), id)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const version = db
+    .select({
+      id: worldVersions.id,
+      name: worldVersions.name,
+      body: worldVersions.body,
+      created_at: worldVersions.created_at,
+    })
+    .from(worldVersions)
+    .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, paramInt(c, 'versionId'))))
+    .get()
+
+  if (!version) return c.json({ error: 'Not found' }, 404)
+  return c.json(version)
 })
 
 worldRoutes.get('/:id', authMiddleware, (c) => {
@@ -120,11 +160,8 @@ worldRoutes.get('/:id', authMiddleware, (c) => {
   return c.json({
     id: world.id,
     name: world.name,
-    origin: world.origin,
     is_example: Boolean(world.is_example),
-    summary: world.summary,
     body: world.body,
-    register_id: world.register_id,
     updated_at: world.updated_at,
   })
 })
@@ -135,20 +172,35 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
   if (!world) return c.json({ error: 'Not found' }, 404)
 
   const body = await c.req.json()
-  const updates: Record<string, any> = { updated_at: Date.now() }
+  let nextName = world.name
+  let nextBody = world.body
+
   if (body.name !== undefined) {
     const name = typeof body.name === 'string' ? body.name.trim() : ''
     if (!name) return c.json({ error: 'Name required' }, 400)
-    updates.name = name
+    nextName = name
   }
-  if (body.origin !== undefined) updates.origin = originText(body.origin)
-  if (body.is_example !== undefined) updates.is_example = booleanInt(body.is_example)
-  if (body.summary !== undefined) updates.summary = body.summary
-  if (body.body !== undefined) updates.body = body.body
-  if (body.register_id !== undefined) updates.register_id = registerIdValue(body.register_id)
+  if (body.body !== undefined) nextBody = typeof body.body === 'string' ? body.body : ''
 
-  db.update(worlds).set(updates).where(eq(worlds.id, id)).run()
-  return c.json({ ok: true })
+  if (nextName === world.name && nextBody === world.body) {
+    return c.json({ ok: true, changed: false })
+  }
+
+  const now = Date.now()
+  db.transaction(tx => {
+    tx.update(worlds)
+      .set({ name: nextName, body: nextBody, updated_at: now })
+      .where(eq(worlds.id, id))
+      .run()
+    tx.insert(worldVersions).values({
+      world_id: id,
+      name: nextName,
+      body: nextBody,
+      created_at: now,
+    }).run()
+  })
+
+  return c.json({ ok: true, changed: true })
 })
 
 worldRoutes.delete('/:id', authMiddleware, (c) => {

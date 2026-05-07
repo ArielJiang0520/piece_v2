@@ -1,7 +1,5 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { eq } from 'drizzle-orm'
-import { db, registers } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { normalizePromptInput } from '../../prompt-text'
@@ -14,14 +12,8 @@ function generationKey(userId: number, worldId: number, generationId: string) {
   return `${userId}:${worldId}:${generationId}`
 }
 
-function buildSystemPrompt(worldOrigin: string, worldBody: string, registerDetails: string | null): string {
-  const origin = worldOrigin.trim()
-  const originSentence = !origin || origin === 'original'
-    ? `The world is based on the user's original setting.`
-    : `The world is based on an existing work: ${origin}.`
-
-  const sections: string[] = [originSentence]
-
+function buildSystemPrompt(worldBody: string): string {
+  const sections: string[] = []
   if (worldBody.trim()) {
     sections.push(`# World setting\n${worldBody.trim()}`)
   }
@@ -29,10 +21,6 @@ function buildSystemPrompt(worldOrigin: string, worldBody: string, registerDetai
   sections.push(
     `# Task\nThe user will give you a prompt. Using the world setting above, write a story that responds to the user's prompt while staying faithful to the world.`,
   )
-
-  if (registerDetails && registerDetails.trim()) {
-    sections.push(`# The world's register\n${registerDetails.trim()}`)
-  }
 
   sections.push(
     `# Language\nRegardless of the language of these instructions, always reply in the same language as the user's prompt.`,
@@ -47,10 +35,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const register = world.register_id
-    ? db.select().from(registers).where(eq(registers.id, world.register_id)).get()
-    : null
-  const systemPrompt = buildSystemPrompt(world.origin, world.body, register?.details ?? null)
+  const systemPrompt = buildSystemPrompt(world.body)
 
   const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, generationId } = await c.req.json()
 

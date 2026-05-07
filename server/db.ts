@@ -24,13 +24,18 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    origin TEXT NOT NULL DEFAULT 'original',
     is_example INTEGER NOT NULL DEFAULT 0,
-    summary TEXT NOT NULL DEFAULT '',
     body TEXT NOT NULL DEFAULT '',
-    register_id INTEGER REFERENCES registers(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS world_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS prompt_clusters (
@@ -68,12 +73,6 @@ sqlite.run(`
     created_at INTEGER NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS registers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    details TEXT NOT NULL,
-    summary TEXT NOT NULL DEFAULT ''
-  );
 `)
 
 function addColumnIfMissing(table: string, column: string, ddl: string) {
@@ -83,18 +82,58 @@ function addColumnIfMissing(table: string, column: string, ddl: string) {
   }
 }
 
-function dropColumnIfPresent(table: string, column: string) {
-  const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
-  if (rows.some(row => row.name === column)) {
-    sqlite.run(`ALTER TABLE ${table} DROP COLUMN ${column};`)
+function rebuildWorldsTable() {
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run('DROP TABLE IF EXISTS worlds_new;')
+    sqlite.run(`
+      CREATE TABLE IF NOT EXISTS worlds_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        is_example INTEGER NOT NULL DEFAULT 0,
+        body TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO worlds_new (id, user_id, name, is_example, body, created_at, updated_at)
+      SELECT id, user_id, name, is_example, body, created_at, updated_at FROM worlds;
+    `)
+    sqlite.run('DROP TABLE worlds;')
+    sqlite.run('ALTER TABLE worlds_new RENAME TO worlds;')
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
   }
 }
 
-addColumnIfMissing('worlds', 'origin', "origin TEXT NOT NULL DEFAULT 'original'")
+function dropColumnIfPresent(table: string, column: string) {
+  const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (rows.some(row => row.name === column)) {
+    try {
+      sqlite.run(`ALTER TABLE ${table} DROP COLUMN ${column};`)
+    } catch (error) {
+      if (table === 'worlds' && ['summary', 'origin', 'register_id'].includes(column)) {
+        rebuildWorldsTable()
+        return
+      }
+      throw error
+    }
+  }
+}
+
 addColumnIfMissing('worlds', 'is_example', 'is_example INTEGER NOT NULL DEFAULT 0')
 dropColumnIfPresent('worlds', 'language')
-addColumnIfMissing('registers', 'summary', "summary TEXT NOT NULL DEFAULT ''")
-addColumnIfMissing('worlds', 'register_id', 'register_id INTEGER REFERENCES registers(id) ON DELETE SET NULL')
+dropColumnIfPresent('worlds', 'summary')
+dropColumnIfPresent('worlds', 'origin')
+dropColumnIfPresent('worlds', 'register_id')
+
+sqlite.run(`
+  INSERT INTO world_versions (world_id, name, body, created_at)
+  SELECT id, name, body, updated_at FROM worlds
+  WHERE id NOT IN (SELECT world_id FROM world_versions);
+`)
 
 sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
@@ -105,6 +144,7 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_pieces ON prompt_clusters(user_id, world_id, piece_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_variations ON prompt_clusters(user_id, world_id, prompt_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_worlds_user_updated ON worlds(user_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_world_versions_world_created ON world_versions(world_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 `)
 
@@ -126,24 +166,22 @@ export const sessions = sqliteTable('sessions', {
   expires_at: integer('expires_at').notNull(),
 })
 
-export const registers = sqliteTable('registers', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  title: text('title').notNull(),
-  details: text('details').notNull(),
-  summary: text('summary').notNull().default(''),
-})
-
 export const worlds = sqliteTable('worlds', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   name: text('name').notNull(),
-  origin: text('origin').notNull().default('original'),
   is_example: integer('is_example').notNull().default(0),
-  summary: text('summary').notNull().default(''),
   body: text('body').notNull().default(''),
-  register_id: integer('register_id').references(() => registers.id),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
+})
+
+export const worldVersions = sqliteTable('world_versions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  world_id: integer('world_id').notNull().references(() => worlds.id),
+  name: text('name').notNull(),
+  body: text('body').notNull(),
+  created_at: integer('created_at').notNull(),
 })
 
 export const promptClusters = sqliteTable('prompt_clusters', {
@@ -181,4 +219,4 @@ export const pieces = sqliteTable('pieces', {
   created_at: integer('created_at').notNull(),
 })
 
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, promptClusters, prompts, pieces, registers } })
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces } })
