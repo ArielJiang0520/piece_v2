@@ -33,8 +33,8 @@ sqlite.run(`
   CREATE TABLE IF NOT EXISTS world_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
     body TEXT NOT NULL,
+    restored_from_version_id INTEGER,
     created_at INTEGER NOT NULL
   );
 
@@ -54,6 +54,7 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
     cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE SET NULL,
     text TEXT NOT NULL,
     embedding TEXT,
@@ -67,6 +68,7 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
     prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
     body TEXT NOT NULL,
     model TEXT,
@@ -108,6 +110,30 @@ function rebuildWorldsTable() {
   }
 }
 
+function rebuildWorldVersionsTable() {
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run('DROP TABLE IF EXISTS world_versions_new;')
+    sqlite.run(`
+      CREATE TABLE IF NOT EXISTS world_versions_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        restored_from_version_id INTEGER,
+        created_at INTEGER NOT NULL
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO world_versions_new (id, world_id, body, restored_from_version_id, created_at)
+      SELECT id, world_id, body, restored_from_version_id, created_at FROM world_versions;
+    `)
+    sqlite.run('DROP TABLE world_versions;')
+    sqlite.run('ALTER TABLE world_versions_new RENAME TO world_versions;')
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
+  }
+}
+
 function dropColumnIfPresent(table: string, column: string) {
   const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   if (rows.some(row => row.name === column)) {
@@ -118,33 +144,44 @@ function dropColumnIfPresent(table: string, column: string) {
         rebuildWorldsTable()
         return
       }
+      if (table === 'world_versions' && column === 'name') {
+        rebuildWorldVersionsTable()
+        return
+      }
       throw error
     }
   }
 }
 
 addColumnIfMissing('worlds', 'is_example', 'is_example INTEGER NOT NULL DEFAULT 0')
+addColumnIfMissing('world_versions', 'restored_from_version_id', 'restored_from_version_id INTEGER')
+addColumnIfMissing('prompts', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')
+addColumnIfMissing('pieces', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')
+dropColumnIfPresent('world_versions', 'name')
 dropColumnIfPresent('worlds', 'language')
 dropColumnIfPresent('worlds', 'summary')
 dropColumnIfPresent('worlds', 'origin')
 dropColumnIfPresent('worlds', 'register_id')
 
 sqlite.run(`
-  INSERT INTO world_versions (world_id, name, body, created_at)
-  SELECT id, name, body, updated_at FROM worlds
+  INSERT INTO world_versions (world_id, body, created_at)
+  SELECT id, body, updated_at FROM worlds
   WHERE id NOT IN (SELECT world_id FROM world_versions);
 `)
 
 sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_pieces_world_version ON pieces(world_version_id);
   CREATE INDEX IF NOT EXISTS idx_pieces_prompt_created ON pieces(prompt_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_world_updated ON prompts(user_id, world_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_prompts_world_version ON prompts(world_version_id);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster ON prompts(cluster_id);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_updated ON prompt_clusters(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_pieces ON prompt_clusters(user_id, world_id, piece_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_variations ON prompt_clusters(user_id, world_id, prompt_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_worlds_user_updated ON worlds(user_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_world_versions_world_created ON world_versions(world_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_world_versions_world_restored_from ON world_versions(world_id, restored_from_version_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 `)
 
@@ -179,8 +216,8 @@ export const worlds = sqliteTable('worlds', {
 export const worldVersions = sqliteTable('world_versions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   world_id: integer('world_id').notNull().references(() => worlds.id),
-  name: text('name').notNull(),
   body: text('body').notNull(),
+  restored_from_version_id: integer('restored_from_version_id'),
   created_at: integer('created_at').notNull(),
 })
 
@@ -200,6 +237,7 @@ export const prompts = sqliteTable('prompts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
+  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   cluster_id: integer('cluster_id').references(() => promptClusters.id),
   text: text('text').notNull(),
   embedding: text('embedding'),
@@ -213,6 +251,7 @@ export const pieces = sqliteTable('pieces', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
+  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   prompt_id: integer('prompt_id').notNull().references(() => prompts.id),
   body: text('body').notNull(),
   model: text('model'),

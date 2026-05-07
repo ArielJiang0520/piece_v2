@@ -98,7 +98,6 @@ worldRoutes.post('/', authMiddleware, async (c) => {
 
     tx.insert(worldVersions).values({
       world_id: world.id,
-      name: world.name,
       body: world.body,
       created_at: now,
     }).run()
@@ -123,12 +122,12 @@ worldRoutes.get('/:id/versions', authMiddleware, (c) => {
   const rows = db
     .select({
       id: worldVersions.id,
-      name: worldVersions.name,
+      restored_from_version_id: worldVersions.restored_from_version_id,
       created_at: worldVersions.created_at,
     })
     .from(worldVersions)
     .where(eq(worldVersions.world_id, id))
-    .orderBy(desc(worldVersions.created_at))
+    .orderBy(desc(worldVersions.created_at), desc(worldVersions.id))
     .all()
 
   return c.json(rows)
@@ -142,8 +141,8 @@ worldRoutes.get('/:id/versions/:versionId', authMiddleware, (c) => {
   const version = db
     .select({
       id: worldVersions.id,
-      name: worldVersions.name,
       body: worldVersions.body,
+      restored_from_version_id: worldVersions.restored_from_version_id,
       created_at: worldVersions.created_at,
     })
     .from(worldVersions)
@@ -152,6 +151,43 @@ worldRoutes.get('/:id/versions/:versionId', authMiddleware, (c) => {
 
   if (!version) return c.json({ error: 'Not found' }, 404)
   return c.json(version)
+})
+
+worldRoutes.post('/:id/versions/:versionId/restore', authMiddleware, (c) => {
+  const id = paramInt(c, 'id')
+  const world = findUserWorld(getUserId(c), id)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const sourceVersionId = paramInt(c, 'versionId')
+  const sourceVersion = db
+    .select({
+      id: worldVersions.id,
+      body: worldVersions.body,
+    })
+    .from(worldVersions)
+    .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, sourceVersionId)))
+    .get()
+
+  if (!sourceVersion) return c.json({ error: 'Not found' }, 404)
+  if (sourceVersion.body === world.body) {
+    return c.json({ ok: true, changed: false })
+  }
+
+  const now = Date.now()
+  db.transaction(tx => {
+    tx.update(worlds)
+      .set({ body: sourceVersion.body, updated_at: now })
+      .where(eq(worlds.id, id))
+      .run()
+    tx.insert(worldVersions).values({
+      world_id: id,
+      body: sourceVersion.body,
+      restored_from_version_id: sourceVersion.id,
+      created_at: now,
+    }).run()
+  })
+
+  return c.json({ ok: true, changed: true })
 })
 
 worldRoutes.get('/:id', authMiddleware, (c) => {
@@ -182,7 +218,10 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
   }
   if (body.body !== undefined) nextBody = typeof body.body === 'string' ? body.body : ''
 
-  if (nextName === world.name && nextBody === world.body) {
+  const nameChanged = nextName !== world.name
+  const bodyChanged = nextBody !== world.body
+
+  if (!nameChanged && !bodyChanged) {
     return c.json({ ok: true, changed: false })
   }
 
@@ -192,12 +231,13 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
       .set({ name: nextName, body: nextBody, updated_at: now })
       .where(eq(worlds.id, id))
       .run()
-    tx.insert(worldVersions).values({
-      world_id: id,
-      name: nextName,
-      body: nextBody,
-      created_at: now,
-    }).run()
+    if (bodyChanged) {
+      tx.insert(worldVersions).values({
+        world_id: id,
+        body: nextBody,
+        created_at: now,
+      }).run()
+    }
   })
 
   return c.json({ ok: true, changed: true })

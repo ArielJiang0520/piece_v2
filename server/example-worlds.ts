@@ -41,12 +41,11 @@ export function createExampleWorldsForUser(tx: any, userId: number, now = Date.n
       updated_at: timestamp,
     }).returning({ id: worlds.id }).get()
 
-    tx.insert(worldVersions).values({
+    const worldVersion = tx.insert(worldVersions).values({
       world_id: world.id,
-      name: example.name.trim(),
       body: worldBody,
       created_at: timestamp,
-    }).run()
+    }).returning({ id: worldVersions.id }).get()
 
     for (const examplePrompt of example.prompts ?? []) {
       const text = normalizePromptInput(examplePrompt.text)
@@ -57,6 +56,7 @@ export function createExampleWorldsForUser(tx: any, userId: number, now = Date.n
       const prompt = tx.insert(prompts).values({
         user_id: userId,
         world_id: world.id,
+        world_version_id: worldVersion.id,
         text,
         piece_count: promptPieces.length,
         created_at: timestamp,
@@ -68,6 +68,7 @@ export function createExampleWorldsForUser(tx: any, userId: number, now = Date.n
         tx.insert(pieces).values({
           user_id: userId,
           world_id: world.id,
+          world_version_id: worldVersion.id,
           prompt_id: prompt.id,
           body,
           model: null,

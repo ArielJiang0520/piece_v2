@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { db, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { findUserWorldId, getUserId, isValidModelId, paramInt } from '../../route-helpers'
+import { findCurrentWorldVersionId, findUserWorldId, getUserId, isValidModelId, paramInt } from '../../route-helpers'
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 
@@ -54,12 +54,14 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   }
 
   const now = Date.now()
+  const worldVersionId = findCurrentWorldVersionId(worldId)
   const isNewPrompt = existingPromptId === undefined
 
   const promptRow = isNewPrompt
     ? db.insert(prompts).values({
       user_id: userId,
       world_id: worldId,
+      world_version_id: worldVersionId,
       text: promptText,
       piece_count: 1,
       created_at: now,
@@ -70,6 +72,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   const piece = db.insert(pieces).values({
     user_id: userId,
     world_id: worldId,
+    world_version_id: worldVersionId,
     prompt_id: promptRow.id,
     body: pieceBody,
     model,

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Lightbulb } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
@@ -6,6 +7,7 @@ import { entityLabel } from '../../config'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import Skeleton from '../../components/Skeleton'
 import { useTopNavConfig } from '../../components/topNavConfig'
+import CreateWorldTipsDialog from './CreateWorldTipsDialog'
 
 interface World {
   id: number
@@ -13,6 +15,10 @@ interface World {
   body: string
   is_example: boolean
   updated_at: number
+}
+
+interface WorldListItem {
+  is_example: boolean
 }
 
 export default function WorldEditor() {
@@ -30,10 +36,37 @@ export default function WorldEditor() {
   const [initialBody, setInitialBody] = useState('')
   const [initialized, setInitialized] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [tipsOpen, setTipsOpen] = useState(false)
+  const worldsQuery = useQuery({
+    queryKey: ['worlds'],
+    queryFn: () => apiFetch('/api/worlds') as Promise<WorldListItem[]>,
+    enabled: isNewWorld,
+  })
+  const isFirstUserWorld = isNewWorld && worldsQuery.data?.every(world => world.is_example) === true
+  const tipsAction = useMemo(() => {
+    if (!isNewWorld) return undefined
+
+    return (
+      <button
+        type="button"
+        className="relative grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+        aria-label={`Show ${entityLabel('world')} tips`}
+        title={`${entityLabel('world', { capitalize: true })} tips`}
+        onClick={() => setTipsOpen(true)}
+      >
+        <Lightbulb aria-hidden="true" className="h-5 w-5" />
+        {isFirstUserWorld && (
+          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose ring-2 ring-paper" aria-hidden="true" />
+        )}
+      </button>
+    )
+  }, [isFirstUserWorld, isNewWorld])
 
   useTopNavConfig({
-    secondaryTitle: `${isNewWorld ? 'Create' : 'Edit'} ${entityLabel('world', { capitalize: true })}`,
+    mainTitle: isNewWorld ? `Create ${entityLabel('world', { capitalize: true })}` : undefined,
+    secondaryTitle: isNewWorld ? undefined : `Edit ${entityLabel('world', { capitalize: true })}`,
     backHref: id ? `/worlds/${id}/about` : '/worlds',
+    rightAction: tipsAction,
   })
 
   const worldQuery = useQuery({
@@ -122,7 +155,7 @@ export default function WorldEditor() {
     return (
       <div className="page-fade-in min-h-svh bg-paper">
         <div className="page-width min-h-svh px-6 pb-10 pt-4">
-          <div className="sticky top-12 z-10 -mx-6 flex h-14 items-center justify-between border-b border-rose-line bg-paper/95 px-6 backdrop-blur">
+          <div className="sticky top-12 z-10 -mx-6 flex h-14 items-center justify-between bg-paper/95 px-6 backdrop-blur">
             <Skeleton className="h-8 w-16 rounded-full" />
             <Skeleton className="h-8 w-16 rounded-full" />
           </div>
@@ -136,10 +169,10 @@ export default function WorldEditor() {
   return (
     <div className="page-fade-in min-h-svh bg-paper">
       <div className="page-width flex min-h-svh flex-col px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4">
-        <header className="sticky top-12 z-10 -mx-6 flex h-14 items-center justify-between border-b border-rose-line bg-paper/95 px-6 backdrop-blur">
+        <header className="sticky top-12 z-10 -mx-6 flex h-14 items-center justify-between bg-paper/95 px-6 backdrop-blur">
           <button
             type="button"
-            className="rounded-full px-3 py-2 font-serif-zh text-[15px] italic text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+            className="rounded-full px-3 py-2 font-serif-zh text-[15px] italic text-ink-3 transition-[color,transform] hover:-translate-y-px hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-4/50"
             onClick={cancel}
           >
             Cancel
@@ -154,24 +187,39 @@ export default function WorldEditor() {
           </button>
         </header>
 
-        <label className="mt-8">
+        {isFirstUserWorld && (
+          <div className="mt-6 rounded-md border border-rose-line bg-rose-pale/45 px-4 py-3">
+            <p className="font-serif-zh text-[16px] leading-7 text-ink">
+              First time creating a {entityLabel('world')}?{' '}
+              <button
+                type="button"
+                className="italic text-rose underline decoration-rose/35 underline-offset-4 transition-colors hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                onClick={() => setTipsOpen(true)}
+              >
+                Read our tips.
+              </button>
+            </p>
+          </div>
+        )}
+
+        <label className="mt-8 block">
           <span className="t-eyebrow eyebrow-rule">Name</span>
           <input
             value={name}
             onChange={event => setName(event.target.value)}
-            className="mt-3 w-full border-b border-rose-line bg-transparent px-0 py-2.5 font-serif-zh text-3xl leading-tight text-ink placeholder:text-ink-4 focus:border-rose focus:outline-none"
+            className="mt-4 block w-full bg-transparent px-0 py-1 font-serif-zh text-[2.625rem] leading-[1.08] text-ink placeholder:text-ink-4 focus:outline-none focus-visible:outline focus-visible:outline-offset-4 focus-visible:outline-ink-4/70"
             placeholder={`${entityLabel('world', { capitalize: true })} name`}
             autoFocus
           />
         </label>
 
-        <label className="mt-8 flex min-h-0 flex-1 flex-col">
-          <span className="t-eyebrow eyebrow-rule">Body</span>
+        <label className="mt-10 flex min-h-0 flex-1 flex-col">
+          <span className="t-eyebrow eyebrow-rule">Details</span>
           <textarea
             value={body}
             onChange={event => setBody(event.target.value)}
-            className="mt-3 min-h-[55svh] flex-1 resize-none border-y border-rose-line bg-transparent px-0 py-4 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:border-rose focus:outline-none"
-            placeholder={`Write the ${entityLabel('world')}'s details here...`}
+            className="mt-4 min-h-[55svh] flex-1 resize-none border-l border-rose-line bg-transparent py-1 pl-5 pr-0 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:outline-none focus-visible:border-ink-4"
+            placeholder={`Write the ${entityLabel('world')}'s setting, tone, and important details here...`}
           />
         </label>
 
@@ -190,6 +238,7 @@ export default function WorldEditor() {
         onConfirm={() => navigate(isNewWorld ? '/worlds' : `/worlds/${id}/about`)}
         onClose={() => setConfirmCancel(false)}
       />
+      <CreateWorldTipsDialog open={tipsOpen} onClose={() => setTipsOpen(false)} />
     </div>
   )
 }

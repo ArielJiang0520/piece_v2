@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { db, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
+import { findCurrentWorldVersionId, findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 
@@ -20,6 +20,7 @@ promptRoutes.post('/', authMiddleware, async (c: any) => {
   const existingPrompt = db
     .select({
       id: prompts.id,
+      world_version_id: prompts.world_version_id,
       cluster_id: prompts.cluster_id,
       text: prompts.text,
       piece_count: prompts.piece_count,
@@ -36,6 +37,7 @@ promptRoutes.post('/', authMiddleware, async (c: any) => {
 
     return c.json({
       id: existingPrompt.id,
+      world_version_id: existingPrompt.world_version_id,
       cluster_id: clusterId,
       text: existingPrompt.text,
       piece_count: existingPrompt.piece_count,
@@ -45,9 +47,11 @@ promptRoutes.post('/', authMiddleware, async (c: any) => {
   }
 
   const now = Date.now()
+  const worldVersionId = findCurrentWorldVersionId(worldId)
   const prompt = db.insert(prompts).values({
     user_id: userId,
     world_id: worldId,
+    world_version_id: worldVersionId,
     text,
     piece_count: 0,
     created_at: now,
@@ -57,6 +61,7 @@ promptRoutes.post('/', authMiddleware, async (c: any) => {
 
   return c.json({
     id: prompt.id,
+    world_version_id: prompt.world_version_id,
     cluster_id: clusterId,
     text: prompt.text,
     piece_count: prompt.piece_count,
@@ -96,6 +101,7 @@ promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
   const prompt = db
     .select({
       id: prompts.id,
+      world_version_id: prompts.world_version_id,
       cluster_id: prompts.cluster_id,
       text: prompts.text,
       piece_count: prompts.piece_count,
@@ -111,6 +117,7 @@ promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
   const rows = db
     .select({
       id: pieces.id,
+      world_version_id: pieces.world_version_id,
       preview: sql<string>`substr(${pieces.body}, 1, 200)`,
       created_at: pieces.created_at,
     })

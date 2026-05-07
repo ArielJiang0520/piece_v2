@@ -164,7 +164,7 @@ export default function OutputPanel({
                 <div className="space-y-3">
                   <div>
                     {recordedTextCountDisplay}
-                    {` ${recordedTextCount.label} recorded in `}
+                    {` ${recordedTextCount.label} written in `}
                     {recordedElapsed}
                     .
                   </div>
