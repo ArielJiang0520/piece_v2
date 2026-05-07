@@ -10,7 +10,7 @@ import RelativeTimeStatus from '../../components/RelativeTimeStatus'
 import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import TextField from '../../components/TextField'
 import { useTopNavConfig } from '../../components/topNavConfig'
-import WorldTabs from './WorldTabs'
+import WorldHeader from './WorldHeader'
 
 interface ClusterGroup {
   id: number
@@ -123,7 +123,7 @@ export default function World() {
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
-    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string }>,
+    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string; is_example: boolean }>,
     enabled: !!id,
   })
 
@@ -287,12 +287,12 @@ export default function World() {
   return (
     <div className="page-fade-in min-h-screen bg-paper">
       <div className="page-width min-h-screen px-6 pb-32 pt-12">
-        <header>
-          <h1 className="t-display min-w-0">
-            {worldName}
-          </h1>
-          <WorldTabs active="scenes" worldId={id} />
-        </header>
+        <WorldHeader
+          active="scenes"
+          isExample={worldQuery.data.is_example}
+          name={worldName}
+          worldId={id}
+        />
 
         <div className="mt-6">
           <TextField

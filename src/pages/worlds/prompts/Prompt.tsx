@@ -167,7 +167,7 @@ export default function Prompt() {
           to={`/worlds/${id}/generate?promptId=${prompt.id}`}
           className="mt-12 inline-flex items-center gap-3 rounded-full bg-rose px-6 py-3.5 font-serif-zh text-[15px] italic text-white shadow-(--shadow-cta) transition-all hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus:ring-4 focus:ring-rose/25"
         >
-          <span>Another take</span>
+          <span>{pieces.length > 0 ? 'Another take' : 'Take it'}</span>
         </Link>
       </header>
 

@@ -70,7 +70,14 @@ export default function WorldList() {
                     className="group block w-full py-7 text-left transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
                     onClick={() => navigate(`/worlds/${w.id}`)}
                   >
-                    <RelativeTimeStatus className="mb-4" timestamp={timestamp} prefix="Updated " />
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <RelativeTimeStatus className="min-w-0" timestamp={timestamp} prefix="Updated " />
+                      {w.is_example && (
+                        <span className="shrink-0 rounded-full bg-rose-pale px-2.5 py-1 font-serif-zh text-xs italic leading-none text-rose-deep">
+                          sample {entityLabel('world')}
+                        </span>
+                      )}
+                    </div>
 
                     <div className="t-headline">
                       {w.name}
@@ -81,17 +88,6 @@ export default function WorldList() {
                         {bodySummary}
                       </p>
                     )}
-
-                    {/* {tags.length > 0 && (
-                      <div className="t-meta mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                        {tags.map((tag, i) => (
-                          <span key={tag} className="flex items-center gap-2 capitalize">
-                            {i > 0 && <span aria-hidden="true" className="text-ink-4">—</span>}
-                            <span>{tag}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )} */}
 
                     <div className="mt-5 transition-opacity duration-200 group-hover:opacity-90">
                       <CountIndicator

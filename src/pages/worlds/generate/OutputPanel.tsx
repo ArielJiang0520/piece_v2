@@ -93,7 +93,7 @@ export default function OutputPanel({
   }, [displayElapsedMs, restoredSavedDisplay, saveResult, saveState])
 
   const wrapperClass = [
-    'min-h-[55vh] rounded-md px-1 pt-2 text-sm transition-[padding-bottom] duration-200 ease-out',
+    'min-h-[55vh] px-2 pt-4 text-sm transition-[padding-bottom] duration-200 ease-out',
     streaming ? 'pb-[45vh]' : 'pb-2',
   ].join(' ')
   const previousTokenCount = previousTokenCountRef.current
@@ -127,10 +127,13 @@ export default function OutputPanel({
     <div className={wrapperClass}>
       <div>
         {displayComplete && (
-          <div className="fade-in-up mb-6 flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.22em] text-ink-4">
-            <span className="h-px flex-1 bg-paper-3" />
-            <span>{`${entityLabel('piece', { capitalize: true })} #${pieceNumber}`}</span>
-            <span className="h-px flex-1 bg-paper-3" />
+          <div className="fade-in-up t-meta mb-8 flex items-center gap-3">
+            <span className="h-px flex-1 bg-rose-line" />
+            <span>
+              {entityLabel('piece', { capitalize: true })}{' '}
+              <span className="text-rose">#{pieceNumber}</span>
+            </span>
+            <span className="h-px flex-1 bg-rose-line" />
           </div>
         )}
         <p className={outputTextClass} style={outputTextStyle}>
@@ -152,12 +155,15 @@ export default function OutputPanel({
         </p>
         {endRevealed && (
           <div className="fade-in-up mt-10">
-            <div className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.22em] text-ink-4">
-              <span className="h-px flex-1 bg-paper-3" />
-              <span>{`End of ${entityLabel('piece', { capitalize: true })} #${pieceNumber}`}</span>
-              <span className="h-px flex-1 bg-paper-3" />
+            <div className="t-meta flex items-center gap-3">
+              <span className="h-px flex-1 bg-rose-line" />
+              <span>
+                End of {entityLabel('piece', { capitalize: true })}{' '}
+                <span className="text-rose">#{pieceNumber}</span>
+              </span>
+              <span className="h-px flex-1 bg-rose-line" />
             </div>
-            <div className="mt-4 text-center text-xs text-ink-4">
+            <div className="t-meta mt-4 text-center">
               {saveState === 'saving' && <span className="italic">Recording...</span>}
               {saveState === 'error' && <span className="text-rose-deep">Could not record this {entityLabel('piece')}</span>}
               {saveState === 'saved' && saveResult && recordedElapsed && (
@@ -170,7 +176,7 @@ export default function OutputPanel({
                   </div>
                   <Link
                     to={`/pieces/${saveResult.pieceId}`}
-                    className="inline-block font-medium text-ink-3 underline decoration-paper-3 underline-offset-4 transition-colors hover:text-rose-deep hover:decoration-rose"
+                    className="inline-block text-ink-3 underline decoration-rose-line underline-offset-4 transition-colors hover:text-ink"
                   >
                     {`View ${entityLabel('piece')}`}
                   </Link>

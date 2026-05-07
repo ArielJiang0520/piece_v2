@@ -8,7 +8,7 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import Skeleton, { SkeletonText } from '../../components/Skeleton'
 import { useTopNavConfig } from '../../components/topNavConfig'
 import { relativeTime } from '../../utils/time'
-import WorldTabs from './WorldTabs'
+import WorldHeader from './WorldHeader'
 
 const ONE_HOUR_MS = 60 * 60 * 1e3
 
@@ -192,10 +192,12 @@ export default function WorldAbout() {
   return (
     <div className="page-fade-in min-h-screen bg-paper">
       <div className="page-width min-h-screen px-6 pb-32 pt-12">
-        <header>
-          <h1 className="t-display min-w-0">{world.name}</h1>
-          <WorldTabs active="about" worldId={id} />
-        </header>
+        <WorldHeader
+          active="about"
+          isExample={world.is_example}
+          name={world.name}
+          worldId={id}
+        />
 
         <div className="mt-8 flex items-center justify-between gap-3">
           <div ref={versionMenuRef} className="relative min-w-0">

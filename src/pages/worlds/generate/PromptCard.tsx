@@ -1,8 +1,6 @@
 import Skeleton from '../../../components/Skeleton'
 import { entityLabel } from '../../../config'
 
-const pillClass = 'rounded-full bg-paper-2 px-2 py-0.5 text-[10px] font-medium uppercase leading-none text-ink-4'
-
 interface PromptCardProps {
   prompt: string
   onPromptChange: (value: string) => void
@@ -23,18 +21,18 @@ export default function PromptCard({
   error,
 }: PromptCardProps) {
   const cardClass = [
-    'rounded-md border border-paper-3 bg-paper shadow-[0_10px_24px_rgba(26,18,16,0.10)] transition-[padding,box-shadow] duration-200 ease-out',
-    compact ? 'px-3 py-2' : 'px-4 py-4',
+    'border-y border-rose-line bg-paper/95 backdrop-blur transition-[padding] duration-200 ease-out',
+    compact ? 'px-2 py-2' : 'px-2 py-4',
   ].join(' ')
 
   const fieldClass = [
-    'w-full rounded-sm px-3 text-base text-ink placeholder-ink-4 transition-[height,padding] duration-200 ease-out focus:outline-none focus:ring-0 disabled:opacity-50 sm:text-sm',
-    compact ? 'h-9 resize-none overflow-hidden py-1.5 leading-5' : 'h-32 resize-y py-2',
+    'w-full bg-transparent px-0 font-serif-zh text-ink placeholder-ink-4 transition-[height,padding,font-size,line-height] duration-200 ease-out focus:outline-none focus:ring-0 disabled:opacity-50',
+    compact ? 'h-10 resize-none overflow-hidden py-2 text-[16px] leading-6' : 'h-32 resize-y py-3 text-[18px] leading-8',
   ].join(' ')
 
   const headerClass = [
-    'flex items-center justify-between gap-3 overflow-hidden transition-[margin,max-height,opacity] duration-200 ease-out',
-    compact ? 'pointer-events-none mb-0 max-h-0 opacity-0' : 'mb-1 max-h-10 opacity-100',
+    'flex items-start justify-between gap-4 overflow-hidden transition-[margin,max-height,opacity] duration-200 ease-out',
+    compact ? 'pointer-events-none mb-0 max-h-0 opacity-0' : 'mb-2 max-h-14 opacity-100',
   ].join(' ')
 
   const errorClass = [
@@ -44,6 +42,7 @@ export default function PromptCard({
 
   const pieceCountLabel = `${promptPieceCount} ${entityLabel('piece', { plural: promptPieceCount !== 1 })}`
   const showNewPromptPill = !!prompt.trim() && promptPieceCount === 0
+  const promptLabel = `Current ${entityLabel('prompt', { capitalize: true })}`
 
   return (
     <div className={cardClass}>
@@ -57,20 +56,23 @@ export default function PromptCard({
       ) : (
         <div>
           <div className={headerClass} aria-hidden={compact}>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <label htmlFor="prompt-input" className="block text-sm uppercase tracking-wide text-ink-3">
-                {`Current ${entityLabel('prompt', { capitalize: true })}`}
+            <div className="min-w-0">
+              <label htmlFor="prompt-input" className="t-eyebrow eyebrow-rule">
+                {promptLabel}
               </label>
-              <span className={pillClass}>{pieceCountLabel}</span>
-              {showNewPromptPill && <span className={pillClass}>new {entityLabel('prompt')}</span>}
+            </div>
+            <div className="t-meta flex shrink-0 items-center gap-2 pt-0.5">
+              <span>{pieceCountLabel}</span>
+              {showNewPromptPill && <span aria-hidden="true" className="text-ink-4">{'\u2014'}</span>}
+              {showNewPromptPill && <span>new {entityLabel('prompt')}</span>}
             </div>
           </div>
           <textarea
             id="prompt-input"
-            aria-label={`Current ${entityLabel('prompt', { capitalize: true })}`}
+            aria-label={promptLabel}
             className={fieldClass}
             rows={compact ? 1 : 4}
-            placeholder={`Enter your ${entityLabel('prompt')}...`}
+            placeholder={`What do you want to see happen?`}
             value={prompt}
             onChange={e => onPromptChange(e.target.value)}
             disabled={streaming}

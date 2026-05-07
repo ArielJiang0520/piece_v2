@@ -30,22 +30,22 @@ export default function ReadingSettingsPanel({
   onReadingFontSizeChange,
 }: ReadingSettingsPanelProps) {
   const wrapperClass = [
-    'overflow-hidden rounded-md border bg-paper transition-[margin,max-height,opacity,padding] duration-200 ease-out',
+    'overflow-hidden border-t bg-paper/95 transition-[margin,max-height,opacity,padding] duration-200 ease-out',
     open
-      ? 'mt-3 max-h-80 border-paper-3 p-3 opacity-100 shadow-[0_12px_28px_rgba(26,18,16,0.12)]'
-      : 'mt-0 max-h-0 border-transparent p-0 opacity-0 shadow-none',
+      ? 'mt-4 max-h-80 border-rose-line pt-4 opacity-100'
+      : 'mt-0 max-h-0 border-transparent pt-0 opacity-0',
   ].join(' ')
   const inputDisabled = disabled || !open
 
   return (
     <div className={wrapperClass} aria-hidden={!open}>
       <div className="flex flex-col gap-4">
-        <div className="rounded-sm border border-paper-3 bg-paper-2 px-3 py-2">
+        <div className="rounded-sm border border-rose-line px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
-            <label htmlFor="reading-speed" className="text-xs font-medium text-ink-3">
+            <label htmlFor="reading-speed" className="t-eyebrow">
               Reading Speed
             </label>
-            <span className="min-w-8 text-right text-sm tabular-nums text-ink">
+            <span className="min-w-8 text-right font-serif-zh text-sm italic tabular-nums text-ink">
               {readingSpeed}
             </span>
           </div>
@@ -63,14 +63,14 @@ export default function ReadingSettingsPanel({
           />
         </div>
 
-        <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5">
+        <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-rose-line p-0.5">
           {READING_FONT_OPTIONS.map(option => {
             const selected = option.id === readingFont
             return (
               <button
                 key={option.id}
                 type="button"
-                className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center text-xs font-medium transition-colors disabled:opacity-50 ${selected ? 'bg-paper text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
+                className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center font-serif-zh text-xs italic transition-colors disabled:opacity-50 ${selected ? 'bg-ink text-paper' : 'text-ink-3 hover:text-ink'
                   }`}
                 aria-pressed={selected}
                 onClick={() => onReadingFontChange(option.id)}
@@ -82,14 +82,14 @@ export default function ReadingSettingsPanel({
           })}
         </div>
 
-        <div className="grid grid-cols-5 overflow-hidden rounded-sm border border-paper-3 bg-paper-2 p-0.5">
+        <div className="grid grid-cols-5 overflow-hidden rounded-sm border border-rose-line p-0.5">
           {READING_FONT_SIZE_OPTIONS.map(option => {
             const selected = option.id === readingFontSize
             return (
               <button
                 key={option.id}
                 type="button"
-                className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center text-xs font-medium transition-colors disabled:opacity-50 ${selected ? 'bg-paper text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
+                className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center text-xs transition-colors disabled:opacity-50 ${selected ? 'bg-ink text-paper' : 'text-ink-3 hover:text-ink'
                 }`}
                 aria-pressed={selected}
                 aria-label={`${option.label} font size`}
@@ -98,7 +98,7 @@ export default function ReadingSettingsPanel({
               >
                 <span
                   aria-hidden="true"
-                  className={`inline-flex h-7 items-center justify-center font-serif font-semibold leading-none ${option.iconClass}`}
+                  className={`inline-flex h-7 items-center justify-center font-serif-zh italic leading-none ${option.iconClass}`}
                 >
                   A
                 </span>

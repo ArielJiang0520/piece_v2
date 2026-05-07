@@ -103,6 +103,9 @@ export default function Generate() {
         : phase === 'writing' ? 'Writing...'
           : hasGeneratedOnScreen ? 'Another take' : 'Take it'
   const panelOpen = settingsOpen || readingSettingsOpen
+  const iconButtonClass =
+    'flex size-11 shrink-0 items-center justify-center rounded-full bg-paper/85 text-ink-3 shadow-(--shadow-feather) transition-all duration-200 hover:-translate-y-px hover:text-ink focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-50'
+  const activeIconButtonClass = 'text-ink ring-1 ring-ink-4/30'
 
   useEffect(() => {
     let ticking = false
@@ -178,8 +181,8 @@ export default function Generate() {
 
   return (
     <>
-      <div className="min-h-screen page-width px-4 pb-32 pt-6">
-        <div className="sticky top-14 z-10 mb-5">
+      <div className="page-fade-in min-h-screen page-width px-4 pb-32 pt-6">
+        <div className="sticky top-14 z-10 mb-8 bg-paper/95 pt-1 backdrop-blur">
           <PromptCard
             prompt={prompt}
             onPromptChange={setPrompt}
@@ -194,7 +197,7 @@ export default function Generate() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                className="min-h-11 min-w-0 flex-1 rounded-full border border-rose bg-rose px-5 py-2 text-sm font-medium text-white shadow-[0_14px_28px_rgba(205,83,106,0.30)] transition-all hover:-translate-y-0.5 hover:border-rose-deep hover:bg-rose-deep hover:shadow-[0_16px_32px_rgba(205,83,106,0.38)] focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
+                className="min-h-11 min-w-0 flex-1 rounded-full bg-rose px-5 py-2.5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
                 onClick={handleGenerate}
                 disabled={streaming || loadingPrompt || !prompt.trim() || panelOpen}
               >
@@ -202,7 +205,7 @@ export default function Generate() {
               </button>
               <button
                 type="button"
-                className={`flex size-11 shrink-0 items-center justify-center rounded-full border border-paper-3 bg-paper-2 text-ink shadow-[0_12px_24px_rgba(54,44,38,0.14)] transition-all hover:-translate-y-0.5 hover:border-rose hover:text-rose-deep focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-50 ${readingSettingsOpen ? 'border-rose text-rose-deep ring-4 ring-rose/15' : ''}`}
+                className={`${iconButtonClass} ${readingSettingsOpen ? activeIconButtonClass : ''}`}
                 onClick={() => {
                   setSettingsOpen(false)
                   setReadingSettingsOpen(open => !open)
@@ -215,7 +218,7 @@ export default function Generate() {
               </button>
               <button
                 type="button"
-                className={`flex size-11 shrink-0 items-center justify-center rounded-full border border-paper-3 bg-paper-2 text-ink shadow-[0_12px_24px_rgba(54,44,38,0.14)] transition-all hover:-translate-y-0.5 hover:border-rose hover:text-rose-deep focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-50 ${settingsOpen ? 'border-rose text-rose-deep ring-4 ring-rose/15' : ''}`}
+                className={`${iconButtonClass} ${settingsOpen ? activeIconButtonClass : ''}`}
                 onClick={() => {
                   setReadingSettingsOpen(false)
                   setSettingsOpen(open => !open)
@@ -230,7 +233,7 @@ export default function Generate() {
               {streaming && (
                 <button
                   type="button"
-                  className="flex size-11 shrink-0 items-center justify-center rounded-full border border-paper-3 bg-paper-2 text-ink shadow-[0_12px_24px_rgba(54,44,38,0.14)] transition-all hover:-translate-y-0.5 hover:border-rose hover:text-rose-deep focus:outline-none focus:ring-4 focus:ring-rose/20"
+                  className={iconButtonClass}
                   onClick={stop}
                   aria-label="Stop generation"
                   title="Stop generation"

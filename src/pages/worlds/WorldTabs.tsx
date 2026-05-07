@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-type WorldTab = 'scenes' | 'about'
+export type WorldTab = 'scenes' | 'about'
 
 interface Props {
   active: WorldTab
