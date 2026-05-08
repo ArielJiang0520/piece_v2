@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowUp } from 'lucide-react'
+import { entityLabel } from '@/config'
 import type { ReadingFont } from '@/preferences/readingFont'
 import { READING_FONT_BY_ID } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
@@ -57,9 +59,22 @@ export default function OutputPanel({
     READING_FONT_BY_ID[readingFont].outputClass,
   ].join(' ')
   const outputTextStyle = READING_FONT_SIZE_BY_ID[readingFontSize].outputStyle
+  const outputLabel = `Generated ${entityLabel('piece', { capitalize: true })}`
+
+  function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   if (!output) {
-    return <div className={wrapperClass} />
+    return (
+      <div className={wrapperClass}>
+        <div className="flex items-center gap-3 pb-5 text-ink-3">
+          <span className="t-eyebrow shrink-0">{outputLabel}</span>
+          <span aria-hidden="true" className="h-px flex-1 bg-rose-line/70" />
+        </div>
+        <div className="min-h-72 border-l border-rose-line/70 pl-5" />
+      </div>
+    )
   }
 
   return (
@@ -95,6 +110,16 @@ export default function OutputPanel({
               <span className="h-px flex-1 bg-rose-line" />
               <span>End</span>
               <span className="h-px flex-1 bg-rose-line" />
+            </div>
+            <div className="mt-8 flex justify-center">
+              <button
+                type="button"
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-rose-line bg-paper px-4 font-serif-zh text-[15px] italic text-rose-deep transition-colors hover:border-rose/40 hover:bg-rose-pale focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                onClick={scrollToTop}
+              >
+                <ArrowUp aria-hidden="true" className="h-4 w-4" />
+                <span>Back to top</span>
+              </button>
             </div>
           </div>
         )}

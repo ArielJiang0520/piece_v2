@@ -55,9 +55,9 @@ export default function SettingsPanel({
   if (!open) return null
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <div className="relative">
-        <span className="t-eyebrow  mb-2 inline-flex">AI Engine</span>
+        <span className="t-eyebrow mb-2 inline-flex">AI Engine</span>
         <button
           id={modelButtonId}
           type="button"
@@ -83,7 +83,7 @@ export default function SettingsPanel({
         {modelMenuOpen && (
           <div
             id={modelListboxId}
-            className="absolute left-0 right-0 top-full z-20 mt-2 max-h-72 overflow-y-auto rounded-sm border border-rose-line bg-paper p-1 shadow-[0_14px_38px_rgba(26,18,16,0.18)]"
+            className="absolute left-0 right-0 top-full z-20 mt-2 max-h-72 overflow-y-auto rounded-sm border border-rose-line bg-paper p-1 shadow-(--shadow-menu)"
             role="listbox"
             aria-labelledby={modelButtonId}
           >
@@ -119,18 +119,13 @@ export default function SettingsPanel({
       </div>
 
       <div>
-        <label htmlFor="reading-speed" className="t-eyebrow  mb-2 inline-flex">
+        <label htmlFor="reading-speed" className="t-eyebrow mb-2 inline-flex">
           Reading Speed
         </label>
-        <div className="rounded-sm border border-rose-line px-3 py-2.5">
-          <div className="flex justify-end">
-            <span className="min-w-8 text-right font-serif-zh text-sm italic tabular-nums text-ink">
-              {readingSpeed}
-            </span>
-          </div>
+        <div className="rounded-sm border border-rose-line px-3 py-4">
           <input
             id="reading-speed"
-            className="mt-2 w-full accent-rose disabled:opacity-50"
+            className="w-full accent-rose disabled:opacity-50"
             type="range"
             min={MIN_READING_SPEED_UNITS_PER_SECOND}
             max={MAX_READING_SPEED_UNITS_PER_SECOND}
@@ -144,16 +139,19 @@ export default function SettingsPanel({
       </div>
 
       <div>
-        <span className="t-eyebrow  mb-2 inline-flex">Reading Font</span>
+        <span className="t-eyebrow mb-2 inline-flex">Reading Font</span>
         <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-rose-line p-0.5">
           {READING_FONT_OPTIONS.map(option => {
             const selected = option.id === readingFont
+            const fontPreviewClass = option.id === 'mono'
+              ? 'font-mono not-italic'
+              : 'font-serif-zh italic'
 
             return (
               <button
                 key={option.id}
                 type="button"
-                className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center font-serif-zh text-xs italic transition-colors disabled:opacity-50 ${selected ? 'bg-ink text-paper' : 'text-ink-3 hover:text-ink'
+                className={`min-w-0 rounded-xs px-1.5 py-1.5 text-center text-xs transition-colors disabled:opacity-50 ${fontPreviewClass} ${selected ? 'bg-ink text-paper' : 'text-ink-3 hover:text-ink'
                   }`}
                 aria-pressed={selected}
                 onClick={() => onReadingFontChange(option.id)}
@@ -167,7 +165,7 @@ export default function SettingsPanel({
       </div>
 
       <div>
-        <span className="t-eyebrow  mb-2 inline-flex">Text Size</span>
+        <span className="t-eyebrow mb-2 inline-flex">Text Size</span>
         <div className="grid grid-cols-5 overflow-hidden rounded-sm border border-rose-line p-0.5">
           {READING_FONT_SIZE_OPTIONS.map(option => {
             const selected = option.id === readingFontSize

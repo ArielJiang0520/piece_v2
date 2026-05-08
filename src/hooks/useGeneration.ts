@@ -8,7 +8,6 @@ export type GenerationCompletion = 'none' | 'completed' | 'cancelled' | 'error'
 
 export interface GenerateInput {
   prompt: string
-  promptId?: number
   model: string
   temperature: number
   useThinking: boolean

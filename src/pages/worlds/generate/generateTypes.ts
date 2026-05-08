@@ -12,8 +12,12 @@ export interface SaveResponse {
 }
 
 export interface PromptDetail {
+  id: number
+  text: string
   cluster_id: number | null
   piece_count: number
+  created_at: number
+  updated_at: number
 }
 
 export interface PromptPiecesResponse {
@@ -29,7 +33,22 @@ export interface PieceDetail {
 }
 
 export interface ClusterResponse {
-  prompts: Array<{
+  cluster: {
     id: number
-  }>
+    prompt_count: number
+    piece_count: number
+    latest_prompt_id: number | null
+    created_at: number
+    updated_at: number
+    title: string
+  }
+  prompts: ClusterPrompt[]
+}
+
+export interface ClusterPrompt {
+  id: number
+  text: string
+  piece_count: number
+  created_at: number
+  updated_at: number
 }

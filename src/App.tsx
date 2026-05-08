@@ -9,7 +9,6 @@ import WorldList from './pages/worlds/WorldList'
 import World from './pages/worlds/World'
 import WorldAbout from './pages/worlds/WorldAbout'
 import WorldEditor from './pages/worlds/WorldEditor'
-import Cluster from './pages/worlds/clusters/Cluster'
 import Generate from './pages/worlds/generate/Generate'
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -36,7 +35,6 @@ export default function App() {
           <Route path="/worlds/:id" element={<ProtectedLayout><World /></ProtectedLayout>} />
           <Route path="/worlds/:id/about" element={<ProtectedLayout><WorldAbout /></ProtectedLayout>} />
           <Route path="/worlds/:id/edit" element={<ProtectedLayout><WorldEditor /></ProtectedLayout>} />
-          <Route path="/worlds/:id/clusters/:clusterId" element={<ProtectedLayout><Cluster /></ProtectedLayout>} />
           <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />
         </Routes>
       </TopNavProvider>

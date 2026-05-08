@@ -395,7 +395,7 @@ export default function World() {
                     to={
                       group.latest_prompt_id
                         ? `/worlds/${id}/generate?promptId=${group.latest_prompt_id}`
-                        : `/worlds/${id}/clusters/${group.id}`
+                        : `/worlds/${id}/generate`
                     }
                     state={{ fromWorldList: true }}
                     onClick={event => saveClusterReturnState(group.id, event)}

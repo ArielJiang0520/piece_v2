@@ -25,8 +25,27 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
 
   let existingPromptId: number | undefined
   let existingPromptClusterId: number | null = null
+  let versionSourceClusterId: number | null = null
 
-  if (body.promptId !== undefined && body.promptId !== null) {
+  if (body.versionSourcePromptId !== undefined && body.versionSourcePromptId !== null) {
+    const sourcePromptId = Number(body.versionSourcePromptId)
+    if (!Number.isInteger(sourcePromptId) || sourcePromptId < 1) return c.json({ error: 'Invalid version source prompt id' }, 400)
+    const sourcePrompt = db
+      .select({ id: prompts.id, text: prompts.text, cluster_id: prompts.cluster_id })
+      .from(prompts)
+      .where(and(eq(prompts.id, sourcePromptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+      .get()
+    if (!sourcePrompt) return c.json({ error: 'Version source prompt not found' }, 404)
+    if (sourcePrompt.cluster_id === null) return c.json({ error: 'Version source prompt has no cluster' }, 400)
+
+    versionSourceClusterId = sourcePrompt.cluster_id
+    if (sourcePrompt.text.trim() === promptText) {
+      existingPromptId = sourcePrompt.id
+      existingPromptClusterId = sourcePrompt.cluster_id
+    }
+  }
+
+  if (existingPromptId === undefined && body.promptId !== undefined && body.promptId !== null) {
     const id = Number(body.promptId)
     if (!Number.isInteger(id) || id < 1) return c.json({ error: 'Invalid prompt id' }, 400)
     const existing = db
@@ -47,6 +66,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
       .where(and(promptTextMatchesNormalized(prompts.text, promptText), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
       .orderBy(desc(prompts.updated_at), desc(prompts.id))
       .get()
+
     if (matching) {
       existingPromptId = matching.id
       existingPromptClusterId = matching.cluster_id
@@ -58,15 +78,26 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   const isNewPrompt = existingPromptId === undefined
 
   const promptRow = isNewPrompt
-    ? db.insert(prompts).values({
-      user_id: userId,
-      world_id: worldId,
-      world_version_id: worldVersionId,
-      text: promptText,
-      piece_count: 1,
-      created_at: now,
-      updated_at: now,
-    }).returning({ id: prompts.id }).get()
+    ? versionSourceClusterId !== null
+      ? db.insert(prompts).values({
+        user_id: userId,
+        world_id: worldId,
+        world_version_id: worldVersionId,
+        cluster_id: versionSourceClusterId,
+        text: promptText,
+        piece_count: 1,
+        created_at: now,
+        updated_at: now,
+      }).returning({ id: prompts.id }).get()
+      : db.insert(prompts).values({
+        user_id: userId,
+        world_id: worldId,
+        world_version_id: worldVersionId,
+        text: promptText,
+        piece_count: 1,
+        created_at: now,
+        updated_at: now,
+      }).returning({ id: prompts.id }).get()
     : { id: existingPromptId! }
 
   const piece = db.insert(pieces).values({
@@ -82,7 +113,13 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   let clusterId = existingPromptClusterId
 
   if (isNewPrompt) {
-    clusterId = await clusterPromptById(promptRow.id)
+    if (versionSourceClusterId !== null) {
+      // Manual versions deliberately inherit the chosen source cluster instead of reclustering.
+      clusterId = versionSourceClusterId
+      recomputePromptCluster(clusterId)
+    } else {
+      clusterId = await clusterPromptById(promptRow.id)
+    }
   } else {
     db.update(prompts)
       .set({

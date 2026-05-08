@@ -1,8 +1,7 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
-import type { PromptSummary } from '@/hooks/usePromptMatch'
 import {
   PIECE_STRIP_LIMIT,
   type ClusterResponse,
@@ -13,16 +12,14 @@ interface UseGenerateDataOptions {
   worldId: string | undefined
   queryPromptId: string | null
   lockedMode: boolean
-  loadedPrompt: PromptSummary | null
-  promptPieceCount: number
+  versionSourceClusterId: number | null
 }
 
 export function useGenerateData({
   worldId,
   queryPromptId,
   lockedMode,
-  loadedPrompt,
-  promptPieceCount,
+  versionSourceClusterId,
 }: UseGenerateDataOptions) {
   const navigate = useNavigate()
 
@@ -41,25 +38,14 @@ export function useGenerateData({
 
   const activePrompt = promptDetailsQuery.data?.prompt ?? null
   const promptPieces = promptDetailsQuery.data?.pieces ?? []
-  const activeClusterId = activePrompt?.cluster_id ?? loadedPrompt?.cluster_id ?? null
+  const activeClusterId = activePrompt?.cluster_id ?? versionSourceClusterId ?? null
 
   const clusterQuery = useQuery({
     queryKey: ['cluster', worldId, String(activeClusterId)],
     queryFn: () =>
       apiFetch(`/api/worlds/${worldId}/clusters/${activeClusterId}`) as Promise<ClusterResponse>,
-    enabled: !!worldId && lockedMode && activeClusterId != null,
+    enabled: !!worldId && activeClusterId != null,
   })
-
-  const promptCardPieceCount = lockedMode
-    ? activePrompt?.piece_count ?? promptPieceCount
-    : promptPieceCount
-
-  const variationNumber = useMemo(() => {
-    if (!queryPromptId || !clusterQuery.data) return null
-    const index = clusterQuery.data.prompts.findIndex(prompt => String(prompt.id) === queryPromptId)
-    return index >= 0 ? index + 1 : null
-  }, [clusterQuery.data, queryPromptId])
-  const showHistoryLink = lockedMode && activeClusterId != null && (clusterQuery.data?.prompts.length ?? 0) > 1
 
   useEffect(() => {
     if (worldQuery.isError) navigate('/')
@@ -69,9 +55,9 @@ export function useGenerateData({
     activePrompt,
     promptPieces,
     activeClusterId,
-    promptCardPieceCount,
+    clusterPrompts: clusterQuery.data?.prompts ?? [],
+    clusterLoading: clusterQuery.isLoading,
     promptDetailsLoading: promptDetailsQuery.isLoading,
-    variationNumber,
-    showHistoryLink,
+    promptDetailsError: promptDetailsQuery.isError,
   }
 }

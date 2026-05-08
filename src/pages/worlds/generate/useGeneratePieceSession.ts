@@ -5,7 +5,6 @@ import { apiFetch } from '@/api'
 import { useToast } from '@/components/Toast'
 import { MODELS } from '@/preferences/generationModel'
 import type { GenerationCompletion } from '@/hooks/useGeneration'
-import type { PromptSummary } from '@/hooks/usePromptMatch'
 import { relativeTime } from '@/utils/time'
 import {
   PIECE_STRIP_LIMIT,
@@ -21,15 +20,14 @@ interface UseGeneratePieceSessionOptions {
   lockedMode: boolean
   prompt: string
   normalizedPrompt: string
-  matchedPrompt: PromptSummary | null
   output: string
   model: string
   streaming: boolean
   displayComplete: boolean
   completion: GenerationCompletion
   generationError: string
+  versionSourcePromptId: number | null
   resetGeneration: () => void
-  applyPromptSaved: (saved: PromptSummary) => void
 }
 
 export function useGeneratePieceSession({
@@ -38,15 +36,14 @@ export function useGeneratePieceSession({
   lockedMode,
   prompt,
   normalizedPrompt,
-  matchedPrompt,
   output,
   model,
   streaming,
   displayComplete,
   completion,
   generationError,
+  versionSourcePromptId,
   resetGeneration,
-  applyPromptSaved,
 }: UseGeneratePieceSessionOptions) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -87,7 +84,8 @@ export function useGeneratePieceSession({
         method: 'POST',
         body: JSON.stringify({
           prompt,
-          promptId: lockedMode && queryPromptId ? Number(queryPromptId) : matchedPrompt?.id,
+          promptId: lockedMode && queryPromptId ? Number(queryPromptId) : undefined,
+          versionSourcePromptId,
           body: output,
           model,
         }),
@@ -105,9 +103,12 @@ export function useGeneratePieceSession({
         ['prompt', worldId, String(result.promptId), 'generate', PIECE_STRIP_LIMIT],
         current => ({
           prompt: {
-            ...current?.prompt,
+            id: current?.prompt.id ?? result.promptId,
+            text: current?.prompt.text ?? normalizedPrompt,
             cluster_id: result.clusterId,
             piece_count: result.pieceCount,
+            created_at: current?.prompt.created_at ?? Date.now(),
+            updated_at: Date.now(),
           },
           pieces: [
             { id: result.pieceId },
@@ -116,15 +117,7 @@ export function useGeneratePieceSession({
         }),
       )
       setSelectedPieceId(result.pieceId)
-      applyPromptSaved({
-        id: result.promptId,
-        cluster_id: result.clusterId,
-        text: normalizedPrompt,
-        piece_count: result.pieceCount,
-      })
       queryClient.invalidateQueries({ queryKey: ['prompt', worldId, String(result.promptId)] })
-      queryClient.invalidateQueries({ queryKey: ['prompt-head', worldId, String(result.promptId)] })
-      queryClient.invalidateQueries({ queryKey: ['prompt-match', worldId] })
       queryClient.invalidateQueries({ queryKey: ['piece', result.pieceId] })
       queryClient.invalidateQueries({ queryKey: ['world', worldId] })
       queryClient.invalidateQueries({ queryKey: ['world-clusters', worldId] })
@@ -140,10 +133,8 @@ export function useGeneratePieceSession({
       })
     }
   }, [
-    applyPromptSaved,
     canSave,
     lockedMode,
-    matchedPrompt?.id,
     model,
     navigate,
     normalizedPrompt,
@@ -152,6 +143,7 @@ export function useGeneratePieceSession({
     queryClient,
     queryPromptId,
     toast,
+    versionSourcePromptId,
     worldId,
   ])
 
@@ -173,7 +165,7 @@ export function useGeneratePieceSession({
     }
   }, [completion, displayComplete, generatedAt, output])
 
-  const modeKey = `${worldId ?? ''}:${queryPromptId ? `prompt:${queryPromptId}` : 'blank'}`
+  const modeKey = `${worldId ?? ''}:${queryPromptId ? `prompt:${queryPromptId}` : versionSourcePromptId ? `version-draft:${versionSourcePromptId}` : 'blank'}`
   useEffect(() => {
     if (previousModeKeyRef.current === modeKey) return
     previousModeKeyRef.current = modeKey

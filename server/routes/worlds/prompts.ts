@@ -2,95 +2,9 @@ import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { db, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { findCurrentWorldVersionId, findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
-import { clusterPromptById } from '../../prompt-clustering'
-import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
+import { findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
 
 const promptRoutes = new Hono<{ Variables: Variables }>()
-
-promptRoutes.post('/', authMiddleware, async (c: any) => {
-  const userId = getUserId(c)
-  const worldId = paramInt(c, 'id')
-  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
-
-  const body = await c.req.json()
-  const text = normalizePromptInput(body.text)
-  if (!text) return c.json({ error: 'Prompt required' }, 400)
-
-  const existingPrompt = db
-    .select({
-      id: prompts.id,
-      world_version_id: prompts.world_version_id,
-      cluster_id: prompts.cluster_id,
-      text: prompts.text,
-      piece_count: prompts.piece_count,
-      created_at: prompts.created_at,
-      updated_at: prompts.updated_at,
-    })
-    .from(prompts)
-    .where(and(promptTextMatchesNormalized(prompts.text, text), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-    .orderBy(desc(prompts.updated_at), desc(prompts.id))
-    .get()
-
-  if (existingPrompt) {
-    const clusterId = existingPrompt.cluster_id ?? await clusterPromptById(existingPrompt.id)
-
-    return c.json({
-      id: existingPrompt.id,
-      world_version_id: existingPrompt.world_version_id,
-      cluster_id: clusterId,
-      text: existingPrompt.text,
-      piece_count: existingPrompt.piece_count,
-      created_at: existingPrompt.created_at,
-      updated_at: existingPrompt.updated_at,
-    })
-  }
-
-  const now = Date.now()
-  const worldVersionId = findCurrentWorldVersionId(worldId)
-  const prompt = db.insert(prompts).values({
-    user_id: userId,
-    world_id: worldId,
-    world_version_id: worldVersionId,
-    text,
-    piece_count: 0,
-    created_at: now,
-    updated_at: now,
-  }).returning().get()
-  const clusterId = await clusterPromptById(prompt.id)
-
-  return c.json({
-    id: prompt.id,
-    world_version_id: prompt.world_version_id,
-    cluster_id: clusterId,
-    text: prompt.text,
-    piece_count: prompt.piece_count,
-    created_at: prompt.created_at,
-    updated_at: prompt.updated_at,
-  })
-})
-
-promptRoutes.get('/match', authMiddleware, (c: any) => {
-  const userId = getUserId(c)
-  const worldId = paramInt(c, 'id')
-  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
-
-  const text = normalizePromptInput(c.req.query('text'))
-  if (!text) return c.json({ prompt: null })
-
-  const prompt = db
-    .select({
-      id: prompts.id,
-      text: prompts.text,
-      piece_count: prompts.piece_count,
-    })
-    .from(prompts)
-    .where(and(promptTextMatchesNormalized(prompts.text, text), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-    .orderBy(desc(prompts.updated_at), desc(prompts.id))
-    .get()
-
-  return c.json({ prompt: prompt ?? null })
-})
 
 promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
   const userId = getUserId(c)

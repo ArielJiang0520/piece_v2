@@ -6,7 +6,6 @@ interface PromptCardProps {
   onPromptChange: (value: string) => void
   loading: boolean
   streaming: boolean
-  promptPieceCount: number
   error: string
   locked?: boolean
 }
@@ -16,11 +15,9 @@ export default function PromptCard({
   onPromptChange,
   loading,
   streaming,
-  promptPieceCount,
   error,
   locked = false,
 }: PromptCardProps) {
-  const showNewPromptPill = !locked && !!prompt.trim() && promptPieceCount === 0
   const promptLabel = entityLabel('prompt', { capitalize: true })
 
   return (
@@ -31,21 +28,16 @@ export default function PromptCard({
         </div>
       ) : (
         <div>
-          {showNewPromptPill && (
-            <div className="t-meta mb-2 flex justify-end">
-              <span>new {entityLabel('prompt')}</span>
-            </div>
-          )}
           {locked ? (
-            <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-0 py-3 font-serif-zh text-[18px] leading-8 text-ink">
+            <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-0 pb-4 pt-3 font-serif-zh text-[22px]   leading-[1.55] text-ink tracking-normal">
               {prompt}
             </p>
           ) : (
             <textarea
               id="prompt-input"
               aria-label={promptLabel}
-              className="h-32 w-full resize-y bg-transparent px-0 py-3 font-serif-zh text-[18px] leading-8 text-ink placeholder-ink-4 focus:outline-none focus:ring-0 disabled:opacity-50"
-              rows={4}
+              className="h-44 w-full resize-y bg-transparent px-0 py-3 font-serif-zh text-[18px] leading-8 text-ink placeholder-ink-4 focus:outline-none focus:ring-0 disabled:opacity-50"
+              rows={6}
               placeholder={`What do you want to see happen?`}
               value={prompt}
               onChange={e => onPromptChange(e.target.value)}
