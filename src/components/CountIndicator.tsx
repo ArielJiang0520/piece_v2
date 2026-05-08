@@ -1,4 +1,4 @@
-import { entityLabel, type EntityKey } from '../config'
+import { entityLabel, type EntityKey } from '@/config'
 
 const DEFAULT_MAX_DOTS = 8
 const DEFAULT_UNITS_PER_DOT = 2

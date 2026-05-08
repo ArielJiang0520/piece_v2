@@ -1,10 +1,10 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { entityLabel } from '../../../config'
-import type { ReadingFont } from '../../../preferences/readingFont'
-import { READING_FONT_BY_ID } from '../../../preferences/readingFont'
-import type { ReadingFontSize } from '../../../preferences/readingFontSize'
-import { READING_FONT_SIZE_BY_ID } from '../../../preferences/readingFontSize'
+import { entityLabel } from '@/config'
+import type { ReadingFont } from '@/preferences/readingFont'
+import { READING_FONT_BY_ID } from '@/preferences/readingFont'
+import type { ReadingFontSize } from '@/preferences/readingFontSize'
+import { READING_FONT_SIZE_BY_ID } from '@/preferences/readingFontSize'
 
 const END_REVEAL_DELAY_MS = 900
 const OUTPUT_TOKEN_RE = /\s+|[^\s]+/g

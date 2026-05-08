@@ -1,5 +1,5 @@
-import Skeleton from '../../../components/Skeleton'
-import { entityLabel } from '../../../config'
+import Skeleton from '@/components/Skeleton'
+import { entityLabel } from '@/config'
 
 interface PromptCardProps {
   prompt: string

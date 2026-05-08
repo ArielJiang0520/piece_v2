@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth'
-import TextField from '../components/TextField'
+import { useAuth } from '@/auth'
+import TextField from '@/components/TextField'
 
 export default function Login() {
   const { login, signup } = useAuth()

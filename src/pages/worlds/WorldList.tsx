@@ -1,12 +1,12 @@
 import { Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../../api'
-import { entityLabel } from '../../config'
-import CountIndicator from '../../components/CountIndicator'
-import RelativeTimeStatus from '../../components/RelativeTimeStatus'
-import Skeleton, { SkeletonText } from '../../components/Skeleton'
-import { useTopNavConfig } from '../../components/topNavConfig'
+import { apiFetch } from '@/api'
+import { entityLabel } from '@/config'
+import CountIndicator from '@/components/CountIndicator'
+import RelativeTimeStatus from '@/components/RelativeTimeStatus'
+import Skeleton, { SkeletonText } from '@/components/Skeleton'
+import { useTopNavConfig } from '@/components/topNavConfig'
 
 interface World {
   id: number

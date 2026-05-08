@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../../../api'
-import { entityLabel } from '../../../config'
-import ConfirmDialog from '../../../components/ConfirmDialog'
-import DeleteIconButton from '../../../components/DeleteIconButton'
-import RelativeTimeStatus from '../../../components/RelativeTimeStatus'
-import Skeleton, { SkeletonText } from '../../../components/Skeleton'
-import { useTopNavConfig } from '../../../components/topNavConfig'
+import { apiFetch } from '@/api'
+import { entityLabel } from '@/config'
+import ConfirmDialog from '@/components/ConfirmDialog'
+import DeleteIconButton from '@/components/DeleteIconButton'
+import RelativeTimeStatus from '@/components/RelativeTimeStatus'
+import Skeleton, { SkeletonText } from '@/components/Skeleton'
+import { useTopNavConfig } from '@/components/topNavConfig'
 
 interface Prompt {
   id: number

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, type MouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../../../api'
-import { entityLabel } from '../../../config'
-import { useScrollReturn } from '../../../hooks/useScrollReturn'
-import { diffPromptInlineEdits } from '../../../utils/promptDiff'
-import Skeleton, { SkeletonText } from '../../../components/Skeleton'
-import { useTopNavConfig } from '../../../components/topNavConfig'
+import { apiFetch } from '@/api'
+import { entityLabel } from '@/config'
+import { useScrollReturn } from '@/hooks/useScrollReturn'
+import { diffPromptInlineEdits } from '@/utils/promptDiff'
+import Skeleton, { SkeletonText } from '@/components/Skeleton'
+import { useTopNavConfig } from '@/components/topNavConfig'
 import PromptVariationCard from './PromptVariationCard'
 
 interface ClusterReturnState {

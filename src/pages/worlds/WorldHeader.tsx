@@ -1,5 +1,5 @@
 import { Sparkles } from 'lucide-react'
-import { entityLabel } from '../../config'
+import { entityLabel } from '@/config'
 import WorldTabs, { type WorldTab } from './WorldTabs'
 
 interface Props {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { entityLabel } from '../../config'
+import { entityLabel } from '@/config'
 
 const createWorldTips = [
   {

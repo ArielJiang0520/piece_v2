@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../api'
-import { entityLabel } from '../config'
+import { apiFetch } from '@/api'
+import { entityLabel } from '@/config'
 
 export interface PromptSummary {
   id: number

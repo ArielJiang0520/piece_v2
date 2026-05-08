@@ -1,12 +1,12 @@
-import type { ReadingFont } from '../../../preferences/readingFont'
-import { READING_FONT_OPTIONS } from '../../../preferences/readingFont'
-import type { ReadingFontSize } from '../../../preferences/readingFontSize'
-import { READING_FONT_SIZE_OPTIONS } from '../../../preferences/readingFontSize'
+import type { ReadingFont } from '@/preferences/readingFont'
+import { READING_FONT_OPTIONS } from '@/preferences/readingFont'
+import type { ReadingFontSize } from '@/preferences/readingFontSize'
+import { READING_FONT_SIZE_OPTIONS } from '@/preferences/readingFontSize'
 import {
   MAX_READING_SPEED_UNITS_PER_SECOND,
   MIN_READING_SPEED_UNITS_PER_SECOND,
   READING_SPEED_STEP,
-} from '../../../preferences/readingSpeed'
+} from '@/preferences/readingSpeed'
 
 interface ReadingSettingsPanelProps {
   open: boolean

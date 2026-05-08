@@ -1,10 +1,10 @@
 import { type MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { RotateCw } from 'lucide-react'
-import CountIndicator from '../../../components/CountIndicator'
-import { entityLabel } from '../../../config'
-import { relativeTime } from '../../../utils/time'
-import { type PromptEditMark } from '../../../utils/promptDiff'
+import CountIndicator from '@/components/CountIndicator'
+import { entityLabel } from '@/config'
+import { relativeTime } from '@/utils/time'
+import { type PromptEditMark } from '@/utils/promptDiff'
 
 export interface PromptVariation {
   id: number

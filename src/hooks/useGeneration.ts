@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef } from 'react'
-import { useReadingSpeedUnitsPerSecond } from '../preferences/readingSpeed'
-import { createRandomId } from '../utils/id'
-import { readServerSentEvents } from '../utils/sse'
+import { useReadingSpeedUnitsPerSecond } from '@/preferences/readingSpeed'
+import { createRandomId } from '@/utils/id'
+import { readServerSentEvents } from '@/utils/sse'
 
 export type GenerationPhase = 'idle' | 'waiting_provider' | 'thinking' | 'writing'
 export type GenerationCompletion = 'none' | 'completed' | 'cancelled' | 'error'

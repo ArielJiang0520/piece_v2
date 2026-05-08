@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { Check, ChevronDown, Gauge, Trophy } from 'lucide-react'
-import { MODELS, type ModelOption } from '../../../preferences/generationModel'
+import { MODELS, type ModelOption } from '@/preferences/generationModel'
 
 interface SettingsPanelProps {
   open: boolean

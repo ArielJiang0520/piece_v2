@@ -1,4 +1,4 @@
-import { relativeTime } from '../utils/time'
+import { relativeTime } from '@/utils/time'
 
 const ONE_HOUR_MS = 60 * 60 * 1e3
 

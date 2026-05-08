@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../api'
-import { entityLabel } from '../config'
-import { relativeTime } from '../utils/time'
-import ConfirmDialog from '../components/ConfirmDialog'
-import DeleteIconButton from '../components/DeleteIconButton'
-import Skeleton, { SkeletonText } from '../components/Skeleton'
-import { useTopNavConfig } from '../components/topNavConfig'
+import { apiFetch } from '@/api'
+import { entityLabel } from '@/config'
+import { relativeTime } from '@/utils/time'
+import ConfirmDialog from '@/components/ConfirmDialog'
+import DeleteIconButton from '@/components/DeleteIconButton'
+import Skeleton, { SkeletonText } from '@/components/Skeleton'
+import { useTopNavConfig } from '@/components/topNavConfig'
 
 interface Piece {
   id: number
