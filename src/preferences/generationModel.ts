@@ -17,7 +17,7 @@ export const MODELS: ModelOption[] = [
   {
     id: 'deepseek/deepseek-v4-flash',
     label: 'DeepSeek V4 Flash',
-    attributes: { speed: 3, quality: 2, cost: 1 },
+    attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
   },
   {
@@ -31,19 +31,7 @@ export const MODELS: ModelOption[] = [
     label: 'GLM 5',
     attributes: { speed: 3, quality: 2, cost: 2 },
     reasoning: { effort: 'none' },
-  },
-  {
-    id: 'z-ai/glm-5.1',
-    label: 'GLM 5.1',
-    attributes: { speed: 1, quality: 3, cost: 2 },
-    reasoning: { effort: 'none' },
-  },
-  {
-    id: 'deepseek/deepseek-v3.2',
-    label: 'DeepSeek V3.2',
-    attributes: { speed: 3, quality: 1, cost: 1 },
-    reasoning: { effort: 'none' },
-  },
+  }
 ]
 
 export const DEFAULT_MODEL_ID = 'z-ai/glm-5'

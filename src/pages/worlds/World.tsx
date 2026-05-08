@@ -393,8 +393,8 @@ export default function World() {
                 >
                   <Link
                     to={
-                      group.prompt_count === 1 && group.latest_prompt_id
-                        ? `/worlds/${id}/prompts/${group.latest_prompt_id}`
+                      group.latest_prompt_id
+                        ? `/worlds/${id}/generate?promptId=${group.latest_prompt_id}`
                         : `/worlds/${id}/clusters/${group.id}`
                     }
                     state={{ fromWorldList: true }}
@@ -415,7 +415,7 @@ export default function World() {
                         <div className="flex shrink-0 items-center gap-1.5">
                           <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
                           <span>
-                            {group.prompt_count} {group.prompt_count === 1 ? 'variation' : 'variations'}
+                            {group.prompt_count} {group.prompt_count === 1 ? 'version' : 'versions'}
                           </span>
                         </div>
                       )}

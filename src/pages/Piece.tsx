@@ -33,7 +33,7 @@ export default function Piece() {
   })
   const piece = pieceQuery.data ?? null
   const backHref = piece
-    ? `/worlds/${piece.world_id}/prompts/${piece.prompt_id}`
+    ? `/worlds/${piece.world_id}/generate?promptId=${piece.prompt_id}`
     : undefined
 
   const deleteMutation = useMutation({
@@ -47,7 +47,7 @@ export default function Piece() {
       queryClient.invalidateQueries({ queryKey: ['world-clusters', worldId] })
       queryClient.invalidateQueries({ queryKey: ['cluster', worldId] })
       queryClient.invalidateQueries({ queryKey: ['prompt', worldId, String(piece.prompt_id)] })
-      navigate(`/worlds/${piece.world_id}/prompts/${piece.prompt_id}`)
+      navigate(`/worlds/${piece.world_id}/generate?promptId=${piece.prompt_id}`)
     },
     onError: e => {
       setDeleteError(e instanceof Error ? e.message : `Could not delete ${entityLabel('piece')}`)

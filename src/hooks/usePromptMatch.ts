@@ -5,6 +5,7 @@ import { entityLabel } from '@/config'
 
 export interface PromptSummary {
   id: number
+  cluster_id?: number | null
   text: string
   piece_count: number
 }
@@ -51,7 +52,9 @@ export function usePromptMatch({ worldId, queryPromptId }: UsePromptMatchOptions
 
   useEffect(() => {
     if (!queryPromptId) {
+      setPrompt('')
       setPromptMatch(null)
+      setPromptError('')
       return
     }
     if (promptQuery.data) {
@@ -101,6 +104,7 @@ export function usePromptMatch({ worldId, queryPromptId }: UsePromptMatchOptions
     promptPieceCount,
     loadingPrompt,
     promptError,
+    loadedPrompt: promptQuery.data?.prompt ?? null,
     applyPromptSaved,
   }
 }

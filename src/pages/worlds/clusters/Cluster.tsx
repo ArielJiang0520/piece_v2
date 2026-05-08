@@ -1,5 +1,5 @@
 import { useEffect, useMemo, type MouseEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { entityLabel } from '@/config'
@@ -44,7 +44,9 @@ interface ClusterResponse {
 export default function Cluster() {
   const { id, clusterId } = useParams<{ id: string; clusterId: string }>()
   const navigate = useNavigate()
-  const backHref = id ? `/worlds/${id}` : '/worlds'
+  const location = useLocation()
+  const stateBackHref = (location.state as { backHref?: string } | null)?.backHref
+  const backHref = stateBackHref ?? (id ? `/worlds/${id}` : '/worlds')
   const {
     stateRef: restoreStateRef,
     scheduledRef: restoreScheduledRef,
@@ -55,7 +57,7 @@ export default function Cluster() {
     parseClusterReturnState,
   )
 
-  useTopNavConfig({ secondaryTitle: `${entityLabel('prompt', { capitalize: true })} variations`, backHref })
+  useTopNavConfig({ secondaryTitle: `${entityLabel('prompt', { capitalize: true })} history`, backHref })
 
   const worldQuery = useQuery({
     queryKey: ['world', id],

@@ -19,7 +19,6 @@ interface State {
   output: string
   error: string
   completion: GenerationCompletion
-  lastCompletedOutput: string
 }
 
 type Action =
@@ -29,8 +28,9 @@ type Action =
   | { type: 'error'; message: string }
   | { type: 'done' }
   | { type: 'stop' }
+  | { type: 'reset' }
 
-const initialState: State = { phase: 'idle', output: '', error: '', completion: 'none', lastCompletedOutput: '' }
+const initialState: State = { phase: 'idle', output: '', error: '', completion: 'none' }
 const DISPLAY_FLUSH_MS = 80
 const MAX_DISPLAY_UNITS_PER_FLUSH = 10
 const DENSE_SCRIPT_PATTERN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
@@ -48,9 +48,11 @@ function reducer(state: State, action: Action): State {
     case 'error':
       return { ...state, phase: 'idle', error: action.message, completion: 'error' }
     case 'done':
-      return { ...state, phase: 'idle', completion: 'completed', lastCompletedOutput: state.output }
+      return { ...state, phase: 'idle', completion: 'completed' }
     case 'stop':
-      return { ...state, phase: 'idle', output: state.lastCompletedOutput, error: '', completion: 'cancelled' }
+      return { ...state, phase: 'idle', output: '', error: '', completion: 'cancelled' }
+    case 'reset':
+      return initialState
   }
 }
 
@@ -199,6 +201,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     dispatch({ type: 'start' })
 
     let streamSettled = false
+    let receivedContent = false
     try {
       const res = await fetch(`/api/worlds/${worldId}/generate`, {
         method: 'POST',
@@ -223,7 +226,10 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
           } else if (msg.type === 'thinking') {
             dispatch({ type: 'phase', phase: 'thinking' })
           } else if (msg.type === 'chunk') {
-            if (typeof msg.content === 'string') queueChunk(msg.content)
+            if (typeof msg.content === 'string') {
+              if (msg.content.length > 0) receivedContent = true
+              queueChunk(msg.content)
+            }
           } else if (msg.type === 'done') {
             streamSettled = true
             completeAfterDisplay({ type: 'done' })
@@ -245,7 +251,11 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
         activeGenerationIdRef.current = null
         activeRequestControllerRef.current = null
         if (!streamSettled && !stopRequestedRef.current) {
-          completeAfterDisplay({ type: 'error', message: 'Generation ended before completion' })
+          completeAfterDisplay(
+            receivedContent
+              ? { type: 'done' }
+              : { type: 'error', message: 'Generation ended before completion' },
+          )
         }
       }
     }
@@ -273,6 +283,14 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     activeRequestControllerRef.current = null
   }
 
+  function reset() {
+    resetDisplayPacer()
+    activeRequestControllerRef.current?.abort()
+    activeGenerationIdRef.current = null
+    activeRequestControllerRef.current = null
+    dispatch({ type: 'reset' })
+  }
+
   return {
     phase: state.phase,
     output: state.output,
@@ -282,5 +300,6 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     streaming,
     generate,
     stop,
+    reset,
   }
 }

@@ -90,7 +90,7 @@ export default function PromptVariationCard({
 
       <div className="min-w-0">
         <Link
-          to={`/worlds/${worldId}/prompts/${prompt.id}`}
+          to={`/worlds/${worldId}/generate?promptId=${prompt.id}`}
           onClick={event => onOpenPrompt(prompt.id, event)}
           className="block transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
         >

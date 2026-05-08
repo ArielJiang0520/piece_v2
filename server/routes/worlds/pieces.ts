@@ -79,8 +79,10 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     created_at: now,
   }).returning({ id: pieces.id }).get()
 
+  let clusterId = existingPromptClusterId
+
   if (isNewPrompt) {
-    await clusterPromptById(promptRow.id)
+    clusterId = await clusterPromptById(promptRow.id)
   } else {
     db.update(prompts)
       .set({
@@ -90,7 +92,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
       .where(and(eq(prompts.id, promptRow.id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
       .run()
     if (existingPromptClusterId === null) {
-      await clusterPromptById(promptRow.id)
+      clusterId = await clusterPromptById(promptRow.id)
     } else {
       recomputePromptCluster(existingPromptClusterId)
     }
@@ -106,6 +108,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     promptId: promptRow.id,
     pieceId: piece.id,
     pieceCount: savedPrompt?.piece_count ?? (isNewPrompt ? 1 : 0),
+    clusterId,
     isNewPrompt,
   })
 })
