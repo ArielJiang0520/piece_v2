@@ -3,7 +3,6 @@ import type { ReadingFont } from '@/preferences/readingFont'
 import { READING_FONT_BY_ID } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
 import { READING_FONT_SIZE_BY_ID } from '@/preferences/readingFontSize'
-import { entityLabel } from '@/config'
 
 const END_REVEAL_DELAY_MS = 900
 const OUTPUT_TOKEN_RE = /\s+|[^\s]+/g
