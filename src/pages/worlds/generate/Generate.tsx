@@ -132,7 +132,7 @@ export default function Generate() {
   const nextVersionNumber = clusterPrompts.length + 1
   const showVersionsButton = activeClusterId != null
   const currentVersionNumber = queryPromptId
-    ? clusterPrompts.findIndex(clusterPrompt => String(clusterPrompt.id) === queryPromptId) + 1
+    ? clusterPrompts.findIndex((clusterPrompt: { id: any }) => String(clusterPrompt.id) === queryPromptId) + 1
     : 0
   const versionsLabel = draftVersionNumber !== null
     ? `Draft version ${draftVersionNumber}`

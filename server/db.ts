@@ -176,6 +176,7 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_prompts_world_updated ON prompts(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_world_version ON prompts(world_version_id);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster ON prompts(cluster_id);
+  CREATE INDEX IF NOT EXISTS idx_prompts_cluster_created ON prompts(cluster_id, created_at DESC, id DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_updated ON prompt_clusters(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_pieces ON prompt_clusters(user_id, world_id, piece_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_variations ON prompt_clusters(user_id, world_id, prompt_count DESC, updated_at DESC);
@@ -188,6 +189,30 @@ sqlite.run(`
 sqlite.run(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_prompts_user_world_normalized_text_unique
   ON prompts(user_id, world_id, rtrim(text, ' ' || char(9) || char(10) || char(13)));
+`)
+
+sqlite.run(`
+  UPDATE prompt_clusters
+  SET
+    latest_prompt_id = (
+      SELECT prompts.id
+      FROM prompts
+      WHERE prompts.cluster_id = prompt_clusters.id
+      ORDER BY prompts.created_at DESC, prompts.id DESC
+      LIMIT 1
+    ),
+    updated_at = coalesce((
+      SELECT prompts.created_at
+      FROM prompts
+      WHERE prompts.cluster_id = prompt_clusters.id
+      ORDER BY prompts.created_at DESC, prompts.id DESC
+      LIMIT 1
+    ), updated_at)
+  WHERE EXISTS (
+    SELECT 1
+    FROM prompts
+    WHERE prompts.cluster_id = prompt_clusters.id
+  );
 `)
 
 export const users = sqliteTable('users', {

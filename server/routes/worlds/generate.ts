@@ -29,6 +29,23 @@ function buildSystemPrompt(worldBody: string): string {
   return sections.join('\n\n')
 }
 
+async function readOpenRouterError(response: Response): Promise<string> {
+  const fallback = `OpenRouter ${response.status} ${response.statusText}`
+  const rawBody = await response.text().catch(() => '')
+  if (!rawBody) return fallback
+
+  try {
+    const parsed = JSON.parse(rawBody) as any
+    const message = parsed?.error?.message
+      ?? parsed?.error?.metadata?.raw
+      ?? parsed?.error
+      ?? parsed?.message
+    return typeof message === 'string' ? message : rawBody
+  } catch {
+    return rawBody
+  }
+}
+
 generateRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
@@ -67,6 +84,11 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
+      const provider = {
+        require_parameters: true,
+        only: modelOption.preferredProviders,
+      }
+
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         signal: controller.signal,
@@ -79,8 +101,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           temperature,
           reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
           stream: true,
-          provider: { sort: 'throughput' },
-          require_parameters: true,
+          provider,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: promptText },
@@ -89,12 +110,14 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
       })
 
       if (!response.ok || !response.body) {
-        let message = `OpenRouter ${response.status} ${response.statusText}`
-        try {
-          const errBody = await response.json() as any
-          if (errBody?.error?.message) message = errBody.error.message
-          else if (typeof errBody?.error === 'string') message = errBody.error
-        } catch { }
+        const message = await readOpenRouterError(response)
+        console.error('[OpenRouter generate error]', {
+          status: response.status,
+          statusText: response.statusText,
+          model: modelOption.id,
+          provider,
+          message,
+        })
         await stream.writeSSE({ data: JSON.stringify({ type: 'error', message }) })
         return
       }
@@ -106,6 +129,19 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
         }
         try {
           const parsed = JSON.parse(data)
+          if (parsed?.error) {
+            const message = typeof parsed.error?.message === 'string'
+              ? parsed.error.message
+              : JSON.stringify(parsed.error)
+            console.error('[OpenRouter generate stream error]', {
+              model: modelOption.id,
+              provider,
+              error: parsed.error,
+            })
+            await stream.writeSSE({ data: JSON.stringify({ type: 'error', message }) })
+            return
+          }
+
           const delta = parsed?.choices?.[0]?.delta
           const reasoning = delta?.reasoning
             ?? delta?.reasoning_content

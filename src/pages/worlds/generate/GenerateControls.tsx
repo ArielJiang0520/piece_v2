@@ -1,9 +1,10 @@
-import { useEffect, useId, useState } from 'react'
-import { Settings, X } from 'lucide-react'
+import { useCallback, useEffect, useId, useState } from 'react'
+import { X } from 'lucide-react'
 import type { GenerationPhase } from '@/hooks/useGeneration'
 import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
 import SettingsPanel from './SettingsPanel'
+import ModelSelector from './ModelSelector'
 import { entityLabel } from '@/config'
 
 interface GenerateControlsProps {
@@ -27,8 +28,8 @@ interface GenerateControlsProps {
 }
 
 const iconButtonClass =
-  'flex size-15 shrink-0 items-center justify-center rounded-full bg-paper/85 text-ink-3 shadow-(--shadow-feather) transition-all duration-200 hover:-translate-y-px hover:text-ink focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-50'
-const activeIconButtonClass = 'text-ink ring-1 ring-ink-4/30'
+  'flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-rose-line bg-paper/85 text-ink-3 shadow-(--shadow-feather) transition-all duration-200 hover:-translate-y-px hover:border-rose/35 hover:text-ink focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-50'
+const activeIconButtonClass = 'border-ink-4/30 text-ink ring-1 ring-ink-4/30'
 const floatingStopButtonClass =
   'fixed bottom-7 left-1/2 z-40 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20'
 
@@ -51,12 +52,14 @@ export default function GenerateControls({
   onCloseSettings,
   onStop,
 }: GenerateControlsProps) {
-  const settingsTitleBaseId = useId()
-  const mobileSettingsTitleId = `${settingsTitleBaseId}-mobile`
-  const desktopSettingsTitleId = `${settingsTitleBaseId}-desktop`
+  const settingsPanelId = useId()
   const [settingsRendered, setSettingsRendered] = useState(settingsOpen)
   const [settingsEntered, setSettingsEntered] = useState(settingsOpen)
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const settingsVisible = settingsOpen && settingsEntered
+  const handleModelMenuOpenChange = useCallback((open: boolean) => {
+    setModelMenuOpen(open)
+  }, [])
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -95,81 +98,74 @@ export default function GenerateControls({
         </button>
       )}
 
-      <div className={`sticky top-16 mt-2 bg-paper/0 py-3 ${settingsRendered ? 'z-50' : 'z-10'}`}>
-        <div className="flex items-center gap-3">
+      <div className={`sticky top-16 mt-2 bg-paper/0 py-3 ${settingsRendered || modelMenuOpen ? 'z-50' : 'z-10'}`}>
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             type="button"
-            className="min-h-11 min-w-0 flex-1 rounded-full bg-rose px-5 py-2.5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
+            className="inline-flex h-11 max-w-56 shrink-0 items-center justify-center rounded-md bg-rose px-6 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
             onClick={onGenerate}
             disabled={disabled}
           >
-            {generateButtonLabel(phase, hasExistingPieces)}
+            <span className="min-w-0 truncate">{generateButtonLabel(phase, hasExistingPieces)}</span>
           </button>
-          <button
-            type="button"
-            className={`${iconButtonClass} ${settingsOpen ? activeIconButtonClass : ''}`}
-            onClick={onToggleSettings}
-            aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
-            title={settingsOpen ? 'Close settings' : 'Open settings'}
-            aria-expanded={settingsOpen}
-          >
-            <Settings className="size-5" aria-hidden="true" />
-          </button>
+
+          <ModelSelector
+            model={model}
+            onModelChange={onModelChange}
+            disabled={streaming}
+            closeMenu={settingsOpen}
+            onMenuOpenChange={handleModelMenuOpenChange}
+          />
+
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              className={`relative z-50 ${iconButtonClass} ${settingsOpen ? activeIconButtonClass : ''}`}
+              onClick={onToggleSettings}
+              aria-label={settingsOpen ? 'Close reading settings' : 'Open reading settings'}
+              title={settingsOpen ? 'Close reading settings' : 'Open reading settings'}
+              aria-expanded={settingsOpen}
+              aria-controls={settingsPanelId}
+            >
+              <span aria-hidden="true" className="font-serif-zh text-[15px] italic leading-none">
+                Aa
+              </span>
+            </button>
+
+            {settingsRendered && (
+              <>
+                <div
+                  className={`fixed inset-0 z-40 bg-transparent transition-opacity duration-220 ${settingsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+                  onClick={onCloseSettings}
+                  aria-hidden="true"
+                />
+
+                <div
+                  id={settingsPanelId}
+                  className={`absolute right-0 top-full z-50 mt-2 w-[min(19rem,calc(100vw-2rem))] origin-top-right rounded-md border border-rose-line bg-paper/95 p-3 shadow-(--shadow-menu) transition-[opacity,transform] duration-220 ease-out ${settingsVisible ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-1 scale-[0.98] opacity-0'}`}
+                  role="dialog"
+                  aria-modal="false"
+                  aria-label="Reading settings"
+                  aria-hidden={!settingsOpen}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-1.75 right-4 h-3.5 w-3.5 rotate-45 border-l border-t border-rose-line bg-paper"
+                  />
+                  <SettingsPanel
+                    open={settingsRendered}
+                    readingSpeed={readingSpeed}
+                    onReadingSpeedChange={onReadingSpeedChange}
+                    readingFont={readingFont}
+                    onReadingFontChange={onReadingFontChange}
+                    readingFontSize={readingFontSize}
+                    onReadingFontSizeChange={onReadingFontSizeChange}
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </div>
-
-        {settingsRendered && (
-          <>
-            <div
-              className={`fixed inset-0 z-30 bg-ink/30 transition-opacity duration-220 ease-out dark:bg-black/40 sm:bg-transparent sm:dark:bg-transparent ${settingsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-              onClick={onCloseSettings}
-              aria-hidden="true"
-            />
-
-            <div
-              className={`fixed inset-x-4 bottom-4 z-40 max-h-[calc(85dvh-1rem)] overflow-y-auto rounded-lg border border-rose-line bg-paper px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4 shadow-(--shadow-menu) transition-[opacity,transform] duration-220 ease-out sm:hidden ${settingsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'}`}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={mobileSettingsTitleId}
-              aria-hidden={!settingsOpen}
-            >
-              <SettingsHeader titleId={mobileSettingsTitleId} onClose={onCloseSettings} />
-              <SettingsPanel
-                open={settingsRendered}
-                disabled={streaming}
-                model={model}
-                onModelChange={onModelChange}
-                readingSpeed={readingSpeed}
-                onReadingSpeedChange={onReadingSpeedChange}
-                readingFont={readingFont}
-                onReadingFontChange={onReadingFontChange}
-                readingFontSize={readingFontSize}
-                onReadingFontSizeChange={onReadingFontSizeChange}
-              />
-            </div>
-
-            <div
-              className={`absolute right-0 top-full z-40 mt-2 hidden w-[min(24rem,calc(100vw-2rem))] origin-top-right rounded-lg border border-rose-line bg-paper/95 p-4 shadow-(--shadow-menu) transition-[opacity,transform] duration-220 ease-out sm:block ${settingsVisible ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-1 scale-[0.98] opacity-0'}`}
-              role="dialog"
-              aria-modal="false"
-              aria-labelledby={desktopSettingsTitleId}
-              aria-hidden={!settingsOpen}
-            >
-              <SettingsHeader titleId={desktopSettingsTitleId} onClose={onCloseSettings} />
-              <SettingsPanel
-                open={settingsRendered}
-                disabled={streaming}
-                model={model}
-                onModelChange={onModelChange}
-                readingSpeed={readingSpeed}
-                onReadingSpeedChange={onReadingSpeedChange}
-                readingFont={readingFont}
-                onReadingFontChange={onReadingFontChange}
-                readingFontSize={readingFontSize}
-                onReadingFontSizeChange={onReadingFontSizeChange}
-              />
-            </div>
-          </>
-        )}
       </div>
     </>
   )
@@ -179,31 +175,6 @@ function generateButtonLabel(phase: GenerationPhase, hasExistingPieces: boolean)
   if (phase === 'waiting_provider') return 'Waiting...'
   if (phase === 'thinking') return 'Thinking...'
   if (phase === 'writing') return 'Writing...'
-  if (!hasExistingPieces) return `Write first ${entityLabel('piece')}`
-  return `Write another ${entityLabel('piece')}`
-}
-
-function SettingsHeader({
-  titleId,
-  onClose,
-}: {
-  titleId: string
-  onClose: () => void
-}) {
-  return (
-    <div className="mb-4 flex items-center gap-3">
-      <h2 id={titleId} className="min-w-0 flex-1 font-serif-zh text-xl italic leading-tight text-ink">
-        Settings
-      </h2>
-      <button
-        type="button"
-        className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-        aria-label="Close settings"
-        title="Close settings"
-        onClick={onClose}
-      >
-        <X aria-hidden="true" className="h-5 w-5" />
-      </button>
-    </div>
-  )
+  if (!hasExistingPieces) return `First ${entityLabel('piece')}`
+  return `Another ${entityLabel('piece')}`
 }

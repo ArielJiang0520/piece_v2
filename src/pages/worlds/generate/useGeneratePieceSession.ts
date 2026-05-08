@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { useToast } from '@/components/Toast'
-import { MODELS } from '@/preferences/generationModel'
 import type { GenerationCompletion } from '@/hooks/useGeneration'
 import { relativeTime } from '@/utils/time'
 import {
@@ -76,7 +75,6 @@ export function useGeneratePieceSession({
   const displayedOutput = viewingPendingPiece ? output : viewingSavedPiece ? selectedPiece?.body ?? '' : ''
   const outputDisplayComplete = viewingPendingPiece ? displayComplete : viewingSavedPiece ? !!selectedPiece : false
   const displayedPieceCreatedAt = viewingPendingPiece ? generatedAt : selectedPiece?.created_at ?? null
-  const displayedPieceModel = viewingPendingPiece ? model : selectedPiece?.model ?? null
   const displayedOutputCountLabel = outputCountLabel(displayedOutput)
   const displayedPieceMetaLabel = displayedPieceCreatedAt
     ? `${relativeTime(displayedPieceCreatedAt)} - ${displayedOutputCountLabel}`
@@ -239,10 +237,6 @@ export function useGeneratePieceSession({
     prepareGeneration,
     cancelPendingGeneration,
   }
-}
-
-function modelLabel(modelId: string | null | undefined) {
-  return MODELS.find(option => option.id === modelId)?.label ?? modelId ?? 'Unknown model'
 }
 
 function outputCountLabel(text: string) {

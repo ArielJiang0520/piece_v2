@@ -11,6 +11,7 @@ export interface ModelOption {
   reasoning: {
     effort: 'low' | 'high' | 'none'
   }
+  preferredProviders: string[]
 }
 
 export const MODELS: ModelOption[] = [
@@ -19,18 +20,28 @@ export const MODELS: ModelOption[] = [
     label: 'DeepSeek V4 Flash',
     attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
+    preferredProviders: ['parasail/fp8'],
   },
   {
     id: 'deepseek/deepseek-v4-pro',
     label: 'DeepSeek V4 Pro',
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
+    preferredProviders: ['parasail/fp8'],
   },
   {
     id: 'z-ai/glm-5',
     label: 'GLM 5',
     attributes: { speed: 3, quality: 2, cost: 2 },
     reasoning: { effort: 'none' },
+    preferredProviders: ['parasail/fp8'],
+  },
+  {
+    id: 'z-ai/glm-5.1',
+    label: 'GLM 5.1',
+    attributes: { speed: 1, quality: 3, cost: 3 },
+    reasoning: { effort: 'none' },
+    preferredProviders: ['parasail/fp8'],
   }
 ]
 

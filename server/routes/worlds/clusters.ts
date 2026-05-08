@@ -33,7 +33,7 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
       id: prompts.id,
       cluster_id: prompts.cluster_id,
       text: prompts.text,
-      updated_at: prompts.updated_at,
+      created_at: prompts.created_at,
     })
     .from(prompts)
     .where(and(
@@ -41,7 +41,7 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
       eq(prompts.world_id, worldId),
       eq(prompts.user_id, userId),
     ))
-    .orderBy(desc(prompts.updated_at), desc(prompts.id))
+    .orderBy(desc(prompts.created_at), desc(prompts.id))
     .all()
   const latestPieceRows = db
     .select({
@@ -76,9 +76,10 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
 
   return clusterRows.map(cluster => {
     const clusterPrompts = promptsByCluster.get(cluster.id) ?? []
-    const latestPrompt = clusterPrompts.find(prompt => prompt.id === cluster.latest_prompt_id) ?? clusterPrompts[0]
+    const latestPrompt = clusterPrompts[0]
     return {
       ...cluster,
+      latest_prompt_id: latestPrompt?.id ?? cluster.latest_prompt_id,
       title: latestPrompt?.text ?? 'Untitled cluster',
       latest_piece_at: latestPieceByCluster.get(cluster.id) ?? null,
     }
@@ -218,7 +219,8 @@ clusterRoutes.get('/:clusterId', authMiddleware, (c: any) => {
   return c.json({
     cluster: {
       ...cluster,
-      title: promptRows.find(prompt => prompt.id === cluster.latest_prompt_id)?.text ?? promptRows[0]?.text ?? 'Untitled cluster',
+      latest_prompt_id: promptRows[promptRows.length - 1]?.id ?? cluster.latest_prompt_id,
+      title: promptRows[promptRows.length - 1]?.text ?? 'Untitled cluster',
     },
     prompts: promptRows,
   })
