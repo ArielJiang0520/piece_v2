@@ -4,12 +4,12 @@ import type { GenerationPhase } from '@/hooks/useGeneration'
 import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
 import SettingsPanel from './SettingsPanel'
+import { entityLabel } from '@/config'
 
 interface GenerateControlsProps {
   phase: GenerationPhase
   streaming: boolean
   settingsOpen: boolean
-  viewingSavedPiece: boolean
   disabled: boolean
   model: string
   onModelChange: (model: string) => void
@@ -35,7 +35,6 @@ export default function GenerateControls({
   phase,
   streaming,
   settingsOpen,
-  viewingSavedPiece,
   disabled,
   model,
   onModelChange,
@@ -80,8 +79,6 @@ export default function GenerateControls({
     return () => window.clearTimeout(timeout)
   }, [settingsOpen])
 
-  if (viewingSavedPiece && !streaming) return null
-
   return (
     <>
       {streaming && (
@@ -98,31 +95,27 @@ export default function GenerateControls({
 
       <div className={`sticky top-12 mt-2 bg-paper/0 py-3 ${settingsRendered ? 'z-50' : 'z-10'}`}>
         <div className="flex items-center gap-3">
-          {!viewingSavedPiece && (
-            <button
-              type="button"
-              className="min-h-11 min-w-0 flex-1 rounded-full bg-rose px-5 py-2.5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
-              onClick={onGenerate}
-              disabled={disabled}
-            >
-              {generateButtonLabel(phase)}
-            </button>
-          )}
-          {!viewingSavedPiece && (
-            <button
-              type="button"
-              className={`${iconButtonClass} ${settingsOpen ? activeIconButtonClass : ''}`}
-              onClick={onToggleSettings}
-              aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
-              title={settingsOpen ? 'Close settings' : 'Open settings'}
-              aria-expanded={settingsOpen}
-            >
-              <Settings className="size-5" aria-hidden="true" />
-            </button>
-          )}
+          <button
+            type="button"
+            className="min-h-11 min-w-0 flex-1 rounded-full bg-rose px-5 py-2.5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus:ring-4 focus:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
+            onClick={onGenerate}
+            disabled={disabled}
+          >
+            {generateButtonLabel(phase)}
+          </button>
+          <button
+            type="button"
+            className={`${iconButtonClass} ${settingsOpen ? activeIconButtonClass : ''}`}
+            onClick={onToggleSettings}
+            aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
+            title={settingsOpen ? 'Close settings' : 'Open settings'}
+            aria-expanded={settingsOpen}
+          >
+            <Settings className="size-5" aria-hidden="true" />
+          </button>
         </div>
 
-        {settingsRendered && !viewingSavedPiece && (
+        {settingsRendered && (
           <>
             <div
               className={`fixed inset-0 z-30 bg-ink/30 transition-opacity duration-220 ease-out dark:bg-black/40 sm:bg-transparent sm:dark:bg-transparent ${settingsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
@@ -184,7 +177,7 @@ function generateButtonLabel(phase: GenerationPhase) {
   if (phase === 'waiting_provider') return 'Waiting...'
   if (phase === 'thinking') return 'Thinking...'
   if (phase === 'writing') return 'Writing...'
-  return 'Take it'
+  return `Write another ${entityLabel('piece')}`
 }
 
 function SettingsHeader({

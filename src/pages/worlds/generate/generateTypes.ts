@@ -1,8 +1,10 @@
-import type { PieceStripPiece } from './PieceStrip'
-
 export const PIECE_STRIP_LIMIT = 24
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+export interface PieceStripPiece {
+  id: number
+}
 
 export interface SaveResponse {
   promptId: number

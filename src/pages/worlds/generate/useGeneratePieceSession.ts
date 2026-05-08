@@ -9,6 +9,7 @@ import { relativeTime } from '@/utils/time'
 import {
   PIECE_STRIP_LIMIT,
   type PieceDetail,
+  type PieceStripPiece,
   type PromptPiecesResponse,
   type SaveResponse,
   type SaveState,
@@ -27,8 +28,11 @@ interface UseGeneratePieceSessionOptions {
   completion: GenerationCompletion
   generationError: string
   versionSourcePromptId: number | null
+  promptPieces: PieceStripPiece[]
   resetGeneration: () => void
 }
+
+type PieceView = 'saved' | 'pending'
 
 export function useGeneratePieceSession({
   worldId,
@@ -43,6 +47,7 @@ export function useGeneratePieceSession({
   completion,
   generationError,
   versionSourcePromptId,
+  promptPieces,
   resetGeneration,
 }: UseGeneratePieceSessionOptions) {
   const navigate = useNavigate()
@@ -50,6 +55,8 @@ export function useGeneratePieceSession({
   const toast = useToast()
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [selectedPieceId, setSelectedPieceId] = useState<number | null>(null)
+  const [pieceView, setPieceView] = useState<PieceView>('saved')
+  const [pendingPieceNumber, setPendingPieceNumber] = useState<number | null>(null)
   const [generatedAt, setGeneratedAt] = useState<number | null>(null)
   const pendingSavedSelectionRef = useRef<{ promptId: string; pieceId: number } | null>(null)
   const previousModeKeyRef = useRef<string | null>(null)
@@ -63,18 +70,19 @@ export function useGeneratePieceSession({
   })
 
   const selectedPiece = selectedPieceQuery.data ?? null
-  const viewingSavedPiece = selectedPieceId !== null
-  const viewingNewPiece = lockedMode && selectedPieceId === null
-  const displayedOutput = viewingSavedPiece ? selectedPiece?.body ?? '' : viewingNewPiece && saveState === 'saved' ? '' : output
-  const outputDisplayComplete = viewingSavedPiece ? !!selectedPiece : viewingNewPiece && saveState === 'saved' ? false : displayComplete
-  const displayedPieceCreatedAt = selectedPiece?.created_at ?? generatedAt
-  const displayedPieceModel = selectedPiece?.model ?? model
+  const latestPieceId = promptPieces[0]?.id ?? null
+  const viewingPendingPiece = pieceView === 'pending'
+  const viewingSavedPiece = pieceView === 'saved' && selectedPieceId !== null
+  const displayedOutput = viewingPendingPiece ? output : viewingSavedPiece ? selectedPiece?.body ?? '' : ''
+  const outputDisplayComplete = viewingPendingPiece ? displayComplete : viewingSavedPiece ? !!selectedPiece : false
+  const displayedPieceCreatedAt = viewingPendingPiece ? generatedAt : selectedPiece?.created_at ?? null
+  const displayedPieceModel = viewingPendingPiece ? model : selectedPiece?.model ?? null
   const displayedOutputCountLabel = outputCountLabel(displayedOutput)
   const displayedPieceMetaLabel = displayedPieceCreatedAt
-    ? `${relativeTime(displayedPieceCreatedAt)} - ${modelLabel(displayedPieceModel)} - ${displayedOutputCountLabel}`
+    ? `${relativeTime(displayedPieceCreatedAt)} - ${displayedOutputCountLabel}`
     : null
 
-  const canSave = !streaming && !!output && saveState !== 'saving' && saveState !== 'saved'
+  const canSave = viewingPendingPiece && !streaming && !!output && saveState !== 'saving' && saveState !== 'saved'
 
   const handleSave = useCallback(async () => {
     if (!worldId || !canSave) return
@@ -93,6 +101,8 @@ export function useGeneratePieceSession({
 
       setSaveState('saved')
       pendingSavedSelectionRef.current = { promptId: String(result.promptId), pieceId: result.pieceId }
+      setPieceView('saved')
+      setPendingPieceNumber(null)
       queryClient.setQueryData(['piece', result.pieceId], {
         id: result.pieceId,
         body: output,
@@ -148,14 +158,6 @@ export function useGeneratePieceSession({
   ])
 
   useEffect(() => {
-    if (streaming) {
-      setSelectedPieceId(null)
-      setSaveState('idle')
-      setGeneratedAt(null)
-    }
-  }, [streaming])
-
-  useEffect(() => {
     if (!output) {
       setGeneratedAt(null)
       return
@@ -173,35 +175,69 @@ export function useGeneratePieceSession({
 
     if (pendingSelection && queryPromptId === pendingSelection.promptId) {
       setSelectedPieceId(pendingSelection.pieceId)
+      setPieceView('saved')
       pendingSavedSelectionRef.current = null
     } else {
       setSelectedPieceId(null)
+      setPieceView('saved')
     }
 
+    setPendingPieceNumber(null)
     setSaveState('idle')
     setGeneratedAt(null)
     resetGenerationRef.current()
   }, [modeKey, queryPromptId])
 
   useEffect(() => {
+    if (!lockedMode || viewingPendingPiece || selectedPieceId !== null || latestPieceId === null) return
+    setSelectedPieceId(latestPieceId)
+  }, [latestPieceId, lockedMode, selectedPieceId, viewingPendingPiece])
+
+  useEffect(() => {
     if (!displayComplete || completion !== 'completed' || !output || generationError || saveState !== 'idle') return
     void handleSave()
   }, [completion, displayComplete, generationError, handleSave, output, saveState])
 
-  const prepareGeneration = useCallback(() => {
+  const prepareGeneration = useCallback((pendingBasePieceCount: number) => {
     setSelectedPieceId(null)
+    setPieceView('pending')
+    setPendingPieceNumber(pendingBasePieceCount + 1)
+    setSaveState('idle')
     setGeneratedAt(null)
   }, [])
+
+  const selectPiece = useCallback((pieceId: number) => {
+    setSelectedPieceId(pieceId)
+    setPieceView('saved')
+  }, [])
+
+  const selectPendingPiece = useCallback(() => {
+    if (pendingPieceNumber === null) return
+    setSelectedPieceId(null)
+    setPieceView('pending')
+  }, [pendingPieceNumber])
+
+  const cancelPendingGeneration = useCallback(() => {
+    setPieceView('saved')
+    setPendingPieceNumber(null)
+    setSelectedPieceId(latestPieceId)
+    setSaveState('idle')
+    setGeneratedAt(null)
+  }, [latestPieceId])
 
   return {
     saveState,
     selectedPieceId,
-    setSelectedPieceId,
+    selectPiece,
+    selectPendingPiece,
+    viewingPendingPiece,
     viewingSavedPiece,
+    pendingPieceNumber,
     displayedOutput,
     outputDisplayComplete,
     displayedPieceMetaLabel,
     prepareGeneration,
+    cancelPendingGeneration,
   }
 }
 

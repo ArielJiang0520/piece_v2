@@ -1,16 +1,14 @@
 import { entityLabel } from '@/config'
-import { Plus } from 'lucide-react'
-
-export interface PieceStripPiece {
-  id: number
-}
+import type { PieceStripPiece } from './generateTypes'
 
 interface PieceStripProps {
   pieces: PieceStripPiece[]
   promptPieceCount: number
   selectedPieceId: number | null
+  pendingPieceNumber: number | null
+  pendingSelected: boolean
   disabled: boolean
-  onSelectNew: () => void
+  onSelectPending: () => void
   onSelectPiece: (pieceId: number) => void
 }
 
@@ -18,12 +16,14 @@ export default function PieceStrip({
   pieces,
   promptPieceCount,
   selectedPieceId,
+  pendingPieceNumber,
+  pendingSelected,
   disabled,
-  onSelectNew,
+  onSelectPending,
   onSelectPiece,
 }: PieceStripProps) {
-  const newSelected = selectedPieceId === null
-  const showOverflowHint = pieces.length > 2
+  const showPendingPiece = pendingPieceNumber !== null
+  const showOverflowHint = pieces.length + (showPendingPiece ? 1 : 0) > 2
 
   return (
     <div className="relative py-3">
@@ -34,25 +34,24 @@ export default function PieceStrip({
         />
       )}
       <div className={`flex gap-2 overflow-x-auto pb-1 ${showOverflowHint ? 'pr-8 sm:pr-0' : ''}`}>
-        <button
-          type="button"
-          className={newPieceButtonClass(newSelected)}
-          onClick={onSelectNew}
-          disabled={disabled}
-          aria-pressed={newSelected}
-        >
-          <span className="flex items-center justify-center gap-1.5 whitespace-nowrap">
-            <Plus aria-hidden="true" className={newSelected ? 'h-4 w-4 shrink-0 text-rose-deep' : 'h-4 w-4 shrink-0 text-ink-4'} />
-            <span className={newSelected ? 'font-serif-zh text-sm italic text-rose-deep' : 'font-serif-zh text-sm italic text-ink-3'}>
-              New {entityLabel('piece', { capitalize: true })}
+        {showPendingPiece && (
+          <button
+            type="button"
+            className={pieceButtonClass(pendingSelected)}
+            onClick={onSelectPending}
+            disabled={disabled}
+            aria-pressed={pendingSelected}
+          >
+            <span className={pendingSelected ? 'whitespace-nowrap font-serif-zh text-sm italic text-rose-deep' : 'whitespace-nowrap font-serif-zh text-sm italic text-ink-3'}>
+              {entityLabel('piece', { capitalize: true })} #{pendingPieceNumber}
             </span>
-          </span>
-          {newSelected && <SelectedHairline />}
-        </button>
+            {pendingSelected && <SelectedHairline />}
+          </button>
+        )}
 
         {pieces.map((piece, index) => {
           const pieceNumber = Math.max(1, promptPieceCount - index)
-          const selected = selectedPieceId === piece.id
+          const selected = selectedPieceId === piece.id && !pendingSelected
 
           return (
             <button
@@ -81,15 +80,6 @@ function pieceButtonClass(selected: boolean) {
     selected
       ? 'text-rose-deep'
       : 'text-ink-3 hover:text-rose',
-  ].join(' ')
-}
-
-function newPieceButtonClass(selected: boolean) {
-  return [
-    'relative flex h-10 min-w-28 shrink-0 items-center justify-center px-4 py-1 text-center transition-[color,transform] duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 disabled:opacity-50',
-    selected
-      ? 'text-rose-deep'
-      : 'text-ink-3 hover:text-ink',
   ].join(' ')
 }
 

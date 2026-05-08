@@ -103,12 +103,16 @@ export default function Generate() {
   const {
     saveState,
     selectedPieceId,
-    setSelectedPieceId,
+    selectPiece,
+    selectPendingPiece,
+    viewingPendingPiece,
     viewingSavedPiece,
+    pendingPieceNumber,
     displayedOutput,
     outputDisplayComplete,
     displayedPieceMetaLabel,
     prepareGeneration,
+    cancelPendingGeneration,
   } = useGeneratePieceSession({
     worldId: id,
     queryPromptId,
@@ -122,6 +126,7 @@ export default function Generate() {
     completion,
     generationError,
     versionSourcePromptId,
+    promptPieces,
     resetGeneration: reset,
   })
   const nextVersionNumber = clusterPrompts.length + 1
@@ -135,7 +140,7 @@ export default function Generate() {
       ? `Version ${currentVersionNumber}`
       : 'Versions'
   const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
-  const showPieceStrip = lockedMode && activePromptPieceCount > 0
+  const showPieceStrip = lockedMode && (activePromptPieceCount > 0 || pendingPieceNumber !== null)
   const PromptStateIcon = lockedMode ? LockKeyhole : Pencil
   const promptStateTitle = lockedMode ? `Saved ${entityLabel('prompt')}` : `Draft ${entityLabel('prompt')}`
   const promptStateLabel = lockedMode ? 'Read-only' : 'Editable'
@@ -166,13 +171,18 @@ export default function Generate() {
 
   function handleGenerate() {
     if (generateDisabled) return
-    prepareGeneration()
+    prepareGeneration(activePromptPieceCount)
     generate({
       prompt,
       model,
       temperature: GENERATION_TEMPERATURE,
       useThinking: USE_THINKING,
     })
+  }
+
+  function handleStop() {
+    stop()
+    cancelPendingGeneration()
   }
 
   function handleEditFromPrompt(sourcePrompt: ClusterPrompt) {
@@ -241,7 +251,6 @@ export default function Generate() {
           phase={phase}
           streaming={streaming}
           settingsOpen={settingsOpen}
-          viewingSavedPiece={viewingSavedPiece}
           disabled={generateDisabled}
           model={model}
           onModelChange={setGenerationModel}
@@ -254,7 +263,7 @@ export default function Generate() {
           onGenerate={handleGenerate}
           onToggleSettings={() => setSettingsOpen(open => !open)}
           onCloseSettings={() => setSettingsOpen(false)}
-          onStop={stop}
+          onStop={handleStop}
         />
 
         <section className="mt-2 border-t border-rose-line/70 bg-paper/60">
@@ -263,9 +272,11 @@ export default function Generate() {
               pieces={promptPieces}
               promptPieceCount={activePromptPieceCount}
               selectedPieceId={selectedPieceId}
+              pendingPieceNumber={pendingPieceNumber}
+              pendingSelected={viewingPendingPiece}
               disabled={streaming}
-              onSelectNew={() => setSelectedPieceId(null)}
-              onSelectPiece={pieceId => setSelectedPieceId(pieceId)}
+              onSelectPending={selectPendingPiece}
+              onSelectPiece={selectPiece}
             />
           )}
 
