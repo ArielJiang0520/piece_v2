@@ -11,6 +11,7 @@ interface GenerateControlsProps {
   streaming: boolean
   settingsOpen: boolean
   disabled: boolean
+  hasExistingPieces: boolean
   model: string
   onModelChange: (model: string) => void
   readingSpeed: number
@@ -36,6 +37,7 @@ export default function GenerateControls({
   streaming,
   settingsOpen,
   disabled,
+  hasExistingPieces,
   model,
   onModelChange,
   readingSpeed,
@@ -93,7 +95,7 @@ export default function GenerateControls({
         </button>
       )}
 
-      <div className={`sticky top-12 mt-2 bg-paper/0 py-3 ${settingsRendered ? 'z-50' : 'z-10'}`}>
+      <div className={`sticky top-16 mt-2 bg-paper/0 py-3 ${settingsRendered ? 'z-50' : 'z-10'}`}>
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -101,7 +103,7 @@ export default function GenerateControls({
             onClick={onGenerate}
             disabled={disabled}
           >
-            {generateButtonLabel(phase)}
+            {generateButtonLabel(phase, hasExistingPieces)}
           </button>
           <button
             type="button"
@@ -173,10 +175,11 @@ export default function GenerateControls({
   )
 }
 
-function generateButtonLabel(phase: GenerationPhase) {
+function generateButtonLabel(phase: GenerationPhase, hasExistingPieces: boolean) {
   if (phase === 'waiting_provider') return 'Waiting...'
   if (phase === 'thinking') return 'Thinking...'
   if (phase === 'writing') return 'Writing...'
+  if (!hasExistingPieces) return `Write first ${entityLabel('piece')}`
   return `Write another ${entityLabel('piece')}`
 }
 

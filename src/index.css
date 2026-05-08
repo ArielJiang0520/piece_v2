@@ -3,3 +3,13 @@
 @import "./tokens.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :is(button, a, input, textarea, select, summary, [role="button"], [tabindex]):focus,
+  :is(button, a, input, textarea, select, summary, [role="button"], [tabindex]):focus-visible {
+    outline: none !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+    --tw-inset-ring-shadow: 0 0 #0000 !important;
+  }
+}

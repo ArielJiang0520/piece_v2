@@ -19,6 +19,10 @@ export default function PromptCard({
   locked = false,
 }: PromptCardProps) {
   const promptLabel = entityLabel('prompt', { capitalize: true })
+  const editorFrameClass =
+    'rounded-lg border border-rose-line/80 bg-paper px-4 py-4 shadow-[inset_0_0_38px_rgba(205,83,106,0.055)] transition-colors focus-within:border-rose/60 focus-within:shadow-[inset_0_0_42px_rgba(205,83,106,0.085)]'
+  const editorTextClass =
+    'font-serif-zh text-[16px] leading-6 text-ink tracking-normal'
 
   return (
     <div className="bg-paper/95 px-2 py-4">
@@ -29,20 +33,22 @@ export default function PromptCard({
       ) : (
         <div>
           {locked ? (
-            <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-0 pb-4 pt-3 font-serif-zh text-[22px]   leading-[1.55] text-ink tracking-normal">
+            <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-4 pb-3 pt-3 font-serif-zh text-[20px] leading-[1.55] text-ink tracking-normal">
               {prompt}
             </p>
           ) : (
-            <textarea
-              id="prompt-input"
-              aria-label={promptLabel}
-              className="h-44 w-full resize-y bg-transparent px-0 py-3 font-serif-zh text-[18px] leading-8 text-ink placeholder-ink-4 focus:outline-none focus:ring-0 disabled:opacity-50"
-              rows={6}
-              placeholder={`What do you want to see happen?`}
-              value={prompt}
-              onChange={e => onPromptChange(e.target.value)}
-              disabled={streaming}
-            />
+            <div className={editorFrameClass}>
+              <textarea
+                id="prompt-input"
+                aria-label={promptLabel}
+                className={`${editorTextClass} h-44 w-full resize-y bg-transparent placeholder:text-ink-4 focus:outline-none focus:ring-0 disabled:opacity-50 [scrollbar-color:var(--color-rose)_transparent] [scrollbar-width:thin]`}
+                rows={6}
+                placeholder={`What do you want to see happen?`}
+                value={prompt}
+                onChange={e => onPromptChange(e.target.value)}
+                disabled={streaming}
+              />
+            </div>
           )}
         </div>
       )}

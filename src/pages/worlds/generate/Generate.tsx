@@ -233,7 +233,7 @@ export default function Generate() {
             <PromptStateIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
             <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
             <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
-            <span className="t-meta shrink-0">{promptStateLabel}</span>
+            <span className="t-meta shrink-0" style={lockedMode ? undefined : { color: 'var(--color-rose-deep)' }}>{promptStateLabel}</span>
           </div>
 
           <PromptCard
@@ -252,6 +252,7 @@ export default function Generate() {
           streaming={streaming}
           settingsOpen={settingsOpen}
           disabled={generateDisabled}
+          hasExistingPieces={activePromptPieceCount > 0}
           model={model}
           onModelChange={setGenerationModel}
           readingSpeed={readingSpeed}

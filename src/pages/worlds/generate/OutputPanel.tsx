@@ -50,7 +50,7 @@ export default function OutputPanel({
   }, [displayComplete])
 
   const wrapperClass = [
-    'min-h-[55vh] px-2 pt-4 text-sm transition-[padding-bottom] duration-200 ease-out',
+    'min-h-[55vh] px-2 pt-2 text-sm transition-[padding-bottom] duration-200 ease-out',
     streaming ? 'pb-[45vh]' : 'pb-2',
   ].join(' ')
   const previousTokenCount = previousTokenCountRef.current
@@ -81,10 +81,8 @@ export default function OutputPanel({
     <div className={wrapperClass}>
       <div>
         {displayComplete && pieceMetaLabel && (
-          <div className="fade-in-up t-meta mb-8 flex items-center gap-3">
-            <span className="h-px flex-1 bg-rose-line" />
-            <span>{pieceMetaLabel}</span>
-            <span className="h-px flex-1 bg-rose-line" />
+          <div className="fade-in-up t-meta mb-4 flex items-center gap-3">
+            {pieceMetaLabel}
           </div>
         )}
         <p className={outputTextClass} style={outputTextStyle}>
