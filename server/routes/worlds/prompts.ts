@@ -3,7 +3,7 @@ import { eq, and, desc, sql } from 'drizzle-orm'
 import { db, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findCurrentWorldVersionId, findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
-import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
+import { clusterPromptById } from '../../prompt-clustering'
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 
 const promptRoutes = new Hono<{ Variables: Variables }>()
@@ -135,27 +135,6 @@ promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
     limit,
     hasMore: rows.length > limit,
   })
-})
-
-promptRoutes.delete('/:promptId', authMiddleware, (c: any) => {
-  const userId = getUserId(c)
-  const worldId = paramInt(c, 'id')
-  const promptId = paramInt(c, 'promptId')
-  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
-
-  const prompt = db
-    .select({ id: prompts.id, cluster_id: prompts.cluster_id })
-    .from(prompts)
-    .where(and(eq(prompts.id, promptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-    .get()
-  if (!prompt) return c.json({ error: 'Prompt not found' }, 404)
-
-  db.delete(prompts)
-    .where(and(eq(prompts.id, promptId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-    .run()
-  recomputePromptCluster(prompt.cluster_id)
-
-  return c.json({ ok: true, cluster_id: prompt.cluster_id })
 })
 
 export default promptRoutes

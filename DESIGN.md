@@ -143,12 +143,3 @@ What changed: the box dissolved, the title is serif, metadata is italic serif se
 Ask: *"Does this element exist because the content needs it, or because I'm afraid the page looks too empty?"*
 
 Most of the time, it's the second. Delete it. Air is doing the work.
-
-## File map
-
-- [src/tokens.css](src/tokens.css) — all tokens, all utility classes. Foundation.
-- [src/components/RelativeTimeStatus.tsx](src/components/RelativeTimeStatus.tsx) — italic serif metadata + pink dot. Reuse, don't reinvent.
-- [src/components/TopNav.tsx](src/components/TopNav.tsx) — chrome reference for the eyebrow + hairline pattern.
-- [src/pages/worlds/WorldList.tsx](src/pages/worlds/WorldList.tsx) — canonical hairline list. Look here when adding new list pages.
-- [src/pages/worlds/prompts/Prompt.tsx](src/pages/worlds/prompts/Prompt.tsx) — canonical detail page with drop-cap.
-- [src/pages/worlds/clusters/PromptVariationCard.tsx](src/pages/worlds/clusters/PromptVariationCard.tsx) — canonical "timeline" pattern (rose-line connector, italic serif numerals).

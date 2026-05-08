@@ -196,20 +196,6 @@ body {
   opacity: 0.55;
 }
 
-/* ---------- Drop cap (used on prompt detail) ---------- */
-
-.drop-cap::first-letter {
-  font-family: var(--font-serif-zh);
-  font-style: italic;
-  font-weight: 500;
-  float: left;
-  font-size: 3.4em;
-  line-height: 0.85;
-  margin-right: 0.08em;
-  margin-top: 0.06em;
-  color: var(--color-rose);
-}
-
 /* ---------- Animations ---------- */
 
 @keyframes fadeInUp {
