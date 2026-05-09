@@ -85,6 +85,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
       const provider = {
+        sort: 'latency',
         require_parameters: true,
         only: modelOption.preferredProviders,
       }

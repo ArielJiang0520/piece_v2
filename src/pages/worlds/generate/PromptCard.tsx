@@ -1,4 +1,3 @@
-import { LockKeyhole } from 'lucide-react'
 import Skeleton from '@/components/Skeleton'
 import { entityLabel } from '@/config'
 
@@ -20,14 +19,13 @@ export default function PromptCard({
   locked = false,
 }: PromptCardProps) {
   const promptLabel = entityLabel('prompt', { capitalize: true })
-  const promptStateTitle = `Saved version`
   const editorFrameClass =
     'rounded-lg border border-rose-line/80 bg-paper px-4 py-4 shadow-[inset_0_0_38px_rgba(205,83,106,0.055)] transition-colors focus-within:border-rose/60 focus-within:shadow-[inset_0_0_42px_rgba(205,83,106,0.085)]'
   const editorTextClass =
     'font-serif-zh text-[16px] leading-6 text-ink tracking-normal'
 
   return (
-    <div className="bg-paper/95 px-2 py-4">
+    <div className="bg-paper/95 px-2 py-2">
       {loading ? (
         <div>
           <Skeleton className="h-32 w-full" />
@@ -36,13 +34,7 @@ export default function PromptCard({
         <div>
           {locked ? (
             <>
-              <div className="flex justify-start px-4 pb-1 pt-1">
-                {/* <span className="flex min-w-0 items-center gap-2 text-ink-3">
-                  <LockKeyhole aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                  <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
-                  <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
-                  <span className="t-meta shrink-0">Read-only</span>
-                </span> */}
+              <div className="flex justify-start px-4 pb-1 pt-0">
               </div>
               <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-4 pb-3 pt-2 font-serif-zh text-[20px] leading-[1.55] text-ink tracking-normal">
                 {prompt}

@@ -20,14 +20,14 @@ export const MODELS: ModelOption[] = [
     label: 'DeepSeek V4 Pro',
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['parasail/fp8'],
+    preferredProviders: ['parasail/fp8', 'deepinfra/fp4'],
   },
   {
     id: 'deepseek/deepseek-v4-flash',
     label: 'DeepSeek V4 Flash',
     attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['parasail/fp8'],
+    preferredProviders: ['parasail/fp8', 'deepinfra/fp4'],
   },
   {
     id: 'z-ai/glm-5',

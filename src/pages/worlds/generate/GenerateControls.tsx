@@ -26,6 +26,7 @@ interface GenerateControlsProps {
   onToggleSettings: () => void
   onCloseSettings: () => void
   onStop: () => void
+  stickyTopClass?: string
 }
 
 const iconButtonClass =
@@ -54,6 +55,7 @@ export default function GenerateControls({
   onToggleSettings,
   onCloseSettings,
   onStop,
+  stickyTopClass = 'top-16',
 }: GenerateControlsProps) {
   const settingsPanelId = useId()
   const [settingsRendered, setSettingsRendered] = useState(settingsOpen)
@@ -101,7 +103,7 @@ export default function GenerateControls({
         </button>
       )}
 
-      <div className={`sticky top-16 mt-2 bg-paper/0 py-3 ${modelMenuOpen ? 'z-50' : 'z-10'}`}>
+      <div className={`sticky ${stickyTopClass} mt-2 bg-paper/0 py-3 ${modelMenuOpen ? 'z-50' : 'z-10'}`}>
         <div className="flex items-center justify-center">
           <div className="flex w-[78%] max-w-md min-w-0 flex-col items-center">
             <button

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowDownUp, ChevronRight, GitBranch, LockKeyhole, Pencil } from 'lucide-react'
+import { LockKeyhole, Pencil } from 'lucide-react'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel } from '@/config'
@@ -15,13 +15,15 @@ import PromptCard from './PromptCard'
 import PieceStrip from './PieceStrip'
 import OutputPanel from './OutputPanel'
 import GenerateControls from './GenerateControls'
-import GenerateVersionsDrawer from './VersionsDrawer'
+import GenerateVersionsPanel from './VersionsPanel'
 import { useGenerateData } from './useGenerateData'
 import { useGeneratePieceSession } from './useGeneratePieceSession'
 import type { ClusterPrompt } from './generateTypes'
 
 const GENERATION_TEMPERATURE = 1
 const USE_THINKING = false
+
+type GenerateTab = 'prompt' | 'versions'
 
 interface VersionDraftState {
   promptText: string
@@ -60,10 +62,9 @@ export default function Generate() {
   const routeState = location.state as { draftPrompt?: unknown; versionDraft?: unknown } | null
   const versionDraft = parseVersionDraft(routeState?.versionDraft)
   const draftPrompt = versionDraft?.promptText ?? (typeof routeState?.draftPrompt === 'string' ? routeState.draftPrompt : '')
-  const draftVersionNumber = !lockedMode ? versionDraft?.versionNumber ?? null : null
   const versionSourcePromptId = !lockedMode ? versionDraft?.sourcePromptId ?? null : null
   const versionSourceClusterId = !lockedMode ? versionDraft?.sourceClusterId ?? null : null
-  const [versionsOpen, setVersionsOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<GenerateTab>('prompt')
   const [prompt, setPrompt] = useState(draftPrompt)
   const normalizedPrompt = prompt.trim()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -130,13 +131,7 @@ export default function Generate() {
     resetGeneration: reset,
   })
   const nextVersionNumber = clusterPrompts.length + 1
-  const showVersionsButton = activeClusterId != null
-  const currentVersionNumber = queryPromptId
-    ? clusterPrompts.findIndex((clusterPrompt: { id: any }) => String(clusterPrompt.id) === queryPromptId) + 1
-    : 0
-  const displayedVersionNumber = draftVersionNumber ?? (currentVersionNumber > 0 ? currentVersionNumber : null)
-  const isLatestVersion = lockedMode && currentVersionNumber > 0 && currentVersionNumber === clusterPrompts.length
-  const versionsLabel = displayedVersionNumber !== null ? `Version ${displayedVersionNumber}` : 'Versions'
+  const showGenerateTabs = activeClusterId != null
   const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
   const pulseGenerateCta = lockedMode && !promptDetailsLoading && activePromptPieceCount === 0
   const showPieceStrip = lockedMode && (activePromptPieceCount > 0 || pendingPieceNumber !== null)
@@ -144,8 +139,40 @@ export default function Generate() {
   const promptStateTitle = lockedMode ? `Saved ${entityLabel('prompt')}` : `Draft ${entityLabel('prompt')}`
   const promptStateLabel = lockedMode ? 'Read-only' : 'Editable'
   const promptEditLabel = `Open to edit this ${entityLabel('prompt')}`
+  const generateTabs = useMemo(() => {
+    if (!showGenerateTabs) return undefined
 
-  useTopNavConfig({ backHref, secondaryTitle: entityLabel('prompt') })
+    return (
+      <nav
+        className="page-width border-b border-rose-line/80"
+        aria-label="Generate view"
+      >
+        <div
+          className="grid grid-cols-2 px-4"
+          role="tablist"
+          aria-label="Generate view"
+        >
+          <GenerateTabButton
+            active={activeTab === 'prompt'}
+            onClick={() => setActiveTab('prompt')}
+          >
+            {entityLabel('prompt')}
+          </GenerateTabButton>
+          <GenerateTabButton
+            active={activeTab === 'versions'}
+            onClick={() => setActiveTab('versions')}
+          >
+            <span>Versions</span>
+            <span className="inline-flex min-w-5 justify-center rounded-full bg-paper-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none tracking-normal text-ink-3 ring-1 ring-paper-3/70">
+              {clusterPrompts.length}
+            </span>
+          </GenerateTabButton>
+        </div>
+      </nav>
+    )
+  }, [activeTab, clusterPrompts.length, showGenerateTabs])
+
+  useTopNavConfig({ backHref, bottomSlot: generateTabs })
 
   useEffect(() => {
     if (queryPromptId) return
@@ -158,8 +185,8 @@ export default function Generate() {
   }, [activePrompt, queryPromptId])
 
   useEffect(() => {
-    if (!showVersionsButton) setVersionsOpen(false)
-  }, [showVersionsButton])
+    if (!showGenerateTabs) setActiveTab('prompt')
+  }, [showGenerateTabs])
 
   const promptError = promptDetailsError ? `Could not load ${entityLabel('prompt')}` : ''
   const error = generationError || promptError
@@ -187,7 +214,7 @@ export default function Generate() {
 
   function handleEditFromPrompt(sourcePrompt: ClusterPrompt) {
     if (!id || activeClusterId == null || streaming) return
-    setVersionsOpen(false)
+    setActiveTab('prompt')
     navigate(`/worlds/${id}/generate`, {
       state: {
         versionDraft: {
@@ -201,123 +228,118 @@ export default function Generate() {
   }
 
   return (
-    <>
-      <div className="page-fade-in min-h-screen page-width px-4 pb-32 pt-6">
-        <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''}   bg-paper/95 pb-1`}>
-          {showVersionsButton && (
-            <div className="border-y border-rose-line/70 py-1">
-              <button
-                type="button"
-                className="flex w-full items-center gap-1 text-left transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-                aria-label="Open versions"
-                title="Open versions"
-                aria-expanded={versionsOpen}
-                onClick={() => setVersionsOpen(true)}
-              >
-                <GitBranch aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 text-ink-3" />
-                <span className="min-w-0 flex-1 m-2">
-                  <span className="flex min-w-0 items-baseline gap-1.5 font-serif-zh text-sm italic leading-5 text-ink">
-                    <span className="truncate">{versionsLabel}</span>
-                    {isLatestVersion && (
-                      <span className="shrink-0 text-xs text-rose-deep">(latest)</span>
-                    )}
-                  </span>
-                  {lockedMode ? (
-                    <span className="mt-0.5 block t-meta text-ink-3">{promptEditLabel}</span>
-                  ) : (
-                    <span className="mt-0.5 block t-meta text-ink-3">
-                      {promptStateTitle} · {promptStateLabel}
-                    </span>
-                  )}
-                </span>
-                <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" />
-              </button>
-            </div>
-          )}
+    <div className="page-fade-in min-h-screen page-width px-4 pb-32 pt-6">
+      {activeTab === 'prompt' ? (
+        <>
+          <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''} bg-paper/95 pb-1`}>
+            {!showGenerateTabs && (
+              <div className="flex items-center gap-2 px-2 pt-4 text-ink-3">
+                {lockedMode ? (
+                  <span className="t-meta text-ink-3">{promptEditLabel}</span>
+                ) : (
+                  <>
+                    <PromptStateIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                    <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
+                    <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
+                    <span className="t-meta shrink-0" style={{ color: 'var(--color-rose-deep)' }}>{promptStateLabel}</span>
+                  </>
+                )}
+              </div>
+            )}
 
-          {!showVersionsButton && (
-            <div className="flex items-center gap-2 px-2 pt-4 text-ink-3">
-              {lockedMode ? (
-                <span className="t-meta text-ink-3">{promptEditLabel}</span>
-              ) : (
-                <>
-                  <PromptStateIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                  <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
-                  <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
-                  <span className="t-meta shrink-0" style={{ color: 'var(--color-rose-deep)' }}>{promptStateLabel}</span>
-                </>
-              )}
-            </div>
-          )}
-
-          <PromptCard
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            loading={promptDetailsLoading}
-            streaming={streaming}
-            error={error}
-            locked={lockedMode}
-          />
-
-        </div>
-
-        <GenerateControls
-          phase={phase}
-          streaming={streaming}
-          settingsOpen={settingsOpen}
-          disabled={generateDisabled}
-          hasExistingPieces={activePromptPieceCount > 0}
-          pulseCta={pulseGenerateCta}
-          model={model}
-          onModelChange={setGenerationModel}
-          readingSpeed={readingSpeed}
-          onReadingSpeedChange={setReadingSpeedUnitsPerSecond}
-          readingFont={readingFont}
-          onReadingFontChange={setReadingFont}
-          readingFontSize={readingFontSize}
-          onReadingFontSizeChange={setReadingFontSize}
-          onGenerate={handleGenerate}
-          onToggleSettings={() => setSettingsOpen(open => !open)}
-          onCloseSettings={() => setSettingsOpen(false)}
-          onStop={handleStop}
-        />
-
-        <section className="mt-2 border-t border-rose-line/70 bg-paper/60">
-          {showPieceStrip && (
-            <PieceStrip
-              pieces={promptPieces}
-              promptPieceCount={activePromptPieceCount}
-              selectedPieceId={selectedPieceId}
-              pendingPieceNumber={pendingPieceNumber}
-              pendingSelected={viewingPendingPiece}
-              disabled={streaming}
-              onSelectPending={selectPendingPiece}
-              onSelectPiece={selectPiece}
+            <PromptCard
+              prompt={prompt}
+              onPromptChange={setPrompt}
+              loading={promptDetailsLoading}
+              streaming={streaming}
+              error={error}
+              locked={lockedMode}
             />
-          )}
+          </div>
 
-          <OutputPanel
-            output={displayedOutput}
+          <GenerateControls
             phase={phase}
             streaming={streaming}
-            displayComplete={outputDisplayComplete}
-            pieceMetaLabel={displayedPieceMetaLabel}
+            settingsOpen={settingsOpen}
+            disabled={generateDisabled}
+            hasExistingPieces={activePromptPieceCount > 0}
+            pulseCta={pulseGenerateCta}
+            model={model}
+            onModelChange={setGenerationModel}
+            readingSpeed={readingSpeed}
+            onReadingSpeedChange={setReadingSpeedUnitsPerSecond}
             readingFont={readingFont}
+            onReadingFontChange={setReadingFont}
             readingFontSize={readingFontSize}
+            onReadingFontSizeChange={setReadingFontSize}
+            onGenerate={handleGenerate}
+            onToggleSettings={() => setSettingsOpen(open => !open)}
+            onCloseSettings={() => setSettingsOpen(false)}
+            onStop={handleStop}
+            stickyTopClass={showGenerateTabs ? 'top-23' : 'top-16'}
+          />
+
+          <section className="mt-2 border-t border-rose-line/70 bg-paper/60">
+            {showPieceStrip && (
+              <PieceStrip
+                pieces={promptPieces}
+                promptPieceCount={activePromptPieceCount}
+                selectedPieceId={selectedPieceId}
+                pendingPieceNumber={pendingPieceNumber}
+                pendingSelected={viewingPendingPiece}
+                disabled={streaming}
+                onSelectPending={selectPendingPiece}
+                onSelectPiece={selectPiece}
+              />
+            )}
+
+            <OutputPanel
+              output={displayedOutput}
+              phase={phase}
+              streaming={streaming}
+              displayComplete={outputDisplayComplete}
+              pieceMetaLabel={displayedPieceMetaLabel}
+              readingFont={readingFont}
+              readingFontSize={readingFontSize}
+            />
+          </section>
+        </>
+      ) : (
+        <section className="bg-paper/95 pb-6 pt-1">
+          <GenerateVersionsPanel
+            worldId={id}
+            currentPromptId={queryPromptId}
+            prompts={clusterPrompts}
+            loading={clusterLoading || promptDetailsLoading}
+            streaming={streaming}
+            onViewPrompt={() => setActiveTab('prompt')}
+            onEditFromPrompt={handleEditFromPrompt}
           />
         </section>
-      </div>
+      )}
+    </div>
+  )
+}
 
-      <GenerateVersionsDrawer
-        open={versionsOpen}
-        worldId={id}
-        currentPromptId={queryPromptId}
-        prompts={clusterPrompts}
-        loading={clusterLoading || promptDetailsLoading}
-        streaming={streaming}
-        onClose={() => setVersionsOpen(false)}
-        onEditFromPrompt={handleEditFromPrompt}
-      />
-    </>
+interface GenerateTabButtonProps {
+  active: boolean
+  children: ReactNode
+  onClick: () => void
+}
+
+function GenerateTabButton({ active, children, onClick }: GenerateTabButtonProps) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      className={`-mb-px inline-flex h-11 min-w-0 items-center justify-center gap-2 border-b-2 px-1 t-eyebrow leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper ${active
+        ? 'border-rose text-ink!'
+        : 'border-transparent text-ink-3! hover:text-ink!'
+        }`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   )
 }

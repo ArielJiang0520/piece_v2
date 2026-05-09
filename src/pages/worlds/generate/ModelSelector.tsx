@@ -49,7 +49,7 @@ export default function ModelSelector({
         onClick={() => setMenuOpen(current => !current)}
         disabled={disabled}
       >
-        {/* <span className="shrink-0 text-ink-4">Model:</span> */}
+        <span className="shrink-0 text-ink-4">AI Engine:</span>
         <span className="min-w-0 truncate text-ink-3">{selectedModel.label}</span>
         <ChevronDown
           className={`size-3 shrink-0 text-ink-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
@@ -64,13 +64,6 @@ export default function ModelSelector({
           role="listbox"
           aria-labelledby={modelButtonId}
         >
-          <div
-            className="px-2.5 pb-2 pt-2.5 font-serif-zh text-[12px] italic leading-none text-rose-deep/85"
-            role="presentation"
-          >
-            Select an AI engine
-          </div>
-          <div className="mx-2.5 mb-0.5 h-px bg-rose-line/80" role="presentation" />
           {MODELS.map(option => {
             const selected = option.id === model
 

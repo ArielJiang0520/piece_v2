@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { useToast } from '@/components/Toast'
 import type { GenerationCompletion } from '@/hooks/useGeneration'
+import { containsChineseText } from '@/preferences/readingSpeed'
 import { relativeTime } from '@/utils/time'
 import {
   PIECE_STRIP_LIMIT,
@@ -240,15 +241,11 @@ export function useGeneratePieceSession({
 }
 
 function outputCountLabel(text: string) {
-  if (containsChinese(text)) {
+  if (containsChineseText(text)) {
     const count = Array.from(text).filter(character => !/\s/u.test(character)).length
     return `${count} ${count === 1 ? 'character' : 'characters'}`
   }
 
   const count = text.match(/[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu)?.length ?? 0
   return `${count} ${count === 1 ? 'word' : 'words'}`
-}
-
-function containsChinese(text: string) {
-  return /[\u3400-\u9fff\uf900-\ufaff]/u.test(text)
 }

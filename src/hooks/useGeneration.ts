@@ -1,5 +1,8 @@
 import { useEffect, useReducer, useRef } from 'react'
-import { useReadingSpeedUnitsPerSecond } from '@/preferences/readingSpeed'
+import {
+  getHiddenReadingSpeedUnitsPerSecond,
+  useReadingSpeedUnitsPerSecond,
+} from '@/preferences/readingSpeed'
 import { createRandomId } from '@/utils/id'
 import { readServerSentEvents } from '@/utils/sse'
 
@@ -131,7 +134,11 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     lastChunkFlushAtRef.current = now
 
     const budget = Math.min(
-      displayUnitBudgetRef.current + (maxDisplayUnitsPerSecondRef.current * elapsed) / 1000,
+      displayUnitBudgetRef.current
+        + (getHiddenReadingSpeedUnitsPerSecond(
+          pendingChunkRef.current,
+          maxDisplayUnitsPerSecondRef.current,
+        ) * elapsed) / 1000,
       MAX_DISPLAY_UNITS_PER_FLUSH,
     )
     const allowance = Math.max(1, Math.floor(budget))
