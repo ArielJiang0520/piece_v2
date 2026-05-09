@@ -36,21 +36,23 @@ export default function ModelSelector({
   }
 
   return (
-    <div className="relative -mt-px flex h-7 w-[78%] min-w-0 justify-center rounded-b-full border border-t-0 border-rose-line bg-paper/70 px-1 pb-0.5 shadow-(--shadow-feather)">
+    <div className="relative mt-2 flex w-full min-w-0 justify-center">
       <button
         id={modelButtonId}
         type="button"
-        className="relative inline-flex h-full w-full max-w-full items-center justify-center rounded-b-full bg-transparent pl-4 pr-7 font-serif-zh text-[11px] italic leading-none text-ink-3 transition-colors duration-200 hover:bg-rose-pale/45 hover:text-ink focus:outline-none disabled:pointer-events-none disabled:opacity-50"
+        className="inline-flex max-w-full items-center justify-center gap-1.5 px-2 py-1.5 font-serif-zh text-[11px] italic leading-none text-ink-3 focus:outline-none disabled:pointer-events-none disabled:opacity-50"
         aria-label="Select AI engine"
         aria-haspopup="listbox"
         aria-expanded={menuOpen}
         aria-controls={modelListboxId}
+        title={selectedModel.label}
         onClick={() => setMenuOpen(current => !current)}
         disabled={disabled}
       >
-        <span className="min-w-0 truncate">{selectedModel.label}</span>
+        {/* <span className="shrink-0 text-ink-4">Model:</span> */}
+        <span className="min-w-0 truncate text-ink-3">{selectedModel.label}</span>
         <ChevronDown
-          className={`absolute right-3 top-1/2 size-3 -translate-y-1/2 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
+          className={`size-3 shrink-0 text-ink-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
           aria-hidden="true"
         />
       </button>
@@ -58,7 +60,7 @@ export default function ModelSelector({
       {menuOpen && (
         <div
           id={modelListboxId}
-          className="absolute right-0 top-full z-40 mt-1 w-[min(14rem,calc(100vw-2rem))] overflow-hidden rounded-sm border border-rose-line bg-paper p-0.5 shadow-(--shadow-menu)"
+          className="absolute right-0 top-full z-40 mt-2 w-[min(15rem,calc(100vw-2rem))] overflow-hidden rounded-sm border border-rose-line bg-paper p-0.5 shadow-(--shadow-menu)"
           role="listbox"
           aria-labelledby={modelButtonId}
         >

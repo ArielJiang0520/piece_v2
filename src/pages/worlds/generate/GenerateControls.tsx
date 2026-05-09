@@ -103,10 +103,10 @@ export default function GenerateControls({
 
       <div className={`sticky top-16 mt-2 bg-paper/0 py-3 ${modelMenuOpen ? 'z-50' : 'z-10'}`}>
         <div className="flex items-center justify-center">
-          <div className="flex w-[78%] min-w-0 flex-col items-center transition-all duration-200 focus-within:ring-4 focus-within:ring-rose/15">
+          <div className="flex w-[78%] max-w-md min-w-0 flex-col items-center">
             <button
               type="button"
-              className={`inline-flex h-10 w-full min-w-0 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white opacity-100 shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none disabled:pointer-events-none disabled:opacity-50 sm:px-6 ${pulseCta && !disabled ? 'cta-attention-pulse' : ''}`}
+              className={`inline-flex h-10 w-full min-w-0 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white opacity-100 shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] duration-200 hover:bg-rose-deep focus:outline-none disabled:pointer-events-none disabled:opacity-50 sm:px-6 ${pulseCta && !disabled ? 'cta-attention-pulse' : ''}`}
               onClick={onGenerate}
               disabled={disabled}
             >

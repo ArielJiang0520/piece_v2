@@ -203,7 +203,7 @@ export default function Generate() {
   return (
     <>
       <div className="page-fade-in min-h-screen page-width px-4 pb-32 pt-6">
-        <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''} border-b border-rose-line/70 bg-paper/95 pb-1`}>
+        <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''}   bg-paper/95 pb-1`}>
           {showVersionsButton && (
             <div className="border-y border-rose-line/70 py-1">
               <button
