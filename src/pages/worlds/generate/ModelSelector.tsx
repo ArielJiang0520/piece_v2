@@ -36,11 +36,11 @@ export default function ModelSelector({
   }
 
   return (
-    <div className="relative flex min-w-0 max-w-[40%] flex-[0_1_9.75rem] justify-end">
+    <div className="relative -mt-px flex h-7 w-[78%] min-w-0 justify-center rounded-b-full border border-t-0 border-rose-line bg-paper/70 px-1 pb-0.5 shadow-(--shadow-feather)">
       <button
         id={modelButtonId}
         type="button"
-        className="relative inline-flex h-10 w-full max-w-full items-center justify-start rounded-full bg-transparent pl-3 pr-8 font-serif-zh text-[12px] italic leading-none text-ink-3 transition-colors duration-200 hover:bg-rose-pale/45 hover:text-ink focus:outline-none disabled:pointer-events-none disabled:opacity-50"
+        className="relative inline-flex h-full w-full max-w-full items-center justify-center rounded-b-full bg-transparent pl-4 pr-7 font-serif-zh text-[11px] italic leading-none text-ink-3 transition-colors duration-200 hover:bg-rose-pale/45 hover:text-ink focus:outline-none disabled:pointer-events-none disabled:opacity-50"
         aria-label="Select AI engine"
         aria-haspopup="listbox"
         aria-expanded={menuOpen}

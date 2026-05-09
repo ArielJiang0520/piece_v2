@@ -5,6 +5,7 @@ export interface TopNavConfig {
   secondaryTitle?: string
   backHref?: string
   rightAction?: ReactNode
+  bottomSlot?: ReactNode
 }
 
 export const TopNavConfigContext = createContext<TopNavConfig>({})
@@ -16,9 +17,9 @@ export function useCurrentTopNavConfig() {
 
 export function useTopNavConfig(config: TopNavConfig) {
   const setConfig = useContext(TopNavSetConfigContext)
-  const { mainTitle, secondaryTitle, backHref, rightAction } = config
+  const { mainTitle, secondaryTitle, backHref, rightAction, bottomSlot } = config
   useEffect(() => {
-    setConfig({ mainTitle, secondaryTitle, backHref, rightAction })
+    setConfig({ mainTitle, secondaryTitle, backHref, rightAction, bottomSlot })
     return () => setConfig({})
-  }, [setConfig, mainTitle, secondaryTitle, backHref, rightAction])
+  }, [setConfig, mainTitle, secondaryTitle, backHref, rightAction, bottomSlot])
 }

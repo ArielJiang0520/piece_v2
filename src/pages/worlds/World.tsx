@@ -6,11 +6,12 @@ import { apiFetch } from '@/api'
 import { entityLabel } from '@/config'
 import { useScrollReturn } from '@/hooks/useScrollReturn'
 import CountIndicator from '@/components/CountIndicator'
+import ListEndMarker from '@/components/ListEndMarker'
 import RelativeTimeStatus from '@/components/RelativeTimeStatus'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import TextField from '@/components/TextField'
 import { useTopNavConfig } from '@/components/topNavConfig'
-import WorldHeader from './WorldHeader'
+import WorldTabs from './WorldTabs'
 
 interface ClusterGroup {
   id: number
@@ -259,21 +260,32 @@ export default function World() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const worldName = worldQuery.data?.name ?? ''
   const firstPage = pages[0]
   const totalClusters = firstPage?.total ?? 0
   const searchTotal = searchQuery.data?.items.length ?? 0
-  useTopNavConfig({ backHref: '/worlds' })
+  const worldTabs = useMemo(
+    () => (
+      <WorldTabs
+        active="prompts"
+        worldId={id}
+        promptCount={clustersQuery.data ? totalClusters : undefined}
+      />
+    ),
+    [clustersQuery.data, id, totalClusters],
+  )
+  useTopNavConfig({ backHref: '/worlds', bottomSlot: worldTabs })
 
   if (!worldQuery.data || (isSearching ? false : !clustersQuery.data)) {
     return (
       <div className="min-h-screen bg-paper">
-        <div className="page-width min-h-screen px-6 pb-32 pt-12">
-          <header>
-            <Skeleton className="h-11 w-52" />
-            <Skeleton className="mt-6 h-11 w-full rounded-full" />
-          </header>
-          <Skeleton className="mt-6 h-11 w-full rounded-md" />
+        <div className="page-width min-h-screen px-6 pb-32 pt-0">
+          <Skeleton className="mt-6 h-11 w-48" />
+          <div className="sticky top-23 z-10 -mx-6 mt-6 border-y border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
+            <div className="flex items-center gap-3 py-3">
+              <Skeleton className="h-11 min-w-0 flex-1 rounded-full" />
+              <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+            </div>
+          </div>
           <div className="mt-5 flex items-center justify-between gap-4">
             <Skeleton className="h-3 w-24" />
             <Skeleton className="h-6 w-20" />
@@ -287,79 +299,46 @@ export default function World() {
   return (
     <div className="page-fade-in min-h-screen bg-paper">
       <div className="page-width min-h-screen px-6 pb-32 pt-0">
-        <WorldHeader
-          active="prompts"
-          name={worldName}
-          worldId={id}
-        />
-
-        <div className="mt-6 flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <TextField
-              type="text"
-              value={searchInput}
-              onChange={event => setSearchInput(event.target.value)}
-              placeholder={`Search ${entityLabel('prompt', { plural: true })} by meaning...`}
-              aria-label={`Search ${entityLabel('prompt', { plural: true })}`}
-              variant="search"
-              leadingAdornment={<Search aria-hidden="true" className="h-4 w-4 text-ink-4" />}
-              trailingAdornment={searchInput && (
-                <button
-                  type="button"
-                  onClick={() => setSearchInput('')}
-                  className="grid h-6 w-6 place-items-center rounded-full text-ink-4 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
-                  aria-label="Clear search"
-                  title="Clear search"
-                >
-                  <X aria-hidden="true" className="h-3.5 w-3.5" />
-                </button>
-              )}
-            />
-          </div>
-          <Link
-            to={`/worlds/${id}/generate`}
-            className="inline-flex h-12 shrink-0 items-center justify-center gap-2.5 rounded-full bg-rose py-2.5 pl-2.5 pr-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
-            aria-label={`New ${entityLabel('prompt', { capitalize: true })}`}
-          >
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-white/15">
-              <Plus aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
-            </span>
-            New {entityLabel('prompt', { capitalize: true })}
-          </Link>
-        </div>
-
-        <div className="mt-6 flex items-baseline justify-between gap-4">
-          <div className="t-eyebrow">
-            {loadingSearch ? (
-              <Skeleton className="h-3 w-24" />
-            ) : isSearching ? (
-              <>
-                <span className="text-rose">{searchTotal}</span>{' '}
-                {searchTotal === 1 ? 'match' : 'matches'}
-              </>
-            ) : (
-              <>
-                <span className="text-rose">{totalClusters}</span>{' '}
-                {entityLabel('prompt', { plural: totalClusters !== 1 })}
-              </>
-            )}
-          </div>
-          {!isSearching && groups.length > 0 && (
-            <div ref={sortMenuRef} className="relative">
+        <div className="sticky top-23 z-10 -mx-6 mt-6 border-y border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
+          <div className="flex items-center gap-3 py-3">
+            <div className="min-w-0 flex-1">
+              <TextField
+                type="text"
+                value={searchInput}
+                onChange={event => setSearchInput(event.target.value)}
+                placeholder={`Search ${entityLabel('prompt', { plural: true })} by meaning...`}
+                aria-label={`Search ${entityLabel('prompt', { plural: true })}`}
+                variant="search"
+                leadingAdornment={<Search aria-hidden="true" className="h-4 w-4 text-ink-4" />}
+                trailingAdornment={searchInput && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchInput('')}
+                    className="grid h-6 w-6 place-items-center rounded-full text-ink-4 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
+                    aria-label="Clear search"
+                    title="Clear search"
+                  >
+                    <X aria-hidden="true" className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              />
+            </div>
+            <div ref={sortMenuRef} className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setSortOpen(open => !open)}
-                className="t-meta flex items-center gap-1.5 transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+                className="grid h-12 w-12 place-items-center rounded-full border border-rose-line/80 bg-paper/60 text-ink-3 shadow-[inset_0_0_24px_rgba(205,83,106,0.03)] transition-[border-color,background-color,color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-tint/45 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                aria-label={`Sort by ${SORT_OPTIONS.find(o => o.value === sort)?.label}`}
+                title={`Sort by ${SORT_OPTIONS.find(o => o.value === sort)?.label}`}
                 aria-haspopup="menu"
                 aria-expanded={sortOpen}
               >
-                <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5" />
-                <span>{SORT_OPTIONS.find(o => o.value === sort)?.label}</span>
+                <ArrowUpDown aria-hidden="true" className="h-4.5 w-4.5" />
               </button>
               {sortOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 top-full z-10 mt-2 w-52 overflow-hidden rounded-md bg-paper shadow-(--shadow-menu)"
+                  className="absolute right-0 top-full z-20 mt-2 w-52 overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
                 >
                   {SORT_OPTIONS.map(option => (
                     <button
@@ -368,7 +347,7 @@ export default function World() {
                       role="menuitemradio"
                       aria-checked={sort === option.value}
                       onClick={() => handleSortChange(option.value)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left font-serif-zh text-sm italic text-ink-2 transition-colors hover:text-ink focus:outline-none focus:bg-rose-tint"
+                      className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left font-serif-zh text-sm italic text-ink-2 transition-colors hover:bg-rose-tint/50 hover:text-ink focus:outline-none focus:bg-rose-tint"
                     >
                       <span>{option.label}</span>
                       {sort === option.value && (
@@ -379,8 +358,34 @@ export default function World() {
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
+
+        {(loadingSearch || isSearching) && (
+          <div className="mt-5 flex items-baseline justify-between gap-4">
+            <div className="t-eyebrow">
+              {loadingSearch ? (
+                <Skeleton className="h-3 w-24" />
+              ) : (
+                <>
+                  <span className="text-rose">{searchTotal}</span>{' '}
+                  {searchTotal === 1 ? 'match' : 'matches'}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <Link
+          to={`/worlds/${id}/generate`}
+          className="fixed bottom-[calc(1.75rem+env(safe-area-inset-bottom))] right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-rose font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 sm:right-7 sm:w-auto sm:gap-2.5 sm:pl-2.5 sm:pr-5"
+          aria-label={`New ${entityLabel('prompt', { capitalize: true })}`}
+        >
+          <span className="grid h-7 w-7 place-items-center rounded-full">
+            <Plus aria-hidden="true" className="h-6 w-6 stroke-[1.8]" />
+          </span>
+          <span className="hidden sm:inline">New {entityLabel('prompt', { capitalize: true })}</span>
+        </Link>
 
         {loadingSearch ? (
           <ClusterCardSkeletons count={3} />
@@ -394,7 +399,7 @@ export default function World() {
           </div>
         ) : (
           <>
-            <ul className="hairline-list mt-6 flex flex-col">
+            <ul className="hairline-list mt-2 flex flex-col [&>li:first-child>a]:pt-5">
               {groups.map((group, index) => (
                 <li
                   key={group.id}
@@ -438,17 +443,23 @@ export default function World() {
 
             {!isSearching && (
               <>
-                <div ref={loadMoreRef} className="mt-7 min-h-8 text-center text-sm text-ink-4">
+                <div
+                  ref={loadMoreRef}
+                  className={isFetchingNextPage ? 'mt-7 min-h-8 text-center text-sm text-ink-4' : 'h-px'}
+                >
                   {isFetchingNextPage && (
                     <div className="-mt-8">
                       <ClusterCardSkeletons count={1} />
                     </div>
                   )}
                 </div>
-                {!hasNextPage && groups.length > PAGE_SIZE && (
-                  <div className="mt-2 text-center text-xs text-ink-4">End of {entityLabel('prompt', { plural: true })}</div>
+                {!hasNextPage && groups.length > 0 && (
+                  <ListEndMarker label={`End of ${entityLabel('prompt', { plural: true })}`} />
                 )}
               </>
+            )}
+            {isSearching && groups.length > 0 && (
+              <ListEndMarker label="End of matches" />
             )}
           </>
         )}

@@ -144,6 +144,7 @@ export default function TopNav() {
             </div>
           </div>
         )}
+        {config.bottomSlot}
       </div>
 
       <div

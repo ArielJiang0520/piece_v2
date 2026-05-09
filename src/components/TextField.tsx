@@ -34,7 +34,7 @@ const labelBaseClass = 't-eyebrow eyebrow-rule'
 const inputBaseClass =
   'w-full border-b border-rose-line bg-transparent px-0 py-2.5 text-xl leading-snug text-ink placeholder:text-ink-4 focus:border-rose focus:outline-none disabled:opacity-50'
 const searchInputBaseClass =
-  'w-full rounded-full border border-rose-line bg-paper py-2.5 pl-9 pr-9 italic text-[15px] text-ink placeholder:text-ink-4 placeholder:italic focus:border-rose/40 focus:outline-none focus:ring-2 focus:ring-rose/15 disabled:opacity-50'
+  'w-full rounded-full border border-rose-line bg-paper py-2.5 pl-9 pr-9 italic text-[16px] text-ink placeholder:text-ink-4 placeholder:italic focus:border-rose/40 focus:outline-none focus:ring-2 focus:ring-rose/15 disabled:opacity-50'
 const textareaBaseClass =
   'w-full resize-y border-y border-rose-line bg-transparent px-0 py-4 text-[16px] leading-8 text-ink placeholder:text-ink-4 focus:border-rose focus:outline-none disabled:opacity-50'
 

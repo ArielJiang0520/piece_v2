@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, Ellipsis, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronDown, History, Pencil, RotateCcw } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
-import { entityLabel } from '@/config'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { relativeTime } from '@/utils/time'
-import WorldHeader from './WorldHeader'
+import WorldTabs from './WorldTabs'
 
 const ONE_HOUR_MS = 60 * 60 * 1e3
 
@@ -30,26 +29,42 @@ interface WorldVersion extends WorldVersionListItem {
   body: string
 }
 
+interface PromptCountResponse {
+  total: number
+}
+
+interface CachedPromptPages {
+  pages?: Array<{ total?: number }>
+}
+
 export default function WorldAbout() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [versionMenuOpen, setVersionMenuOpen] = useState(false)
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null)
-  const [actionsOpen, setActionsOpen] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
-  const [deleteError, setDeleteError] = useState('')
   const [restoreError, setRestoreError] = useState('')
   const versionMenuRef = useRef<HTMLDivElement | null>(null)
-  const actionsMenuRef = useRef<HTMLDivElement | null>(null)
-
-  useTopNavConfig({ backHref: '/worlds' })
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
     queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<World>,
     enabled: !!id,
+  })
+
+  const promptCountQuery = useQuery({
+    queryKey: ['world-clusters-count', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}/clusters?page=1&limit=1`) as Promise<PromptCountResponse>,
+    enabled: !!id,
+    placeholderData: () => {
+      const cachedEntries = queryClient.getQueriesData<CachedPromptPages>({ queryKey: ['world-clusters', id] })
+      for (const [, data] of cachedEntries) {
+        const total = data?.pages?.[0]?.total
+        if (typeof total === 'number') return { total }
+      }
+      return undefined
+    },
   })
 
   const versionsQuery = useQuery({
@@ -62,20 +77,6 @@ export default function WorldAbout() {
     queryKey: ['world-version', id, selectedVersionId],
     queryFn: () => apiFetch(`/api/worlds/${id}/versions/${selectedVersionId}`) as Promise<WorldVersion>,
     enabled: !!id && selectedVersionId !== null,
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: () => apiFetch(`/api/worlds/${id}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['worlds'] })
-      queryClient.removeQueries({ queryKey: ['world', id] })
-      queryClient.removeQueries({ queryKey: ['world-versions', id] })
-      queryClient.removeQueries({ queryKey: ['world-clusters', id] })
-      navigate('/worlds')
-    },
-    onError: error => {
-      setDeleteError(error instanceof Error ? error.message : `Could not delete ${entityLabel('world')}`)
-    },
   })
 
   const restoreMutation = useMutation({
@@ -102,18 +103,14 @@ export default function WorldAbout() {
   }, [navigate, worldQuery.isError])
 
   useEffect(() => {
-    if (!versionMenuOpen && !actionsOpen) return
+    if (!versionMenuOpen) return
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node
       if (versionMenuRef.current && !versionMenuRef.current.contains(target)) setVersionMenuOpen(false)
-      if (actionsMenuRef.current && !actionsMenuRef.current.contains(target)) setActionsOpen(false)
     }
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setVersionMenuOpen(false)
-        setActionsOpen(false)
-      }
+      if (event.key === 'Escape') setVersionMenuOpen(false)
     }
 
     document.addEventListener('pointerdown', handlePointerDown)
@@ -122,7 +119,7 @@ export default function WorldAbout() {
       document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKey)
     }
-  }, [actionsOpen, versionMenuOpen])
+  }, [versionMenuOpen])
 
   function selectCurrent() {
     setSelectedVersionId(null)
@@ -135,12 +132,6 @@ export default function WorldAbout() {
     setVersionMenuOpen(false)
   }
 
-  function deleteWorld() {
-    if (deleteMutation.isPending) return
-    setDeleteError('')
-    deleteMutation.mutate()
-  }
-
   function restoreVersion() {
     if (selectedVersionId === null || restoreMutation.isPending) return
     setRestoreError('')
@@ -148,6 +139,12 @@ export default function WorldAbout() {
   }
 
   const world = worldQuery.data
+  const promptCount = promptCountQuery.data?.total
+  const worldTabs = useMemo(
+    () => <WorldTabs active="about" worldId={id} promptCount={promptCount} />,
+    [id, promptCount],
+  )
+  useTopNavConfig({ backHref: '/worlds', bottomSlot: worldTabs })
   const versions = versionsQuery.data ?? []
   const versionEntries = versions.map((version, index) => ({
     version,
@@ -176,8 +173,8 @@ export default function WorldAbout() {
   if (!world) {
     return (
       <div className="page-fade-in min-h-screen bg-paper">
-        <div className="page-width min-h-screen px-6 pb-32 pt-12">
-          <Skeleton className="h-11 w-52" />
+        <div className="page-width min-h-screen px-6 pb-32 pt-0">
+          <Skeleton className="mt-6 h-11 w-48" />
           <Skeleton className="mt-6 h-11 w-full rounded-full" />
           <div className="mt-8 flex items-center justify-between">
             <Skeleton className="h-10 w-32 rounded-full" />
@@ -191,99 +188,113 @@ export default function WorldAbout() {
 
   return (
     <div className="page-fade-in min-h-screen bg-paper">
-      <div className="page-width min-h-screen px-6 pb-32 pt-12">
-        <WorldHeader
-          active="about"
-          name={world.name}
-          worldId={id}
-        />
-
-        <div className="mt-8 flex items-center justify-between gap-3">
-          <div ref={versionMenuRef} className="relative min-w-0">
-            <button
-              type="button"
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-rose-line px-4 font-serif-zh text-[15px] italic text-ink transition-colors hover:border-rose/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-              onClick={() => setVersionMenuOpen(open => !open)}
-              aria-haspopup="menu"
-              aria-expanded={versionMenuOpen}
-            >
-              {versionDropdownLoading ? (
-                <Skeleton className="h-4 w-16" />
-              ) : (
-                <span>{versionDropdownLabel}</span>
-              )}
-              {!viewingHistory && currentVersionNumber !== null && (
-                <span className="rounded-full bg-rose-pale px-2 py-0.5 font-sans text-[10px] font-semibold not-italic uppercase leading-none tracking-[0.08em] text-rose-deep">
-                  current
-                </span>
-              )}
-              <ChevronDown aria-hidden="true" className="h-4 w-4 text-ink-3" />
-            </button>
-
-            {versionMenuOpen && (
-              <div
-                role="menu"
-                className="absolute left-0 top-full z-10 mt-2 max-h-80 w-72 overflow-y-auto rounded-md border border-rose-line bg-paper shadow-(--shadow-menu)"
+      <div className="page-width min-h-screen px-6 pb-32 pt-0">
+        <div className="sticky top-23 z-10 -mx-6 mt-7 border-y border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
+          <div className="flex items-center justify-between gap-3 py-3">
+            <div ref={versionMenuRef} className="relative min-w-0 flex-1">
+              <button
+                type="button"
+                className="group flex h-12 w-full min-w-0 items-center justify-between gap-3 rounded-full border border-rose-line/80 bg-paper/60 py-2 pl-2 pr-3.5 text-left shadow-[inset_0_0_24px_rgba(205,83,106,0.035)] transition-[border-color,background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-tint/45 hover:shadow-(--shadow-feather) focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                onClick={() => setVersionMenuOpen(open => !open)}
+                aria-haspopup="menu"
+                aria-expanded={versionMenuOpen}
               >
-                {versionsQuery.isLoading ? (
-                  <div className="px-4 py-3">
-                    <Skeleton className="h-4 w-36" />
-                  </div>
-                ) : versionEntries.length === 0 ? (
-                  <div className="t-meta px-4 py-3">No versions yet.</div>
-                ) : (
-                  versionEntries.map(({ version, number }, index) => {
-                    const isCurrent = index === 0
-                    const isSelected = isCurrent ? !viewingHistory : selectedVersionId === version.id
-                    return (
-                      <button
-                        key={version.id}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={isSelected}
-                        className={`${index > 0 ? 'border-t border-rose-line' : ''} flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-paper-2 focus:outline-none focus:bg-rose-tint`}
-                        onClick={() => isCurrent ? selectCurrent() : selectVersion(version.id)}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex min-w-0 items-center gap-2 font-serif-zh text-[15px] italic leading-snug text-ink">
-                            <span>Version {number}</span>
-                            {isCurrent && (
-                              <span className="rounded-full bg-rose-pale px-2 py-0.5 font-sans text-[10px] font-semibold not-italic uppercase leading-none tracking-[0.08em] text-rose-deep">
-                                current
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-rose-pale text-rose-deep transition-colors group-hover:bg-paper">
+                  <History aria-hidden="true" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block t-eyebrow truncate leading-none">Version history</span>
+                  {versionDropdownLoading ? (
+                    <Skeleton className="mt-1.5 h-4 w-20" />
+                  ) : (
+                    <span className="mt-1 block truncate font-serif-zh text-[15px] italic leading-none text-ink">
+                      {versionDropdownLabel}
+                      {!viewingHistory && currentVersionNumber !== null && (
+                        <span className="ml-2 text-rose-deep">current</span>
+                      )}
+                    </span>
+                  )}
+                </span>
+                <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3 transition-transform duration-200 group-aria-expanded:rotate-180" />
+              </button>
+
+              {versionMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute left-0 top-full z-10 mt-2 w-[min(20rem,calc(100vw-3rem))] overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
+                >
+                  {versionsQuery.isLoading ? (
+                    <div className="px-4 py-3">
+                      <Skeleton className="h-4 w-36" />
+                    </div>
+                  ) : versionEntries.length === 0 ? (
+                    <div className="t-meta px-4 py-3">No versions yet.</div>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto py-1">
+                      {versionEntries.map(({ version, number }, index) => {
+                        const isCurrent = index === 0
+                        const isSelected = isCurrent ? !viewingHistory : selectedVersionId === version.id
+                        return (
+                          <button
+                            key={version.id}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={isSelected}
+                            className="group/item flex w-full items-start gap-3 px-3.5 py-3 text-left transition-colors hover:bg-rose-tint/50 focus:outline-none focus:bg-rose-tint"
+                            onClick={() => isCurrent ? selectCurrent() : selectVersion(version.id)}
+                          >
+                            <span
+                              className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full font-serif-zh text-xs italic transition-colors ${isSelected
+                                  ? 'bg-rose text-white shadow-(--shadow-cta)'
+                                  : 'border border-rose-line bg-paper text-ink-3 group-hover/item:border-rose/40 group-hover/item:text-rose-deep'
+                                }`}
+                            >
+                              v{number}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex min-w-0 items-center gap-2 font-serif-zh text-[15px] italic leading-snug text-ink">
+                                <span className="truncate">Version {number}</span>
+                                {isCurrent && (
+                                  <span className="shrink-0 font-serif-zh text-xs italic text-rose-deep">
+                                    current
+                                  </span>
+                                )}
                               </span>
+                              <span className="mt-1 flex min-w-0 items-center gap-2 font-serif-zh text-xs italic leading-none text-ink-3">
+                                <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${versionDotClass(version.created_at)}`} />
+                                <span className="truncate">{relativeTime(version.created_at)}</span>
+                              </span>
+                              {version.restored_from_version_id && (
+                                <span className="mt-1 block truncate font-serif-zh text-xs italic leading-snug text-rose-deep">
+                                  {restoredFromLabel(version.restored_from_version_id)}
+                                </span>
+                              )}
+                            </span>
+                            {isSelected && (
+                              <Check aria-hidden="true" className="mt-2 h-4 w-4 shrink-0 text-rose" />
                             )}
-                          </div>
-                          <div className="mt-1 flex min-w-0 items-center gap-2 font-serif-zh text-[11px] italic leading-none text-ink-3">
-                            <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${versionDotClass(version.created_at)}`} />
-                            <span className="shrink-0">{relativeTime(version.created_at)}</span>
-                          </div>
-                          {version.restored_from_version_id && (
-                            <div className="mt-1 truncate font-serif-zh text-[11px] italic leading-snug text-rose-deep">
-                              {restoredFromLabel(version.restored_from_version_id)}
-                            </div>
-                          )}
-                        </div>
-                        {isSelected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-rose" />}
-                      </button>
-                    )
-                  })
-                )}
-              </div>
-            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Link
+              to={`/worlds/${id}/edit`}
+              className="inline-flex h-12 shrink-0 items-center justify-center gap-2.5 rounded-full border border-rose-line/80 bg-paper/60 py-2.5 pl-2.5 pr-5 font-serif-zh text-[15px] italic leading-none text-rose-deep shadow-[inset_0_0_24px_rgba(205,83,106,0.03)] transition-[border-color,background-color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-tint/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-rose-pale text-rose-deep">
+                <Pencil aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
+              </span>
+              <span>Edit</span>
+            </Link>
           </div>
 
-          <Link
-            to={`/worlds/${id}/edit`}
-            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-rose px-4 font-serif-zh text-[15px] italic text-white shadow-(--shadow-cta) transition-colors hover:bg-rose-deep focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
-          >
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-            Edit
-          </Link>
-        </div>
-
-        {viewingHistory && selectedVersion && (
-          <div className="mt-7 border-y border-rose-line py-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+          {viewingHistory && selectedVersion && (
+            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-rose-line/70 py-3.5">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="t-eyebrow">Viewing history</span>
@@ -315,8 +326,8 @@ export default function WorldAbout() {
                 Restore
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <article className="mt-9 whitespace-pre-wrap font-serif-zh text-[17px] leading-8 text-ink-2">
           {viewingHistory && selectedVersionQuery.isLoading ? (
@@ -327,54 +338,8 @@ export default function WorldAbout() {
             <p className="t-meta">No body yet.</p>
           )}
         </article>
-
-        <div className="mt-5 flex justify-end">
-          <div ref={actionsMenuRef} className="relative">
-            <button
-              type="button"
-              className="grid h-10 w-10 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-              onClick={() => setActionsOpen(open => !open)}
-              aria-label="World actions"
-              title="World actions"
-              aria-haspopup="menu"
-              aria-expanded={actionsOpen}
-            >
-              <Ellipsis aria-hidden="true" className="h-5 w-5" />
-            </button>
-            {actionsOpen && (
-              <div
-                role="menu"
-                className="absolute right-0 top-full z-10 mt-2 w-44 overflow-hidden rounded-md border border-rose-line bg-paper shadow-(--shadow-menu)"
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-signal-red transition-colors hover:bg-paper-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
-                  onClick={() => {
-                    setActionsOpen(false)
-                    setConfirmDelete(true)
-                  }}
-                >
-                  <Trash2 aria-hidden="true" className="h-4 w-4" />
-                  Delete this world
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
-      <ConfirmDialog
-        open={confirmDelete}
-        title={`Delete this ${entityLabel('world')}?`}
-        description={`This will delete the ${entityLabel('world')} and all of its ${entityLabel('piece', { plural: true })}.`}
-        confirmLabel="Yes, delete"
-        pendingLabel="Deleting..."
-        isPending={deleteMutation.isPending}
-        error={deleteError}
-        onConfirm={deleteWorld}
-        onClose={() => setConfirmDelete(false)}
-      />
       <ConfirmDialog
         open={confirmRestore}
         title={`Restore ${selectedVersionNumber !== null ? `Version ${selectedVersionNumber}` : 'this version'}?`}

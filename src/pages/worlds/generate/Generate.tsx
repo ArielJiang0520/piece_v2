@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowDownUp, GitBranch, LockKeyhole, Pencil } from 'lucide-react'
+import { ArrowDownUp, ChevronRight, GitBranch, LockKeyhole, Pencil } from 'lucide-react'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel } from '@/config'
@@ -205,10 +205,10 @@ export default function Generate() {
       <div className="page-fade-in min-h-screen page-width px-4 pb-32 pt-6">
         <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''} border-b border-rose-line/70 bg-paper/95 pb-1`}>
           {showVersionsButton && (
-            <div className="border-y border-rose-line/70 px-2 py-2">
+            <div className="border-y border-rose-line/70 py-1">
               <button
                 type="button"
-                className="flex w-full items-center gap-3 text-left transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                className="flex w-full items-center gap-1 text-left transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
                 aria-label="Open versions"
                 title="Open versions"
                 aria-expanded={versionsOpen}
@@ -230,7 +230,7 @@ export default function Generate() {
                     </span>
                   )}
                 </span>
-                <ArrowDownUp aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" />
+                <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" />
               </button>
             </div>
           )}

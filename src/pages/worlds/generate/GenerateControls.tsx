@@ -102,11 +102,11 @@ export default function GenerateControls({
       )}
 
       <div className={`sticky top-16 mt-2 bg-paper/0 py-3 ${modelMenuOpen ? 'z-50' : 'z-10'}`}>
-        <div className="flex items-center">
-          <div className="flex min-w-0 flex-1 items-center rounded-full border border-rose-line bg-paper/70 p-0.5 shadow-(--shadow-feather) transition-all duration-200 focus-within:ring-4 focus-within:ring-rose/15">
+        <div className="flex items-center justify-center">
+          <div className="flex w-[78%] min-w-0 flex-col items-center transition-all duration-200 focus-within:ring-4 focus-within:ring-rose/15">
             <button
               type="button"
-              className={`inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white opacity-100 shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none disabled:pointer-events-none disabled:opacity-50 sm:px-6 ${pulseCta && !disabled ? 'cta-attention-pulse' : ''}`}
+              className={`inline-flex h-10 w-full min-w-0 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white opacity-100 shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none disabled:pointer-events-none disabled:opacity-50 sm:px-6 ${pulseCta && !disabled ? 'cta-attention-pulse' : ''}`}
               onClick={onGenerate}
               disabled={disabled}
             >
