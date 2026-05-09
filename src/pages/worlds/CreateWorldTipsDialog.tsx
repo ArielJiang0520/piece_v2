@@ -3,13 +3,13 @@ import { entityLabel } from '@/config'
 
 const createWorldTips = [
   {
-    text: 'Name what you want to read. If it\'s a known fandom, you don\'t need to explain it \u2014 the AI knows. Save your words for what makes your version specific.',
+    text: 'Done in five minutes is the right amount of effort. Worlds aren\'t supposed to be perfect. You\'ll learn what\'s missing after a few generations and come back to add it.',
   },
   {
     text: 'Use the words you want to read back. The output matches your vocabulary \u2014 coy in, coy out. If you want it dirty, write it dirty.',
   },
   {
-    text: 'Done in five minutes is the right amount of effort. Worlds aren\'t supposed to be perfect. You\'ll learn what\'s missing after a few generations and come back to add it.',
+    text: 'Name what you want to read. If it\'s a known fandom, you don\'t need to explain it \u2014 the AI knows. Save your words for what makes your version specific.',
   },
 ]
 
@@ -59,7 +59,7 @@ export default function CreateWorldTipsDialog({ open, onClose }: CreateWorldTips
       >
         <div className="mb-5 flex items-center justify-between gap-4">
           <div className="t-eyebrow eyebrow-rule">
-            <span>Helpful Tips</span>
+            <span>Tips for creating a world</span>
           </div>
           <div className="t-meta shrink-0">
             <span className="font-serif-zh text-rose">{activeTip + 1}</span>

@@ -22,10 +22,16 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="page-width">
-        <h1 className="font-serif-zh text-2xl font-normal mb-8 text-ink">Piece</h1>
-        <div className="flex flex-col gap-3">
+    <div className="page-fade-in min-h-screen bg-paper px-4">
+      <div className="page-width flex min-h-screen flex-col justify-center">
+        <header className="mb-10">
+          <p className="t-eyebrow eyebrow-rule mb-5">Private commissions</p>
+          <h1 className="t-display italic">Take #</h1>
+          <p className="t-meta mt-3 max-w-sm">
+            Custom AI-written romance and smut one-shots, made to your brief.
+          </p>
+        </header>
+        <div className="flex flex-col gap-4">
           <TextField
             placeholder="Username"
             value={username}
@@ -39,16 +45,16 @@ export default function Login() {
             onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handle('login')}
           />
-          {error && <p className="text-rose-deep text-sm">{error}</p>}
-          <div className="flex gap-2 mt-1">
+          {error && <p className="t-meta text-rose-deep">{error}</p>}
+          <div className="mt-2 flex items-center gap-3">
             <button
-              className="flex-1 bg-rose hover:bg-rose-deep text-white rounded-sm px-4 py-2 font-medium transition-colors"
+              className="h-12 flex-1 rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
               onClick={() => handle('login')}
             >
               Log in
             </button>
             <button
-              className="flex-1 border border-paper-3 hover:border-ink-4 text-ink rounded-sm px-4 py-2 font-medium transition-colors"
+              className="h-12 rounded-full px-5 font-serif-zh text-[15px] italic leading-none text-ink-3 transition-[color,transform] duration-200 hover:-translate-y-px hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-4/50"
               onClick={() => handle('signup')}
             >
               Sign up

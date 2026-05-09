@@ -92,7 +92,7 @@ export default function OutputPanel({
         </div>
         <div className="min-h-72 border-l border-rose-line/70 pl-5">
           <p className={outputTextClass} style={placeholderTextStyle}>
-            The {entityLabel('piece')} will appear here.
+            New text will appear here.
           </p>
         </div>
       </div>

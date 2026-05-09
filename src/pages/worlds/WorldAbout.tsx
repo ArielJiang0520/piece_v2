@@ -194,7 +194,6 @@ export default function WorldAbout() {
       <div className="page-width min-h-screen px-6 pb-32 pt-12">
         <WorldHeader
           active="about"
-          isExample={world.is_example}
           name={world.name}
           worldId={id}
         />

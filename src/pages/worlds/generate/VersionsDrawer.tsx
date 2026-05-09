@@ -1,7 +1,6 @@
-import { useEffect, useId, useMemo } from 'react'
+import { useEffect, useId, useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Pencil, X } from 'lucide-react'
-import CountIndicator from '@/components/CountIndicator'
+import { Pencil, X } from 'lucide-react'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { entityLabel } from '@/config'
 import { diffPromptInlineEdits, type PromptEditMark } from '@/utils/promptDiff'
@@ -24,7 +23,6 @@ interface PromptVersionEntry {
   number: number
   isLatest: boolean
   isCurrent: boolean
-  isLast: boolean
   editMarks: PromptEditMark[] | null
 }
 
@@ -36,7 +34,7 @@ function renderPromptText(text: string, editMarks: PromptEditMark[] | null) {
       return (
         <ins
           key={index}
-          className="rounded-xs bg-signal-green/10 px-0.5 text-signal-green underline decoration-signal-green/70 underline-offset-2"
+          className="rounded-xs bg-signal-green/5 px-0.5 text-signal-green underline decoration-signal-green/60 underline-offset-2"
         >
           {mark.value}
         </ins>
@@ -47,7 +45,7 @@ function renderPromptText(text: string, editMarks: PromptEditMark[] | null) {
       return (
         <del
           key={index}
-          className="rounded-xs bg-signal-red/10 px-0.5 text-signal-red line-through decoration-signal-red/70"
+          className="rounded-xs bg-signal-red/5 px-0.5 text-signal-red line-through decoration-signal-red/60"
         >
           {mark.value}
         </del>
@@ -79,7 +77,6 @@ export default function GenerateVersionsDrawer({
           number: index + 1,
           isLatest: index === prompts.length - 1,
           isCurrent: String(prompt.id) === currentPromptId,
-          isLast: index === 0,
           editMarks: previousPrompt ? diffPromptInlineEdits(previousPrompt.text, prompt.text) : null,
         }
       })
@@ -102,6 +99,12 @@ export default function GenerateVersionsDrawer({
     if (!worldId || isCurrent) return
     onClose()
     navigate(`/worlds/${worldId}/generate?promptId=${promptId}`)
+  }
+
+  function handlePromptVersionKeyDown(event: ReactKeyboardEvent<HTMLElement>, promptId: number, isCurrent: boolean) {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    viewPromptVersion(promptId, isCurrent)
   }
 
   return (
@@ -149,7 +152,7 @@ export default function GenerateVersionsDrawer({
                 {Array.from({ length: 3 }, (_, index) => (
                   <section
                     key={index}
-                    className={versionEntryClass(false)}
+                    className={versionEntryClass()}
                   >
                     <div className="relative flex justify-center">
                       <Skeleton className="relative z-10 h-12 w-12 rounded-full" />
@@ -165,75 +168,73 @@ export default function GenerateVersionsDrawer({
             ) : entries.length === 0 ? (
               <p className="t-meta">No versions yet.</p>
             ) : (
-              <div className="hairline-list">
-                {entries.map(({ prompt, number, isLatest, isCurrent, isLast, editMarks }) => (
-                  <section
-                    key={prompt.id}
-                    data-prompt-id={prompt.id}
-                    className={versionEntryClass(isCurrent)}
-                    aria-current={isCurrent ? 'page' : undefined}
-                  >
-                    <div className="relative flex justify-center">
-                      {!isLast && (
-                        <span
-                          aria-hidden="true"
-                          className="absolute bottom-0 left-1/2 top-12 w-px -translate-x-1/2 bg-rose-line"
-                        />
-                      )}
-                      <div
-                        className={[
-                          'relative z-10 grid h-10 w-10 place-items-center rounded-full font-serif-zh text-sm italic sm:h-12 sm:w-12 sm:text-base',
-                          isCurrent
-                            ? 'bg-rose text-white shadow-(--shadow-cta)'
-                            : 'bg-rose-pale text-rose-deep',
-                        ].join(' ')}
+              <div className="relative">
+                <span
+                  aria-hidden="true"
+                  className="absolute bottom-8 left-7 top-2 w-px bg-rose-line/45 sm:left-9.5"
+                />
+
+                <div>
+                  {entries.map(({ prompt, number, isCurrent, editMarks }) => {
+                    const canUsePrompt = !!worldId && !isCurrent
+
+                    return (
+                      <section
+                        key={prompt.id}
+                        data-prompt-id={prompt.id}
+                        className={versionEntryClass(canUsePrompt)}
+                        aria-current={isCurrent ? 'page' : undefined}
+                        role={canUsePrompt ? 'button' : undefined}
+                        tabIndex={canUsePrompt ? 0 : undefined}
+                        onClick={() => viewPromptVersion(prompt.id, isCurrent)}
+                        onKeyDown={event => handlePromptVersionKeyDown(event, prompt.id, isCurrent)}
                       >
-                        v{number}
-                      </div>
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="t-meta flex items-start justify-between gap-3 border-b border-rose-line/60 pb-3">
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          {isCurrent && (
-                            <span className="t-eyebrow shrink-0 text-rose">Current</span>
-                          )}
-                          {isLatest && !isCurrent && (
-                            <span className="t-eyebrow shrink-0 text-rose">Latest</span>
-                          )}
-                          <span className="truncate not-italic text-ink-3">{relativeTime(prompt.updated_at)}</span>
-                        </div>
-                        <CountIndicator count={prompt.piece_count} className="shrink-0 justify-end" />
-                      </div>
-
-                      <h2 className="mt-4 max-h-40 overflow-hidden whitespace-pre-wrap font-serif-zh text-[16px] leading-7 text-ink sm:max-h-none">
-                        {renderPromptText(prompt.text, editMarks)}
-                      </h2>
-
-                      <div className="mt-5 flex flex-col items-start gap-2 border-t border-rose-line/40 pt-4">
-                        {worldId && !isCurrent && (
-                          <button
-                            type="button"
-                            className="inline-flex min-h-9 items-center gap-2 font-serif-zh text-sm italic text-rose transition-colors hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-                            onClick={() => viewPromptVersion(prompt.id, isCurrent)}
+                        <div className="relative flex justify-center">
+                          <div
+                            className={[
+                              'relative z-10 grid h-10 w-10 place-items-center rounded-full font-serif-zh text-sm italic',
+                              isCurrent
+                                ? 'bg-rose text-white shadow-(--shadow-cta)'
+                                : 'border border-rose-line bg-paper text-ink-3',
+                            ].join(' ')}
                           >
-                            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                            <span>Use this {entityLabel('prompt')}</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="inline-flex min-h-9 items-center gap-2 font-serif-zh text-sm italic text-rose transition-colors hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 disabled:opacity-50"
-                          onClick={() => onEditFromPrompt(prompt)}
-                          disabled={streaming}
-                        >
-                          <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                          <span>Edit this {entityLabel('prompt')}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </section>
-                ))}
+                            v{number}
+                          </div>
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="t-meta flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <span className="truncate not-italic text-ink-3">{relativeTime(prompt.updated_at)}</span>
+                            </div>
+                            <span className="shrink-0">
+                              {prompt.piece_count} {entityLabel('piece', { plural: prompt.piece_count !== 1 })}
+                            </span>
+                          </div>
+
+                          <h2 className={`mt-3 whitespace-pre-wrap font-serif-zh text-[16px] leading-7 ${isCurrent ? 'text-ink' : 'text-ink-2'}`}>
+                            {renderPromptText(prompt.text, editMarks)}
+                          </h2>
+
+                          {isCurrent && (
+                            <div className="mt-5">
+                              <button
+                                type="button"
+                                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
+                                onClick={() => onEditFromPrompt(prompt)}
+                                disabled={streaming}
+                              >
+                                <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                                <span className="min-w-0 truncate">Edit from this</span>
+                              </button>
+                              <p className="t-meta mt-2 text-center">Your edits will create a new version.</p>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -243,11 +244,11 @@ export default function GenerateVersionsDrawer({
   )
 }
 
-function versionEntryClass(isCurrent: boolean) {
+function versionEntryClass(canUsePrompt = false) {
   return [
-    'grid grid-cols-[3rem_minmax(0,1fr)] gap-3 px-1 py-7 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 sm:grid-cols-[3.75rem_minmax(0,1fr)] sm:gap-4 sm:px-2 sm:py-8',
-    isCurrent
-      ? 'bg-rose-tint/45'
+    'grid grid-cols-[3rem_minmax(0,1fr)] gap-3 px-1 py-6 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 sm:grid-cols-[3.75rem_minmax(0,1fr)] sm:gap-4 sm:px-2 sm:py-7',
+    canUsePrompt
+      ? 'cursor-pointer hover:bg-rose-tint/10'
       : '',
   ].join(' ')
 }

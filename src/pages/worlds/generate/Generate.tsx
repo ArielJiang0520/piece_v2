@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ChevronRight, GitBranch, LockKeyhole, Pencil } from 'lucide-react'
+import { ArrowDownUp, GitBranch, LockKeyhole, Pencil } from 'lucide-react'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel } from '@/config'
@@ -134,16 +134,16 @@ export default function Generate() {
   const currentVersionNumber = queryPromptId
     ? clusterPrompts.findIndex((clusterPrompt: { id: any }) => String(clusterPrompt.id) === queryPromptId) + 1
     : 0
-  const versionsLabel = draftVersionNumber !== null
-    ? `Draft version ${draftVersionNumber}`
-    : currentVersionNumber > 0
-      ? `Version ${currentVersionNumber}`
-      : 'Versions'
+  const displayedVersionNumber = draftVersionNumber ?? (currentVersionNumber > 0 ? currentVersionNumber : null)
+  const isLatestVersion = lockedMode && currentVersionNumber > 0 && currentVersionNumber === clusterPrompts.length
+  const versionsLabel = displayedVersionNumber !== null ? `Version ${displayedVersionNumber}` : 'Versions'
   const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
+  const pulseGenerateCta = lockedMode && !promptDetailsLoading && activePromptPieceCount === 0
   const showPieceStrip = lockedMode && (activePromptPieceCount > 0 || pendingPieceNumber !== null)
   const PromptStateIcon = lockedMode ? LockKeyhole : Pencil
   const promptStateTitle = lockedMode ? `Saved ${entityLabel('prompt')}` : `Draft ${entityLabel('prompt')}`
   const promptStateLabel = lockedMode ? 'Read-only' : 'Editable'
+  const promptEditLabel = `Open to edit this ${entityLabel('prompt')}`
 
   useTopNavConfig({ backHref, secondaryTitle: entityLabel('prompt') })
 
@@ -214,27 +214,41 @@ export default function Generate() {
                 aria-expanded={versionsOpen}
                 onClick={() => setVersionsOpen(true)}
               >
-                <GitBranch aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink-3" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-serif-zh text-sm italic leading-5 text-ink">
-                    {versionsLabel}
+                <GitBranch aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 text-ink-3" />
+                <span className="min-w-0 flex-1 m-2">
+                  <span className="flex min-w-0 items-baseline gap-1.5 font-serif-zh text-sm italic leading-5 text-ink">
+                    <span className="truncate">{versionsLabel}</span>
+                    {isLatestVersion && (
+                      <span className="shrink-0 text-xs text-rose-deep">(latest)</span>
+                    )}
                   </span>
-                  <span className="t-meta block sm:hidden">
-                    Open to edit this {entityLabel('prompt')}
-                  </span>
+                  {lockedMode ? (
+                    <span className="mt-0.5 block t-meta text-ink-3">{promptEditLabel}</span>
+                  ) : (
+                    <span className="mt-0.5 block t-meta text-ink-3">
+                      {promptStateTitle} · {promptStateLabel}
+                    </span>
+                  )}
                 </span>
-                <span className="t-eyebrow hidden shrink-0 sm:inline-flex">Versions</span>
-                <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" />
+                <ArrowDownUp aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" />
               </button>
             </div>
           )}
 
-          <div className="flex items-center gap-2 px-2 pt-4 text-ink-3">
-            <PromptStateIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
-            <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
-            <span className="t-meta shrink-0" style={lockedMode ? undefined : { color: 'var(--color-rose-deep)' }}>{promptStateLabel}</span>
-          </div>
+          {!showVersionsButton && (
+            <div className="flex items-center gap-2 px-2 pt-4 text-ink-3">
+              {lockedMode ? (
+                <span className="t-meta text-ink-3">{promptEditLabel}</span>
+              ) : (
+                <>
+                  <PromptStateIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                  <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
+                  <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
+                  <span className="t-meta shrink-0" style={{ color: 'var(--color-rose-deep)' }}>{promptStateLabel}</span>
+                </>
+              )}
+            </div>
+          )}
 
           <PromptCard
             prompt={prompt}
@@ -253,6 +267,7 @@ export default function Generate() {
           settingsOpen={settingsOpen}
           disabled={generateDisabled}
           hasExistingPieces={activePromptPieceCount > 0}
+          pulseCta={pulseGenerateCta}
           model={model}
           onModelChange={setGenerationModel}
           readingSpeed={readingSpeed}

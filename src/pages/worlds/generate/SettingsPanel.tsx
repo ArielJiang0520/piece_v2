@@ -32,6 +32,11 @@ export default function SettingsPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="t-eyebrow shrink-0">Reading display</span>
+        <span aria-hidden="true" className="h-px flex-1 bg-rose-line/70" />
+      </div>
+
       <div>
         <span className="t-eyebrow mb-1.5 inline-flex">Size</span>
         <div className="grid h-10 grid-cols-5 overflow-hidden rounded-md border border-rose-line bg-paper/50 p-0.5">

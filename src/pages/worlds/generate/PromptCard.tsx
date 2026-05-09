@@ -1,3 +1,4 @@
+import { LockKeyhole } from 'lucide-react'
 import Skeleton from '@/components/Skeleton'
 import { entityLabel } from '@/config'
 
@@ -19,6 +20,7 @@ export default function PromptCard({
   locked = false,
 }: PromptCardProps) {
   const promptLabel = entityLabel('prompt', { capitalize: true })
+  const promptStateTitle = `Saved version`
   const editorFrameClass =
     'rounded-lg border border-rose-line/80 bg-paper px-4 py-4 shadow-[inset_0_0_38px_rgba(205,83,106,0.055)] transition-colors focus-within:border-rose/60 focus-within:shadow-[inset_0_0_42px_rgba(205,83,106,0.085)]'
   const editorTextClass =
@@ -33,9 +35,19 @@ export default function PromptCard({
       ) : (
         <div>
           {locked ? (
-            <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-4 pb-3 pt-3 font-serif-zh text-[20px] leading-[1.55] text-ink tracking-normal">
-              {prompt}
-            </p>
+            <>
+              <div className="flex justify-start px-4 pb-1 pt-1">
+                {/* <span className="flex min-w-0 items-center gap-2 text-ink-3">
+                  <LockKeyhole aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                  <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
+                  <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
+                  <span className="t-meta shrink-0">Read-only</span>
+                </span> */}
+              </div>
+              <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-4 pb-3 pt-2 font-serif-zh text-[20px] leading-[1.55] text-ink tracking-normal">
+                {prompt}
+              </p>
+            </>
           ) : (
             <div className={editorFrameClass}>
               <textarea
@@ -43,7 +55,7 @@ export default function PromptCard({
                 aria-label={promptLabel}
                 className={`${editorTextClass} h-44 w-full resize-y bg-transparent placeholder:text-ink-4 focus:outline-none focus:ring-0 disabled:opacity-50 [scrollbar-color:var(--color-rose)_transparent] [scrollbar-width:thin]`}
                 rows={6}
-                placeholder={`What do you want to see happen?`}
+                placeholder={`What do you want to see happen in this world?`}
                 value={prompt}
                 onChange={e => onPromptChange(e.target.value)}
                 disabled={streaming}

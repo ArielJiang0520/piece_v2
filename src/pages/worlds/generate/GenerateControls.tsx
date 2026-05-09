@@ -13,6 +13,7 @@ interface GenerateControlsProps {
   settingsOpen: boolean
   disabled: boolean
   hasExistingPieces: boolean
+  pulseCta: boolean
   model: string
   onModelChange: (model: string) => void
   readingSpeed: number
@@ -40,6 +41,7 @@ export default function GenerateControls({
   settingsOpen,
   disabled,
   hasExistingPieces,
+  pulseCta,
   model,
   onModelChange,
   readingSpeed,
@@ -104,7 +106,7 @@ export default function GenerateControls({
           <div className="flex min-w-0 flex-1 items-center rounded-full border border-rose-line bg-paper/70 p-0.5 shadow-(--shadow-feather) transition-all duration-200 focus-within:ring-4 focus-within:ring-rose/15">
             <button
               type="button"
-              className="inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-px hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none disabled:pointer-events-none disabled:opacity-50 sm:px-6"
+              className={`inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white opacity-100 shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none disabled:pointer-events-none disabled:opacity-50 sm:px-6 ${pulseCta && !disabled ? 'cta-attention-pulse' : ''}`}
               onClick={onGenerate}
               disabled={disabled}
             >

@@ -207,7 +207,7 @@ export default function WorldEditor() {
           <input
             value={name}
             onChange={event => setName(event.target.value)}
-            className="mt-4 block w-full bg-transparent px-0 py-1 font-serif-zh text-[2.625rem] leading-[1.08] text-ink placeholder:text-ink-4 focus:outline-none focus-visible:outline focus-visible:outline-offset-4 focus-visible:outline-ink-4/70"
+            className="mt-4 block w-full bg-transparent px-0 py-1 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:outline-none focus-visible:outline focus-visible:outline-offset-4 focus-visible:outline-ink-4/70"
             placeholder={`${entityLabel('world', { capitalize: true })} name`}
             autoFocus
           />

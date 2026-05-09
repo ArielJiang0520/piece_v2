@@ -286,35 +286,46 @@ export default function World() {
 
   return (
     <div className="page-fade-in min-h-screen bg-paper">
-      <div className="page-width min-h-screen px-6 pb-32 pt-12">
+      <div className="page-width min-h-screen px-6 pb-32 pt-0">
         <WorldHeader
-          active="scenes"
-          isExample={worldQuery.data.is_example}
+          active="prompts"
           name={worldName}
           worldId={id}
         />
 
-        <div className="mt-6">
-          <TextField
-            type="text"
-            value={searchInput}
-            onChange={event => setSearchInput(event.target.value)}
-            placeholder={`Search ${entityLabel('prompt', { plural: true })} by meaning...`}
-            aria-label={`Search ${entityLabel('prompt', { plural: true })}`}
-            variant="search"
-            leadingAdornment={<Search aria-hidden="true" className="h-4 w-4 text-ink-4" />}
-            trailingAdornment={searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput('')}
-                className="grid h-6 w-6 place-items-center rounded-full text-ink-4 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
-                aria-label="Clear search"
-                title="Clear search"
-              >
-                <X aria-hidden="true" className="h-3.5 w-3.5" />
-              </button>
-            )}
-          />
+        <div className="mt-6 flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <TextField
+              type="text"
+              value={searchInput}
+              onChange={event => setSearchInput(event.target.value)}
+              placeholder={`Search ${entityLabel('prompt', { plural: true })} by meaning...`}
+              aria-label={`Search ${entityLabel('prompt', { plural: true })}`}
+              variant="search"
+              leadingAdornment={<Search aria-hidden="true" className="h-4 w-4 text-ink-4" />}
+              trailingAdornment={searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="grid h-6 w-6 place-items-center rounded-full text-ink-4 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
+                  aria-label="Clear search"
+                  title="Clear search"
+                >
+                  <X aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+              )}
+            />
+          </div>
+          <Link
+            to={`/worlds/${id}/generate`}
+            className="inline-flex h-12 shrink-0 items-center justify-center gap-2.5 rounded-full bg-rose py-2.5 pl-2.5 pr-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
+            aria-label={`New ${entityLabel('prompt', { capitalize: true })}`}
+          >
+            <span className="grid h-7 w-7 place-items-center rounded-full bg-white/15">
+              <Plus aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
+            </span>
+            New {entityLabel('prompt', { capitalize: true })}
+          </Link>
         </div>
 
         <div className="mt-6 flex items-baseline justify-between gap-4">
@@ -447,24 +458,13 @@ export default function World() {
         <button
           type="button"
           onClick={scrollToTop}
-          className="fixed bottom-7 left-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] grid h-14 w-14 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20"
+          className="fixed bottom-7 left-1/2 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-x-1/2 hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20"
           aria-label="Scroll to top"
           title="Scroll to top"
         >
           <ArrowUp aria-hidden="true" className="h-6 w-6" />
         </button>
       )}
-
-      <Link
-        to={`/worlds/${id}/generate`}
-        className="fixed bottom-6 right-[max(1.75rem,calc((100vw-480px)/2+1.75rem))] inline-flex items-center gap-3 rounded-full bg-rose py-2.5 pl-2.5 pr-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
-        aria-label={`New ${entityLabel('prompt', { capitalize: true })}`}
-      >
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-white/15">
-          <Plus aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
-        </span>
-        New {entityLabel('prompt', { capitalize: true })}
-      </Link>
     </div>
   )
 }
