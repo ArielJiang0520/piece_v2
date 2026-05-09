@@ -283,6 +283,7 @@ export default function Generate() {
 
           <OutputPanel
             output={displayedOutput}
+            phase={phase}
             streaming={streaming}
             displayComplete={outputDisplayComplete}
             pieceMetaLabel={displayedPieceMetaLabel}

@@ -16,16 +16,16 @@ export interface ModelOption {
 
 export const MODELS: ModelOption[] = [
   {
-    id: 'deepseek/deepseek-v4-flash',
-    label: 'DeepSeek V4 Flash',
-    attributes: { speed: 3, quality: 1, cost: 1 },
+    id: 'deepseek/deepseek-v4-pro',
+    label: 'DeepSeek V4 Pro',
+    attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
     preferredProviders: ['parasail/fp8'],
   },
   {
-    id: 'deepseek/deepseek-v4-pro',
-    label: 'DeepSeek V4 Pro',
-    attributes: { speed: 1, quality: 3, cost: 3 },
+    id: 'deepseek/deepseek-v4-flash',
+    label: 'DeepSeek V4 Flash',
+    attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
     preferredProviders: ['parasail/fp8'],
   },
@@ -34,18 +34,18 @@ export const MODELS: ModelOption[] = [
     label: 'GLM 5',
     attributes: { speed: 3, quality: 2, cost: 2 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['parasail/fp8'],
+    preferredProviders: ['friendli'],
   },
   {
     id: 'z-ai/glm-5.1',
     label: 'GLM 5.1',
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['parasail/fp8'],
+    preferredProviders: ['friendli'],
   }
 ]
 
-export const DEFAULT_MODEL_ID = 'z-ai/glm-5'
+export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
 function isModelId(value: unknown): value is string {
   return typeof value === 'string' && MODELS.some(model => model.id === value)

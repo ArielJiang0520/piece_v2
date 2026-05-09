@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
+import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { entityLabel } from '@/config'
+import type { GenerationPhase } from '@/hooks/useGeneration'
 import type { ReadingFont } from '@/preferences/readingFont'
 import { READING_FONT_BY_ID } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
@@ -11,6 +13,7 @@ const OUTPUT_TOKEN_RE = /\s+|[^\s]+/g
 
 interface OutputPanelProps {
   output: string
+  phase: GenerationPhase
   streaming: boolean
   displayComplete: boolean
   pieceMetaLabel: string | null
@@ -20,6 +23,7 @@ interface OutputPanelProps {
 
 export default function OutputPanel({
   output,
+  phase,
   streaming,
   displayComplete,
   pieceMetaLabel,
@@ -59,10 +63,24 @@ export default function OutputPanel({
     READING_FONT_BY_ID[readingFont].outputClass,
   ].join(' ')
   const outputTextStyle = READING_FONT_SIZE_BY_ID[readingFontSize].outputStyle
+  const placeholderTextStyle = { ...outputTextStyle, color: 'var(--color-ink-4)' }
   const outputLabel = `Generated ${entityLabel('piece', { capitalize: true })}`
+  const waitingForProvider = phase === 'waiting_provider' && streaming && !output
 
   function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  if (waitingForProvider) {
+    return (
+      <div className={wrapperClass} aria-busy="true">
+        <div className="pt-2">
+          <Skeleton className="mb-5 h-3 w-28" />
+          <SkeletonText className="max-w-3xl" lineClassName="h-4" lines={4} />
+          <SkeletonText className="mt-6 max-w-2xl" lineClassName="h-4" lines={3} />
+        </div>
+      </div>
+    )
   }
 
   if (!output) {
@@ -72,7 +90,11 @@ export default function OutputPanel({
           <span className="t-eyebrow shrink-0">{outputLabel}</span>
           <span aria-hidden="true" className="h-px flex-1 bg-rose-line/70" />
         </div>
-        <div className="min-h-72 border-l border-rose-line/70 pl-5" />
+        <div className="min-h-72 border-l border-rose-line/70 pl-5">
+          <p className={outputTextClass} style={placeholderTextStyle}>
+            The {entityLabel('piece')} will appear here.
+          </p>
+        </div>
       </div>
     )
   }

@@ -36,11 +36,11 @@ export default function ModelSelector({
   }
 
   return (
-    <div className="relative flex min-w-0 flex-1 justify-end">
+    <div className="relative flex min-w-0 max-w-[40%] flex-[0_1_9.75rem] justify-end">
       <button
         id={modelButtonId}
         type="button"
-        className="relative inline-flex h-11 w-full max-w-full items-center justify-start rounded-md border border-rose-line bg-paper/85 pl-3 pr-9 font-serif-zh text-[13px] italic leading-none text-ink-3 shadow-(--shadow-feather) transition-all duration-200 hover:-translate-y-px hover:border-rose/35 hover:text-ink focus:outline-none focus:ring-4 focus:ring-rose/20 disabled:pointer-events-none disabled:opacity-50"
+        className="relative inline-flex h-10 w-full max-w-full items-center justify-start rounded-full bg-transparent pl-3 pr-8 font-serif-zh text-[12px] italic leading-none text-ink-3 transition-colors duration-200 hover:bg-rose-pale/45 hover:text-ink focus:outline-none disabled:pointer-events-none disabled:opacity-50"
         aria-label="Select AI engine"
         aria-haspopup="listbox"
         aria-expanded={menuOpen}
@@ -62,6 +62,13 @@ export default function ModelSelector({
           role="listbox"
           aria-labelledby={modelButtonId}
         >
+          <div
+            className="px-2.5 pb-2 pt-2.5 font-serif-zh text-[12px] italic leading-none text-rose-deep/85"
+            role="presentation"
+          >
+            Select an AI engine
+          </div>
+          <div className="mx-2.5 mb-0.5 h-px bg-rose-line/80" role="presentation" />
           {MODELS.map(option => {
             const selected = option.id === model
 
