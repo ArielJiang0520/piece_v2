@@ -1,6 +1,10 @@
-import { useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Pencil } from 'lucide-react'
+import { Ellipsis, Trash2 } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiFetch } from '@/api'
+import ConfirmDialog from '@/components/ConfirmDialog'
+import CountIndicator from '@/components/CountIndicator'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { entityLabel } from '@/config'
 import { diffPromptInlineEdits, type PromptEditMark } from '@/utils/promptDiff'
@@ -12,9 +16,7 @@ interface GenerateVersionsPanelProps {
   currentPromptId: string | null
   prompts: ClusterPrompt[]
   loading: boolean
-  streaming: boolean
   onViewPrompt: () => void
-  onEditFromPrompt: (prompt: ClusterPrompt) => void
 }
 
 interface PromptVersionEntry {
@@ -22,6 +24,13 @@ interface PromptVersionEntry {
   number: number
   isCurrent: boolean
   editMarks: PromptEditMark[] | null
+}
+
+interface DeletePromptResponse {
+  ok: true
+  deletedPieces: number
+  nextPromptId: number | null
+  clusterDeleted: boolean
 }
 
 function renderPromptText(text: string, editMarks: PromptEditMark[] | null) {
@@ -59,11 +68,15 @@ export default function GenerateVersionsPanel({
   currentPromptId,
   prompts,
   loading,
-  streaming,
   onViewPrompt,
-  onEditFromPrompt,
 }: GenerateVersionsPanelProps) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [showDiff, setShowDiff] = useState(false)
+  const [openMenuPromptId, setOpenMenuPromptId] = useState<number | null>(null)
+  const [confirmPrompt, setConfirmPrompt] = useState<PromptVersionEntry | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null)
   const entries = useMemo<PromptVersionEntry[]>(
     () => prompts
       .map((prompt, index) => {
@@ -78,6 +91,65 @@ export default function GenerateVersionsPanel({
       .reverse(),
     [currentPromptId, prompts],
   )
+  const deletingLastClusterPrompt = !!confirmPrompt && entries.length === 1
+  const deleteDescription = confirmPrompt
+    ? promptDeleteDescription(confirmPrompt, deletingLastClusterPrompt)
+    : undefined
+
+  useEffect(() => {
+    if (openMenuPromptId === null) return
+
+    function handlePointerDown(event: PointerEvent) {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+        setOpenMenuPromptId(null)
+      }
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpenMenuPromptId(null)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [openMenuPromptId])
+
+  const deleteMutation = useMutation({
+    mutationFn: (entry: PromptVersionEntry) => {
+      if (!worldId) throw new Error(`Missing ${entityLabel('world')} id`)
+      return apiFetch(`/api/worlds/${worldId}/prompts/${entry.prompt.id}`, { method: 'DELETE' }) as Promise<DeletePromptResponse>
+    },
+    onSuccess: (result, deletedEntry) => {
+      const deletedPromptId = deletedEntry.prompt.id
+      setConfirmPrompt(null)
+      setDeleteError('')
+      queryClient.invalidateQueries({ queryKey: ['worlds'] })
+      queryClient.invalidateQueries({ queryKey: ['world', worldId] })
+      queryClient.invalidateQueries({ queryKey: ['world-clusters', worldId] })
+      queryClient.invalidateQueries({ queryKey: ['world-clusters-count', worldId] })
+      queryClient.invalidateQueries({ queryKey: ['world-clusters-search', worldId] })
+      queryClient.invalidateQueries({ queryKey: ['cluster', worldId] })
+      if (deletedPromptId) {
+        queryClient.removeQueries({ queryKey: ['prompt', worldId, String(deletedPromptId)] })
+      }
+      if (result.clusterDeleted) {
+        navigate(worldId ? `/worlds/${worldId}` : '/worlds', { replace: true })
+        return
+      }
+      if (deletedPromptId && String(deletedPromptId) === currentPromptId) {
+        if (result.nextPromptId) {
+          navigate(`/worlds/${worldId}/generate?promptId=${result.nextPromptId}`, { replace: true })
+          return
+        }
+        navigate(worldId ? `/worlds/${worldId}` : '/worlds', { replace: true })
+      }
+    },
+    onError: error => {
+      setDeleteError(error instanceof Error ? error.message : `Could not delete ${entityLabel('prompt')}`)
+    },
+  })
 
   function viewPromptVersion(promptId: number, isCurrent: boolean) {
     if (!worldId || isCurrent) return
@@ -85,10 +157,16 @@ export default function GenerateVersionsPanel({
     navigate(`/worlds/${worldId}/generate?promptId=${promptId}`)
   }
 
-  function handlePromptVersionKeyDown(event: ReactKeyboardEvent<HTMLElement>, promptId: number, isCurrent: boolean) {
-    if (event.key !== 'Enter' && event.key !== ' ') return
-    event.preventDefault()
-    viewPromptVersion(promptId, isCurrent)
+  function requestDeletePrompt(entry: PromptVersionEntry) {
+    setOpenMenuPromptId(null)
+    setDeleteError('')
+    setConfirmPrompt(entry)
+  }
+
+  function deletePrompt() {
+    if (!confirmPrompt || deleteMutation.isPending) return
+    setDeleteError('')
+    deleteMutation.mutate(confirmPrompt)
   }
 
   if (loading) {
@@ -119,25 +197,32 @@ export default function GenerateVersionsPanel({
 
   return (
     <div className="relative">
+      <div className="mb-1 flex justify-end px-2">
+        <label className="t-meta inline-flex cursor-pointer items-center gap-2 text-ink-3 transition-colors hover:text-ink">
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 rounded-xs border-rose-line accent-rose focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+            checked={showDiff}
+            onChange={event => setShowDiff(event.target.checked)}
+          />
+          <span>Show changes</span>
+        </label>
+      </div>
+
       <span
         aria-hidden="true"
         className="absolute bottom-8 left-7 top-2 w-px bg-rose-line/45 sm:left-9.5"
       />
 
       <div>
-        {entries.map(({ prompt, number, isCurrent, editMarks }) => {
-          const canUsePrompt = !!worldId && !isCurrent
-
+        {entries.map(entry => {
+          const { prompt, number, isCurrent, editMarks } = entry
           return (
             <section
               key={prompt.id}
               data-prompt-id={prompt.id}
-              className={versionEntryClass(canUsePrompt)}
+              className={versionEntryClass()}
               aria-current={isCurrent ? 'page' : undefined}
-              role={canUsePrompt ? 'button' : undefined}
-              tabIndex={canUsePrompt ? 0 : undefined}
-              onClick={() => viewPromptVersion(prompt.id, isCurrent)}
-              onKeyDown={event => handlePromptVersionKeyDown(event, prompt.id, isCurrent)}
             >
               <div className="relative flex justify-center">
                 <div
@@ -157,27 +242,54 @@ export default function GenerateVersionsPanel({
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="truncate not-italic text-ink-3">{relativeTime(prompt.updated_at)}</span>
                   </div>
-                  <span className="shrink-0">
-                    {prompt.piece_count} {entityLabel('piece', { plural: prompt.piece_count !== 1 })}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <CountIndicator count={prompt.piece_count} className="justify-end gap-x-2" />
+                    <div ref={openMenuPromptId === prompt.id ? actionsMenuRef : undefined} className="relative">
+                      <button
+                        type="button"
+                        className="grid h-7 w-7 place-items-center rounded-full text-ink-3 transition-[background-color,color] hover:bg-paper-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                        aria-label={`${entityLabel('prompt', { capitalize: true })} actions`}
+                        title={`${entityLabel('prompt', { capitalize: true })} actions`}
+                        aria-haspopup="menu"
+                        aria-expanded={openMenuPromptId === prompt.id}
+                        onClick={() => setOpenMenuPromptId(openId => openId === prompt.id ? null : prompt.id)}
+                      >
+                        <Ellipsis aria-hidden="true" className="h-4 w-4" />
+                      </button>
+                      {openMenuPromptId === prompt.id && (
+                        <div
+                          role="menu"
+                          className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm normal-case tracking-normal text-signal-red transition-colors hover:bg-paper-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
+                            onClick={() => requestDeletePrompt(entry)}
+                          >
+                            <Trash2 aria-hidden="true" className="h-4 w-4" />
+                            Delete this {entityLabel('prompt')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <h2 className={`mt-3 whitespace-pre-wrap font-serif-zh text-[16px] leading-7 ${isCurrent ? 'text-ink' : 'text-ink-2'}`}>
-                  {renderPromptText(prompt.text, editMarks)}
+                  {renderPromptText(prompt.text, showDiff ? editMarks : null)}
                 </h2>
 
-                {isCurrent && (
-                  <div className="mt-5">
+                {!isCurrent && (
+                  <div className="mt-5 flex justify-start">
                     <button
                       type="button"
-                      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
-                      onClick={() => onEditFromPrompt(prompt)}
-                      disabled={streaming}
+                      className="inline-flex h-9 items-center justify-center rounded-full border border-rose-line bg-paper px-4 font-serif-zh text-[14px] italic leading-none text-rose-deep transition-[background-color,border-color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-pale focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 disabled:pointer-events-none disabled:opacity-50"
+                      onClick={() => viewPromptVersion(prompt.id, isCurrent)}
+                      disabled={!worldId}
                     >
-                      <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                      <span className="min-w-0 truncate">Edit from this</span>
+                      Switch to v{number}
                     </button>
-                    <p className="t-meta mt-2 text-center">Your edits will create a new version.</p>
                   </div>
                 )}
               </div>
@@ -185,15 +297,33 @@ export default function GenerateVersionsPanel({
           )
         })}
       </div>
+      <ConfirmDialog
+        open={!!confirmPrompt}
+        title={`Delete this ${entityLabel('prompt')}?`}
+        description={deleteDescription}
+        confirmLabel="Yes, delete"
+        pendingLabel="Deleting..."
+        isPending={deleteMutation.isPending}
+        error={deleteError}
+        onConfirm={deletePrompt}
+        onClose={() => {
+          if (deleteMutation.isPending) return
+          setConfirmPrompt(null)
+          setDeleteError('')
+        }}
+      />
     </div>
   )
 }
 
-function versionEntryClass(canUsePrompt = false) {
-  return [
-    'grid grid-cols-[3rem_minmax(0,1fr)] gap-3 px-1 py-6 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 sm:grid-cols-[3.75rem_minmax(0,1fr)] sm:gap-4 sm:px-2 sm:py-7',
-    canUsePrompt
-      ? 'cursor-pointer hover:bg-rose-tint/10'
-      : '',
-  ].join(' ')
+function versionEntryClass() {
+  return 'grid grid-cols-[3rem_minmax(0,1fr)] gap-3 px-1 py-6 sm:grid-cols-[3.75rem_minmax(0,1fr)] sm:gap-4 sm:px-2 sm:py-7'
+}
+
+function promptDeleteDescription(entry: PromptVersionEntry, deletesCluster: boolean) {
+  const pieceCount = entry.prompt.piece_count
+  const base = `This will delete the ${entityLabel('prompt')} and ${pieceCount} ${entityLabel('piece', { plural: pieceCount !== 1 })}.`
+  return deletesCluster
+    ? `${base} This is the last version in its cluster, so the cluster will be deleted too.`
+    : base
 }

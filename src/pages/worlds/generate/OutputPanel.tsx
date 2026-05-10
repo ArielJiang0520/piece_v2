@@ -17,6 +17,7 @@ interface OutputPanelProps {
   streaming: boolean
   displayComplete: boolean
   pieceMetaLabel: string | null
+  pieceNumber: number | null
   readingFont: ReadingFont
   readingFontSize: ReadingFontSize
 }
@@ -27,6 +28,7 @@ export default function OutputPanel({
   streaming,
   displayComplete,
   pieceMetaLabel,
+  pieceNumber,
   readingFont,
   readingFontSize,
 }: OutputPanelProps) {
@@ -128,7 +130,7 @@ export default function OutputPanel({
           <div className="fade-in-up mt-10">
             <div className="t-meta flex items-center gap-3">
               <span className="h-px flex-1 bg-rose-line" />
-              <span>End</span>
+              <span>{pieceNumber ? `End of ${entityLabel('piece', { capitalize: true })} #${pieceNumber}` : 'End'}</span>
               <span className="h-px flex-1 bg-rose-line" />
             </div>
             <div className="mt-8 flex justify-center">

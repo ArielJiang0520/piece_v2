@@ -189,7 +189,7 @@ export default function WorldAbout() {
   return (
     <div className="page-fade-in min-h-screen bg-paper">
       <div className="page-width min-h-screen px-6 pb-32 pt-0">
-        <div className="sticky top-23 z-10 -mx-6 mt-7 border-y border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
+        <div className="sticky top-23 z-10 -mx-6 border-b border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
           <div className="flex items-center justify-between gap-3 py-3">
             <div ref={versionMenuRef} className="relative min-w-0 flex-1">
               <button
@@ -245,8 +245,8 @@ export default function WorldAbout() {
                           >
                             <span
                               className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full font-serif-zh text-xs italic transition-colors ${isSelected
-                                  ? 'bg-rose text-white shadow-(--shadow-cta)'
-                                  : 'border border-rose-line bg-paper text-ink-3 group-hover/item:border-rose/40 group-hover/item:text-rose-deep'
+                                ? 'bg-rose text-white shadow-(--shadow-cta)'
+                                : 'border border-rose-line bg-paper text-ink-3 group-hover/item:border-rose/40 group-hover/item:text-rose-deep'
                                 }`}
                             >
                               v{number}
@@ -289,7 +289,7 @@ export default function WorldAbout() {
               <span className="grid h-7 w-7 place-items-center rounded-full bg-rose-pale text-rose-deep">
                 <Pencil aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
               </span>
-              <span>Edit</span>
+              <span className="text-ink">Edit</span>
             </Link>
           </div>
 

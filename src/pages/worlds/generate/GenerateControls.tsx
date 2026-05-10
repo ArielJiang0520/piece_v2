@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { GenerationPhase } from '@/hooks/useGeneration'
 import type { ReadingFont } from '@/preferences/readingFont'
@@ -26,7 +26,7 @@ interface GenerateControlsProps {
   onToggleSettings: () => void
   onCloseSettings: () => void
   onStop: () => void
-  stickyTopClass?: string
+  stickyTopOffset?: number
 }
 
 const iconButtonClass =
@@ -55,11 +55,13 @@ export default function GenerateControls({
   onToggleSettings,
   onCloseSettings,
   onStop,
-  stickyTopClass = 'top-16',
+  stickyTopOffset = 64,
 }: GenerateControlsProps) {
   const settingsPanelId = useId()
+  const ctaAnchorRef = useRef<HTMLDivElement>(null)
   const [settingsRendered, setSettingsRendered] = useState(settingsOpen)
   const [settingsEntered, setSettingsEntered] = useState(settingsOpen)
+  const [ctaDocked, setCtaDocked] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const settingsVisible = settingsOpen && settingsEntered
   const handleModelMenuOpenChange = useCallback((open: boolean) => {
@@ -89,6 +91,31 @@ export default function GenerateControls({
     return () => window.clearTimeout(timeout)
   }, [settingsOpen])
 
+  useEffect(() => {
+    let frame = 0
+
+    function measureDockedState() {
+      frame = 0
+      const anchorTop = ctaAnchorRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY
+      setCtaDocked(anchorTop <= stickyTopOffset)
+    }
+
+    function queueMeasure() {
+      if (frame) return
+      frame = window.requestAnimationFrame(measureDockedState)
+    }
+
+    measureDockedState()
+    window.addEventListener('scroll', queueMeasure, { passive: true })
+    window.addEventListener('resize', queueMeasure)
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', queueMeasure)
+      window.removeEventListener('resize', queueMeasure)
+    }
+  }, [stickyTopOffset])
+
   return (
     <>
       {streaming && (
@@ -103,26 +130,41 @@ export default function GenerateControls({
         </button>
       )}
 
-      <div className={`sticky ${stickyTopClass} mt-2 bg-paper/0 py-3 ${modelMenuOpen ? 'z-50' : 'z-10'}`}>
-        <div className="flex items-center justify-center">
-          <div className="flex w-[78%] max-w-md min-w-0 flex-col items-center">
+      <div ref={ctaAnchorRef} aria-hidden="true" />
+      <div
+        className={`sticky z-10 bg-paper transition-[margin,padding] duration-200 ease-out ${ctaDocked ? 'mt-0 py-0' : 'mt-2 py-3'}`}
+        style={{ top: stickyTopOffset }}
+      >
+        <div
+          className={`relative left-1/2 flex -translate-x-1/2 items-center justify-center bg-paper transition-[width,max-width] duration-200 ease-out ${ctaDocked
+            ? 'w-screen max-w-none'
+            : 'w-[78%] max-w-md'
+            }`}
+        >
+          <div
+            className="flex w-full min-w-0 items-center justify-center"
+          >
             <button
               type="button"
-              className={`inline-flex h-10 w-full min-w-0 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white opacity-100 shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] duration-200 hover:bg-rose-deep focus:outline-none disabled:pointer-events-none disabled:opacity-50 sm:px-6 ${pulseCta && !disabled ? 'cta-attention-pulse' : ''}`}
+              className={`inline-flex min-w-0 items-center justify-center font-serif-zh text-[15px] italic leading-none opacity-100 transition-[background-color,border-color,border-radius,box-shadow,color,height,padding,width] duration-200 ease-out focus:outline-none disabled:pointer-events-none disabled:opacity-50 ${ctaDocked ? 'h-12 w-full rounded-none border-b border-rose-line bg-paper px-4 text-rose-deep shadow-none hover:bg-rose-tint' : 'h-10 w-full rounded-full bg-rose px-5 text-white shadow-(--shadow-cta) hover:bg-rose-deep sm:px-6'} ${pulseCta && !disabled && !ctaDocked ? 'cta-attention-pulse' : ''}`}
               onClick={onGenerate}
               disabled={disabled}
             >
               <span className="min-w-0 truncate">{generateButtonLabel(phase, hasExistingPieces)}</span>
             </button>
-
-            <ModelSelector
-              model={model}
-              onModelChange={onModelChange}
-              disabled={streaming}
-              closeMenu={settingsOpen}
-              onMenuOpenChange={handleModelMenuOpenChange}
-            />
           </div>
+        </div>
+      </div>
+
+      <div className={`relative flex items-center justify-center ${modelMenuOpen ? 'z-50' : 'z-0'}`}>
+        <div className="flex w-[78%] max-w-md min-w-0 flex-col items-center">
+          <ModelSelector
+            model={model}
+            onModelChange={onModelChange}
+            disabled={streaming}
+            closeMenu={settingsOpen}
+            onMenuOpenChange={handleModelMenuOpenChange}
+          />
         </div>
       </div>
 

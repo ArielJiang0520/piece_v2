@@ -36,7 +36,7 @@ export default function ModelSelector({
   }
 
   return (
-    <div className="relative mt-2 flex w-full min-w-0 justify-center">
+    <div className="relative mt-0.5 mb-2 flex w-full min-w-0 justify-center">
       <button
         id={modelButtonId}
         type="button"

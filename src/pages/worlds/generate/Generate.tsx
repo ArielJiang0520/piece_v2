@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { LockKeyhole, Pencil } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel } from '@/config'
@@ -133,12 +133,18 @@ export default function Generate() {
   const nextVersionNumber = clusterPrompts.length + 1
   const showGenerateTabs = activeClusterId != null
   const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
+  const selectedPieceIndex = selectedPieceId === null
+    ? -1
+    : promptPieces.findIndex(piece => piece.id === selectedPieceId)
+  const displayedPieceNumber = viewingPendingPiece
+    ? pendingPieceNumber
+    : selectedPieceIndex >= 0
+      ? Math.max(1, activePromptPieceCount - selectedPieceIndex)
+      : null
   const pulseGenerateCta = lockedMode && !promptDetailsLoading && activePromptPieceCount === 0
   const showPieceStrip = lockedMode && (activePromptPieceCount > 0 || pendingPieceNumber !== null)
-  const PromptStateIcon = lockedMode ? LockKeyhole : Pencil
-  const promptStateTitle = lockedMode ? `Saved ${entityLabel('prompt')}` : `Draft ${entityLabel('prompt')}`
-  const promptStateLabel = lockedMode ? 'Read-only' : 'Editable'
-  const promptEditLabel = `Open to edit this ${entityLabel('prompt')}`
+  const promptStateTitle = `Draft ${entityLabel('prompt')}`
+  const promptStateLabel = 'Editable'
   const generateTabs = useMemo(() => {
     if (!showGenerateTabs) return undefined
 
@@ -227,23 +233,55 @@ export default function Generate() {
     })
   }
 
+  function handleEditActivePrompt() {
+    if (!activePrompt) return
+    handleEditFromPrompt(activePrompt)
+  }
+
+  function handleCancelVersionDraft() {
+    if (!id || !versionDraft) return
+    navigate(`/worlds/${id}/generate?promptId=${versionDraft.sourcePromptId}`, { replace: true })
+  }
+
   return (
     <div className="page-fade-in min-h-screen page-width px-4 pb-32 pt-6">
       {activeTab === 'prompt' ? (
         <>
           <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''} bg-paper/95 pb-1`}>
-            {!showGenerateTabs && (
+            {lockedMode && activePrompt && (
+              <div className="flex justify-end px-2 pt-4">
+                <button
+                  type="button"
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-rose-line bg-paper px-4 font-serif-zh text-[14px] italic leading-none text-rose-deep transition-[background-color,border-color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-pale focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 disabled:pointer-events-none disabled:opacity-50"
+                  onClick={handleEditActivePrompt}
+                  disabled={streaming || activeClusterId == null}
+                >
+                  <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 truncate">Edit</span>
+                </button>
+              </div>
+            )}
+
+            {!lockedMode && versionDraft && (
+              <div className="flex items-center justify-between gap-3 px-2 pt-4">
+                <span className="t-meta min-w-0 truncate text-ink-3">Creating a new version</span>
+                <button
+                  type="button"
+                  className="t-meta shrink-0 text-ink-3 underline decoration-rose-line underline-offset-4 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                  onClick={handleCancelVersionDraft}
+                  disabled={streaming}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {!showGenerateTabs && !lockedMode && !versionDraft && (
               <div className="flex items-center gap-2 px-2 pt-4 text-ink-3">
-                {lockedMode ? (
-                  <span className="t-meta text-ink-3">{promptEditLabel}</span>
-                ) : (
-                  <>
-                    <PromptStateIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                    <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
-                    <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
-                    <span className="t-meta shrink-0" style={{ color: 'var(--color-rose-deep)' }}>{promptStateLabel}</span>
-                  </>
-                )}
+                <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
+                <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
+                <span className="t-meta shrink-0" style={{ color: 'var(--color-rose-deep)' }}>{promptStateLabel}</span>
               </div>
             )}
 
@@ -276,7 +314,7 @@ export default function Generate() {
             onToggleSettings={() => setSettingsOpen(open => !open)}
             onCloseSettings={() => setSettingsOpen(false)}
             onStop={handleStop}
-            stickyTopClass={showGenerateTabs ? 'top-23' : 'top-16'}
+            stickyTopOffset={showGenerateTabs ? 92 : 64}
           />
 
           <section className="mt-2 border-t border-rose-line/70 bg-paper/60">
@@ -299,6 +337,7 @@ export default function Generate() {
               streaming={streaming}
               displayComplete={outputDisplayComplete}
               pieceMetaLabel={displayedPieceMetaLabel}
+              pieceNumber={displayedPieceNumber}
               readingFont={readingFont}
               readingFontSize={readingFontSize}
             />
@@ -311,9 +350,7 @@ export default function Generate() {
             currentPromptId={queryPromptId}
             prompts={clusterPrompts}
             loading={clusterLoading || promptDetailsLoading}
-            streaming={streaming}
             onViewPrompt={() => setActiveTab('prompt')}
-            onEditFromPrompt={handleEditFromPrompt}
           />
         </section>
       )}
