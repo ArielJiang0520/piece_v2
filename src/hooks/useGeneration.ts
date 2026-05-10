@@ -1,8 +1,5 @@
 import { useEffect, useReducer, useRef } from 'react'
-import {
-  getHiddenReadingSpeedUnitsPerSecond,
-  useReadingSpeedUnitsPerSecond,
-} from '@/preferences/readingSpeed'
+import { useReadingSpeedUnitsPerSecond } from '@/preferences/readingSpeed'
 import { createRandomId } from '@/utils/id'
 import { readServerSentEvents } from '@/utils/sse'
 
@@ -35,7 +32,6 @@ type Action =
 const initialState: State = { phase: 'idle', output: '', error: '', completion: 'none' }
 const DISPLAY_FLUSH_MS = 80
 const MAX_DISPLAY_UNITS_PER_FLUSH = 10
-const DENSE_SCRIPT_PATTERN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -59,8 +55,7 @@ function reducer(state: State, action: Action): State {
 }
 
 function getDisplayUnitCost(char: string) {
-  if (!/\S/u.test(char)) return 0
-  return DENSE_SCRIPT_PATTERN.test(char) ? 2 : 1
+  return /\S/u.test(char) ? 1 : 0
 }
 
 function takeDisplaySlice(text: string, maxUnits: number) {
@@ -135,10 +130,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
 
     const budget = Math.min(
       displayUnitBudgetRef.current
-        + (getHiddenReadingSpeedUnitsPerSecond(
-          pendingChunkRef.current,
-          maxDisplayUnitsPerSecondRef.current,
-        ) * elapsed) / 1000,
+        + (maxDisplayUnitsPerSecondRef.current * elapsed) / 1000,
       MAX_DISPLAY_UNITS_PER_FLUSH,
     )
     const allowance = Math.max(1, Math.floor(budget))

@@ -286,49 +286,51 @@ export default function WorldEditor() {
   }
 
   return (
-    <div className="page-fade-in min-h-svh bg-paper">
-      <div className="page-width flex min-h-svh flex-col px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-7">
-        {isFirstUserWorld && (
-          <div className="rounded-md border border-rose-line bg-rose-pale/45 px-4 py-3">
-            <p className="font-serif-zh text-[16px] leading-7 text-ink">
-              First time creating a {entityLabel('world')}?{' '}
-              <button
-                type="button"
-                className="italic text-rose underline decoration-rose/35 underline-offset-4 transition-colors hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-                onClick={() => setTipsOpen(true)}
-              >
-                Read our tips.
-              </button>
+    <>
+      <div className="page-fade-in min-h-svh bg-paper">
+        <div className="page-width flex min-h-svh flex-col px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-7">
+          {isFirstUserWorld && (
+            <div className="rounded-md border border-rose-line bg-rose-pale/45 px-4 py-3">
+              <p className="flex flex-col items-start gap-1 font-serif-zh text-[16px] leading-7 text-ink">
+                First {entityLabel('world')}?
+                <button
+                  type="button"
+                  className="italic text-rose underline decoration-rose/35 underline-offset-4 transition-colors hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
+                  onClick={() => setTipsOpen(true)}
+                >
+                  Read the tips first.
+                </button>
+              </p>
+            </div>
+          )}
+
+          <label className={isFirstUserWorld ? 'mt-8 block' : 'block'}>
+            <span className="t-eyebrow eyebrow-rule">Name</span>
+            <input
+              value={name}
+              onChange={event => setName(event.target.value)}
+              className="mt-4 block w-full bg-transparent px-0 py-1 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:outline-none focus-visible:outline focus-visible:outline-offset-4 focus-visible:outline-ink-4/70"
+              placeholder={`${entityLabel('world', { capitalize: true })} name`}
+              autoFocus
+            />
+          </label>
+
+          <label className="mt-10 flex min-h-0 flex-1 flex-col">
+            <span className="t-eyebrow eyebrow-rule">Details</span>
+            <textarea
+              value={body}
+              onChange={event => setBody(event.target.value)}
+              className="mt-4 min-h-[55svh] flex-1 resize-none border-l border-rose-line bg-transparent py-1 pl-5 pr-0 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:outline-none focus-visible:border-ink-4"
+              placeholder={`Setting, characters, tone, dynamic, dirty details. Whatever the AI needs to know.`}
+            />
+          </label>
+
+          {saveError && (
+            <p className="mt-4 rounded-md border border-rose/40 bg-rose-pale px-3 py-2 text-sm text-rose-deep">
+              {saveError}
             </p>
-          </div>
-        )}
-
-        <label className={isFirstUserWorld ? 'mt-8 block' : 'block'}>
-          <span className="t-eyebrow eyebrow-rule">Name</span>
-          <input
-            value={name}
-            onChange={event => setName(event.target.value)}
-            className="mt-4 block w-full bg-transparent px-0 py-1 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:outline-none focus-visible:outline focus-visible:outline-offset-4 focus-visible:outline-ink-4/70"
-            placeholder={`${entityLabel('world', { capitalize: true })} name`}
-            autoFocus
-          />
-        </label>
-
-        <label className="mt-10 flex min-h-0 flex-1 flex-col">
-          <span className="t-eyebrow eyebrow-rule">Details</span>
-          <textarea
-            value={body}
-            onChange={event => setBody(event.target.value)}
-            className="mt-4 min-h-[55svh] flex-1 resize-none border-l border-rose-line bg-transparent py-1 pl-5 pr-0 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:outline-none focus-visible:border-ink-4"
-            placeholder={`Write the ${entityLabel('world')}'s setting, tone, and important details here...`}
-          />
-        </label>
-
-        {saveError && (
-          <p className="mt-4 rounded-md border border-rose/40 bg-rose-pale px-3 py-2 text-sm text-rose-deep">
-            {saveError}
-          </p>
-        )}
+          )}
+        </div>
       </div>
 
       <ConfirmDialog
@@ -354,6 +356,6 @@ export default function WorldEditor() {
         }}
       />
       <CreateWorldTipsDialog open={tipsOpen} onClose={() => setTipsOpen(false)} />
-    </div>
+    </>
   )
 }

@@ -72,11 +72,12 @@ export default function GenerateVersionsPanel({
 }: GenerateVersionsPanelProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [showDiff, setShowDiff] = useState(false)
+  const [showDiff, setShowDiff] = useState(true)
   const [openMenuPromptId, setOpenMenuPromptId] = useState<number | null>(null)
   const [confirmPrompt, setConfirmPrompt] = useState<PromptVersionEntry | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const actionsMenuRef = useRef<HTMLDivElement | null>(null)
+  const currentEntryRef = useRef<HTMLElement | null>(null)
   const entries = useMemo<PromptVersionEntry[]>(
     () => prompts
       .map((prompt, index) => {
@@ -95,6 +96,11 @@ export default function GenerateVersionsPanel({
   const deleteDescription = confirmPrompt
     ? promptDeleteDescription(confirmPrompt, deletingLastClusterPrompt)
     : undefined
+
+  useEffect(() => {
+    if (loading || !currentPromptId) return
+    currentEntryRef.current?.scrollIntoView({ block: 'center' })
+  }, [currentPromptId, loading])
 
   useEffect(() => {
     if (openMenuPromptId === null) return
@@ -197,7 +203,7 @@ export default function GenerateVersionsPanel({
 
   return (
     <div className="relative">
-      <div className="mb-1 flex justify-end px-2">
+      <div className="mb-5 flex justify-end px-2">
         <label className="t-meta inline-flex cursor-pointer items-center gap-2 text-ink-3 transition-colors hover:text-ink">
           <input
             type="checkbox"
@@ -217,12 +223,29 @@ export default function GenerateVersionsPanel({
       <div>
         {entries.map(entry => {
           const { prompt, number, isCurrent, editMarks } = entry
+          const clickable = !isCurrent && !!worldId
+          const handleCardActivate = () => {
+            if (!clickable) return
+            viewPromptVersion(prompt.id, isCurrent)
+          }
           return (
             <section
               key={prompt.id}
+              ref={isCurrent ? currentEntryRef : undefined}
               data-prompt-id={prompt.id}
-              className={versionEntryClass()}
+              className={`${versionEntryClass()} ${isCurrent ? 'rounded-lg bg-paper-2/70' : clickable ? 'cursor-pointer' : ''}`}
               aria-current={isCurrent ? 'page' : undefined}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={clickable ? handleCardActivate : undefined}
+              onKeyDown={clickable
+                ? event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    handleCardActivate()
+                  }
+                }
+                : undefined}
             >
               <div className="relative flex justify-center">
                 <div
@@ -252,7 +275,10 @@ export default function GenerateVersionsPanel({
                         title={`${entityLabel('prompt', { capitalize: true })} actions`}
                         aria-haspopup="menu"
                         aria-expanded={openMenuPromptId === prompt.id}
-                        onClick={() => setOpenMenuPromptId(openId => openId === prompt.id ? null : prompt.id)}
+                        onClick={event => {
+                          event.stopPropagation()
+                          setOpenMenuPromptId(openId => openId === prompt.id ? null : prompt.id)
+                        }}
                       >
                         <Ellipsis aria-hidden="true" className="h-4 w-4" />
                       </button>
@@ -260,12 +286,16 @@ export default function GenerateVersionsPanel({
                         <div
                           role="menu"
                           className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
+                          onClick={event => event.stopPropagation()}
                         >
                           <button
                             type="button"
                             role="menuitem"
                             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm normal-case tracking-normal text-signal-red transition-colors hover:bg-paper-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
-                            onClick={() => requestDeletePrompt(entry)}
+                            onClick={event => {
+                              event.stopPropagation()
+                              requestDeletePrompt(entry)
+                            }}
                           >
                             <Trash2 aria-hidden="true" className="h-4 w-4" />
                             Delete this {entityLabel('prompt')}
@@ -279,19 +309,6 @@ export default function GenerateVersionsPanel({
                 <h2 className={`mt-3 whitespace-pre-wrap font-serif-zh text-[16px] leading-7 ${isCurrent ? 'text-ink' : 'text-ink-2'}`}>
                   {renderPromptText(prompt.text, showDiff ? editMarks : null)}
                 </h2>
-
-                {!isCurrent && (
-                  <div className="mt-5 flex justify-start">
-                    <button
-                      type="button"
-                      className="inline-flex h-9 items-center justify-center rounded-full border border-rose-line bg-paper px-4 font-serif-zh text-[14px] italic leading-none text-rose-deep transition-[background-color,border-color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-pale focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 disabled:pointer-events-none disabled:opacity-50"
-                      onClick={() => viewPromptVersion(prompt.id, isCurrent)}
-                      disabled={!worldId}
-                    >
-                      Switch to v{number}
-                    </button>
-                  </div>
-                )}
               </div>
             </section>
           )

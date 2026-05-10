@@ -47,7 +47,7 @@ export default function PromptCard({
                 aria-label={promptLabel}
                 className={`${editorTextClass} h-44 w-full resize-y bg-transparent placeholder:text-ink-4 focus:outline-none focus:ring-0 disabled:opacity-50 [scrollbar-color:var(--color-rose)_transparent] [scrollbar-width:thin]`}
                 rows={6}
-                placeholder={`What do you want to see happen in this world?`}
+                placeholder={`Write a scene. Start with 'Write...' (e.g. Write the night Elena finally breaks)`}
                 value={prompt}
                 onChange={e => onPromptChange(e.target.value)}
                 disabled={streaming}

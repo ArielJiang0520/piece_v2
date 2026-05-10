@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Pencil } from 'lucide-react'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel } from '@/config'
 import { setGenerationModel, useGenerationModel } from '@/preferences/generationModel'
-import { setReadingFont, useReadingFont } from '@/preferences/readingFont'
-import { setReadingFontSize, useReadingFontSize } from '@/preferences/readingFontSize'
+import { useReadingFont } from '@/preferences/readingFont'
+import { useReadingFontSize } from '@/preferences/readingFontSize'
 import {
   setReadingSpeedUnitsPerSecond,
   useReadingSpeedUnitsPerSecond,
@@ -16,12 +15,19 @@ import PieceStrip from './PieceStrip'
 import OutputPanel from './OutputPanel'
 import GenerateControls from './GenerateControls'
 import GenerateVersionsPanel from './VersionsPanel'
+// import ReadingSettingsButton from './ReadingSettingsButton'
 import { useGenerateData } from './useGenerateData'
 import { useGeneratePieceSession } from './useGeneratePieceSession'
 import type { ClusterPrompt } from './generateTypes'
 
 const GENERATION_TEMPERATURE = 1
 const USE_THINKING = false
+
+const headerTextActionClass =
+  'inline-flex h-8 shrink-0 items-center justify-center px-1 font-serif-zh text-[14px] italic leading-none text-ink-3 underline decoration-ink-4/50 underline-offset-4 transition-colors duration-200 hover:text-ink hover:decoration-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-4/30 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:pointer-events-none disabled:opacity-50'
+
+// const navReadingButtonClass =
+//   'grid h-9 w-9 place-items-center rounded-full border border-transparent text-ink-3 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30'
 
 type GenerateTab = 'prompt' | 'versions'
 
@@ -67,7 +73,6 @@ export default function Generate() {
   const [activeTab, setActiveTab] = useState<GenerateTab>('prompt')
   const [prompt, setPrompt] = useState(draftPrompt)
   const normalizedPrompt = prompt.trim()
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const readingSpeed = useReadingSpeedUnitsPerSecond()
   const readingFont = useReadingFont()
   const readingFontSize = useReadingFontSize()
@@ -112,6 +117,7 @@ export default function Generate() {
     displayedOutput,
     outputDisplayComplete,
     displayedPieceMetaLabel,
+    displayedPieceFooterStatsLabel,
     prepareGeneration,
     cancelPendingGeneration,
   } = useGeneratePieceSession({
@@ -131,7 +137,13 @@ export default function Generate() {
     resetGeneration: reset,
   })
   const nextVersionNumber = clusterPrompts.length + 1
-  const showGenerateTabs = activeClusterId != null
+  const activeVersionIndex = activePrompt
+    ? clusterPrompts.findIndex(p => p.id === activePrompt.id)
+    : -1
+  const activeVersionNumber = activeVersionIndex >= 0 ? activeVersionIndex + 1 : null
+  const hasMultipleVersions = clusterPrompts.length > 1
+  const visibleActiveTab: GenerateTab = hasMultipleVersions ? activeTab : 'prompt'
+  const showGenerateTabs = !lockedMode || activeClusterId != null
   const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
   const selectedPieceIndex = selectedPieceId === null
     ? -1
@@ -141,10 +153,17 @@ export default function Generate() {
     : selectedPieceIndex >= 0
       ? Math.max(1, activePromptPieceCount - selectedPieceIndex)
       : null
-  const pulseGenerateCta = lockedMode && !promptDetailsLoading && activePromptPieceCount === 0
+  const needsFirstTakeScrollRoom = lockedMode && activePromptPieceCount === 0 && pendingPieceNumber === null
   const showPieceStrip = lockedMode && (activePromptPieceCount > 0 || pendingPieceNumber !== null)
-  const promptStateTitle = `Draft ${entityLabel('prompt')}`
-  const promptStateLabel = 'Editable'
+  const showHeaderRow = (lockedMode && !!activePrompt) || (!lockedMode && !!versionDraft)
+  const headerLabel = lockedMode
+    ? hasMultipleVersions && activeVersionNumber != null ? `Version ${activeVersionNumber}` : ''
+    : 'Editing scene — new version'
+  const showLatestVersionTag = lockedMode && activeVersionNumber === clusterPrompts.length
+  const showPromptTab = useCallback(() => {
+    setActiveTab('prompt')
+    requestAnimationFrame(() => window.scrollTo({ top: 0 }))
+  }, [])
   const generateTabs = useMemo(() => {
     if (!showGenerateTabs) return undefined
 
@@ -154,29 +173,40 @@ export default function Generate() {
         aria-label="Generate view"
       >
         <div
-          className="grid grid-cols-2 px-4"
+          className={`grid px-4 ${hasMultipleVersions ? 'grid-cols-2' : 'grid-cols-1'}`}
           role="tablist"
           aria-label="Generate view"
         >
           <GenerateTabButton
-            active={activeTab === 'prompt'}
-            onClick={() => setActiveTab('prompt')}
+            active={visibleActiveTab === 'prompt'}
+            onClick={showPromptTab}
           >
             {entityLabel('prompt')}
           </GenerateTabButton>
-          <GenerateTabButton
-            active={activeTab === 'versions'}
-            onClick={() => setActiveTab('versions')}
-          >
-            <span>Versions</span>
-            <span className="inline-flex min-w-5 justify-center rounded-full bg-paper-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none tracking-normal text-ink-3 ring-1 ring-paper-3/70">
-              {clusterPrompts.length}
-            </span>
-          </GenerateTabButton>
+          {hasMultipleVersions && (
+            <GenerateTabButton
+              active={visibleActiveTab === 'versions'}
+              onClick={() => setActiveTab('versions')}
+            >
+              <span>Versions</span>
+              <span className="inline-flex min-w-5 justify-center rounded-full bg-paper-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none tracking-normal text-ink-3 ring-1 ring-paper-3/70">
+                {clusterPrompts.length}
+              </span>
+            </GenerateTabButton>
+          )}
         </div>
       </nav>
     )
-  }, [activeTab, clusterPrompts.length, showGenerateTabs])
+  }, [clusterPrompts.length, hasMultipleVersions, showGenerateTabs, showPromptTab, visibleActiveTab])
+  // const readingSettingsAction = useMemo(() => (
+  //   <ReadingSettingsButton
+  //     className={navReadingButtonClass}
+  //     readingFont={readingFont}
+  //     onReadingFontChange={setReadingFont}
+  //     readingFontSize={readingFontSize}
+  //     onReadingFontSizeChange={setReadingFontSize}
+  //   />
+  // ), [readingFont, readingFontSize])
 
   useTopNavConfig({ backHref, bottomSlot: generateTabs })
 
@@ -191,8 +221,8 @@ export default function Generate() {
   }, [activePrompt, queryPromptId])
 
   useEffect(() => {
-    if (!showGenerateTabs) setActiveTab('prompt')
-  }, [showGenerateTabs])
+    if (!showGenerateTabs || !hasMultipleVersions) setActiveTab('prompt')
+  }, [hasMultipleVersions, showGenerateTabs])
 
   const promptError = promptDetailsError ? `Could not load ${entityLabel('prompt')}` : ''
   const error = generationError || promptError
@@ -220,7 +250,7 @@ export default function Generate() {
 
   function handleEditFromPrompt(sourcePrompt: ClusterPrompt) {
     if (!id || activeClusterId == null || streaming) return
-    setActiveTab('prompt')
+    showPromptTab()
     navigate(`/worlds/${id}/generate`, {
       state: {
         versionDraft: {
@@ -244,44 +274,44 @@ export default function Generate() {
   }
 
   return (
-    <div className="page-fade-in min-h-screen page-width px-4 pb-32 pt-6">
-      {activeTab === 'prompt' ? (
+    <div className={`page-fade-in min-h-screen page-width px-4 pt-6 ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}`}>
+      {visibleActiveTab === 'prompt' ? (
         <>
           <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''} bg-paper/95 pb-1`}>
-            {lockedMode && activePrompt && (
-              <div className="flex justify-end px-2 pt-4">
-                <button
-                  type="button"
-                  className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-rose-line bg-paper px-4 font-serif-zh text-[14px] italic leading-none text-rose-deep transition-[background-color,border-color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-pale focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 disabled:pointer-events-none disabled:opacity-50"
-                  onClick={handleEditActivePrompt}
-                  disabled={streaming || activeClusterId == null}
-                >
-                  <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                  <span className="min-w-0 truncate">Edit</span>
-                </button>
-              </div>
-            )}
-
-            {!lockedMode && versionDraft && (
+            {showHeaderRow && (
               <div className="flex items-center justify-between gap-3 px-2 pt-4">
-                <span className="t-meta min-w-0 truncate text-ink-3">Creating a new version</span>
-                <button
-                  type="button"
-                  className="t-meta shrink-0 text-ink-3 underline decoration-rose-line underline-offset-4 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-                  onClick={handleCancelVersionDraft}
-                  disabled={streaming}
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-
-            {!showGenerateTabs && !lockedMode && !versionDraft && (
-              <div className="flex items-center gap-2 px-2 pt-4 text-ink-3">
-                <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                <span className="t-eyebrow min-w-0 truncate text-ink-3">{promptStateTitle}</span>
-                <span aria-hidden="true" className="h-px w-5 shrink-0 bg-rose-line" />
-                <span className="t-meta shrink-0" style={{ color: 'var(--color-rose-deep)' }}>{promptStateLabel}</span>
+                {headerLabel && (
+                  <span className="t-meta flex min-w-0 items-center gap-1.5 truncate text-ink-3">
+                    {headerLabel}
+                    {showLatestVersionTag && (
+                      <span className="shrink-0 font-serif-zh text-[12px] italic normal-case tracking-normal text-rose-deep">
+                        (latest)
+                      </span>
+                    )}
+                  </span>
+                )}
+                {!headerLabel && (
+                  <span aria-hidden="true" className="h-px flex-1 bg-paper-3/70" />
+                )}
+                {lockedMode ? (
+                  <button
+                    type="button"
+                    className={headerTextActionClass}
+                    onClick={handleEditActivePrompt}
+                    disabled={streaming || activeClusterId == null}
+                  >
+                    Edit
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={headerTextActionClass}
+                    onClick={handleCancelVersionDraft}
+                    disabled={streaming}
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             )}
 
@@ -298,23 +328,15 @@ export default function Generate() {
           <GenerateControls
             phase={phase}
             streaming={streaming}
-            settingsOpen={settingsOpen}
             disabled={generateDisabled}
             hasExistingPieces={activePromptPieceCount > 0}
-            pulseCta={pulseGenerateCta}
             model={model}
-            onModelChange={setGenerationModel}
             readingSpeed={readingSpeed}
+            onModelChange={setGenerationModel}
             onReadingSpeedChange={setReadingSpeedUnitsPerSecond}
-            readingFont={readingFont}
-            onReadingFontChange={setReadingFont}
-            readingFontSize={readingFontSize}
-            onReadingFontSizeChange={setReadingFontSize}
             onGenerate={handleGenerate}
-            onToggleSettings={() => setSettingsOpen(open => !open)}
-            onCloseSettings={() => setSettingsOpen(false)}
             onStop={handleStop}
-            stickyTopOffset={showGenerateTabs ? 92 : 64}
+            stickyTopOffset={showGenerateTabs ? 92 : 48}
           />
 
           <section className="mt-2 border-t border-rose-line/70 bg-paper/60">
@@ -337,6 +359,7 @@ export default function Generate() {
               streaming={streaming}
               displayComplete={outputDisplayComplete}
               pieceMetaLabel={displayedPieceMetaLabel}
+              pieceFooterStatsLabel={displayedPieceFooterStatsLabel}
               pieceNumber={displayedPieceNumber}
               readingFont={readingFont}
               readingFontSize={readingFontSize}
@@ -350,7 +373,7 @@ export default function Generate() {
             currentPromptId={queryPromptId}
             prompts={clusterPrompts}
             loading={clusterLoading || promptDetailsLoading}
-            onViewPrompt={() => setActiveTab('prompt')}
+            onViewPrompt={showPromptTab}
           />
         </section>
       )}

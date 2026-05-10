@@ -4,6 +4,7 @@ import { apiFetch } from './api'
 import Skeleton, { SkeletonText } from './components/Skeleton'
 
 interface User {
+  id: number
   username: string
 }
 

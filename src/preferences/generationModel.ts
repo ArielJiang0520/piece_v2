@@ -3,6 +3,7 @@ import { createPreference } from './createPreference'
 export interface ModelOption {
   id: string
   label: string
+  recommended: boolean
   attributes: {
     speed: 1 | 2 | 3
     quality: 1 | 2 | 3
@@ -18,6 +19,7 @@ export const MODELS: ModelOption[] = [
   {
     id: 'deepseek/deepseek-v4-pro',
     label: 'DeepSeek V4 Pro',
+    recommended: true,
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
     preferredProviders: ['parasail/fp8', 'deepinfra/fp4'],
@@ -25,6 +27,7 @@ export const MODELS: ModelOption[] = [
   {
     id: 'deepseek/deepseek-v4-flash',
     label: 'DeepSeek V4 Flash',
+    recommended: false,
     attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
     preferredProviders: ['parasail/fp8', 'deepinfra/fp4'],
@@ -32,6 +35,7 @@ export const MODELS: ModelOption[] = [
   {
     id: 'z-ai/glm-5',
     label: 'GLM 5',
+    recommended: false,
     attributes: { speed: 3, quality: 2, cost: 2 },
     reasoning: { effort: 'none' },
     preferredProviders: ['friendli'],
@@ -39,6 +43,7 @@ export const MODELS: ModelOption[] = [
   {
     id: 'z-ai/glm-5.1',
     label: 'GLM 5.1',
+    recommended: true,
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
     preferredProviders: ['friendli'],

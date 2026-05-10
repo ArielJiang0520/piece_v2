@@ -34,7 +34,6 @@
   --shadow-feather: 0 12px 32px -12px rgba(20, 18, 30, 0.06);
   --shadow-cta: 0 10px 28px -10px rgba(205, 83, 106, 0.28);
   --shadow-cta-hover: 0 14px 36px -10px rgba(205, 83, 106, 0.40);
-  --shadow-cta-pulse: 0 14px 38px -8px rgba(205, 83, 106, 0.50), 0 0 0 6px rgba(205, 83, 106, 0.10);
   --shadow-menu: 0 16px 40px -16px rgba(20, 18, 30, 0.18);
 }
 
@@ -95,7 +94,6 @@ html.dark {
   --shadow-feather: 0 12px 32px -12px rgba(0, 0, 0, 0.40);
   --shadow-cta: 0 10px 28px -10px rgba(205, 83, 106, 0.36);
   --shadow-cta-hover: 0 14px 36px -10px rgba(205, 83, 106, 0.48);
-  --shadow-cta-pulse: 0 14px 38px -8px rgba(205, 83, 106, 0.58), 0 0 0 6px rgba(205, 83, 106, 0.16);
   --shadow-menu: 0 16px 40px -16px rgba(0, 0, 0, 0.55);
 }
 
@@ -238,21 +236,11 @@ body {
   animation: listItemReveal 480ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
-@keyframes ctaAttentionPulse {
-  0%, 100% { box-shadow: var(--shadow-cta); }
-  50% { box-shadow: var(--shadow-cta-pulse); }
-}
-
-.cta-attention-pulse {
-  animation: ctaAttentionPulse 1800ms ease-in-out infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .streamed-word-fade,
   .fade-in-up,
   .page-fade-in,
-  .list-item-reveal,
-  .cta-attention-pulse {
+  .list-item-reveal {
     animation: none;
     will-change: auto;
   }

@@ -1,95 +1,49 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { GenerationPhase } from '@/hooks/useGeneration'
-import type { ReadingFont } from '@/preferences/readingFont'
-import type { ReadingFontSize } from '@/preferences/readingFontSize'
-import SettingsPanel from './SettingsPanel'
 import ModelSelector from './ModelSelector'
+import ReadingSpeedButton from './ReadingSpeedButton'
 import { entityLabel } from '@/config'
 
 interface GenerateControlsProps {
   phase: GenerationPhase
   streaming: boolean
-  settingsOpen: boolean
   disabled: boolean
   hasExistingPieces: boolean
-  pulseCta: boolean
   model: string
-  onModelChange: (model: string) => void
   readingSpeed: number
+  onModelChange: (model: string) => void
   onReadingSpeedChange: (readingSpeed: number) => void
-  readingFont: ReadingFont
-  onReadingFontChange: (readingFont: ReadingFont) => void
-  readingFontSize: ReadingFontSize
-  onReadingFontSizeChange: (readingFontSize: ReadingFontSize) => void
   onGenerate: () => void
-  onToggleSettings: () => void
-  onCloseSettings: () => void
   onStop: () => void
   stickyTopOffset?: number
 }
 
-const iconButtonClass =
-  'inline-flex h-13 shrink-0 items-center justify-center rounded-full border border-rose-line bg-paper px-4 font-serif-zh text-[15px] italic leading-none text-rose-deep transition-colors hover:border-rose/40 hover:bg-rose-pale focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 disabled:pointer-events-none disabled:opacity-50'
-const activeIconButtonClass = 'border-rose/40 bg-rose-pale text-rose-deep'
-const floatingSettingsButtonClass = 'fixed bottom-7 right-5 z-50 sm:right-7'
-const floatingStopButtonClass =
-  'fixed bottom-7 left-1/2 z-40 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full border border-rose-line bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20'
+const floatingActionDockClass =
+  'fixed inset-x-0 bottom-7 z-40 flex items-center justify-center gap-3 pointer-events-none'
+
+const floatingActionButtonClass =
+  'pointer-events-auto grid h-14 w-14 shrink-0 place-items-center rounded-full border border-rose-line bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20'
 
 export default function GenerateControls({
   phase,
   streaming,
-  settingsOpen,
   disabled,
   hasExistingPieces,
-  pulseCta,
   model,
-  onModelChange,
   readingSpeed,
+  onModelChange,
   onReadingSpeedChange,
-  readingFont,
-  onReadingFontChange,
-  readingFontSize,
-  onReadingFontSizeChange,
   onGenerate,
-  onToggleSettings,
-  onCloseSettings,
   onStop,
-  stickyTopOffset = 64,
+  stickyTopOffset = 48,
 }: GenerateControlsProps) {
-  const settingsPanelId = useId()
   const ctaAnchorRef = useRef<HTMLDivElement>(null)
-  const [settingsRendered, setSettingsRendered] = useState(settingsOpen)
-  const [settingsEntered, setSettingsEntered] = useState(settingsOpen)
   const [ctaDocked, setCtaDocked] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
-  const settingsVisible = settingsOpen && settingsEntered
   const handleModelMenuOpenChange = useCallback((open: boolean) => {
     setModelMenuOpen(open)
   }, [])
-
-  useEffect(() => {
-    if (!settingsOpen) return
-
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onCloseSettings()
-    }
-
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [onCloseSettings, settingsOpen])
-
-  useEffect(() => {
-    if (settingsOpen) {
-      setSettingsRendered(true)
-      const frame = window.requestAnimationFrame(() => setSettingsEntered(true))
-      return () => window.cancelAnimationFrame(frame)
-    }
-
-    setSettingsEntered(false)
-    const timeout = window.setTimeout(() => setSettingsRendered(false), 220)
-    return () => window.clearTimeout(timeout)
-  }, [settingsOpen])
 
   useEffect(() => {
     let frame = 0
@@ -97,7 +51,11 @@ export default function GenerateControls({
     function measureDockedState() {
       frame = 0
       const anchorTop = ctaAnchorRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY
-      setCtaDocked(anchorTop <= stickyTopOffset)
+      setCtaDocked(current => (
+        current
+          ? anchorTop <= stickyTopOffset + 8
+          : anchorTop <= stickyTopOffset
+      ))
     }
 
     function queueMeasure() {
@@ -119,15 +77,23 @@ export default function GenerateControls({
   return (
     <>
       {streaming && (
-        <button
-          type="button"
-          className={floatingStopButtonClass}
-          onClick={onStop}
-          aria-label="Stop generation"
-          title="Stop generation"
-        >
-          <X className="h-6 w-6" aria-hidden="true" />
-        </button>
+        <div className={floatingActionDockClass}>
+          <ReadingSpeedButton
+            className={floatingActionButtonClass}
+            readingSpeed={readingSpeed}
+            onReadingSpeedChange={onReadingSpeedChange}
+          />
+
+          <button
+            type="button"
+            className={floatingActionButtonClass}
+            onClick={onStop}
+            aria-label="Stop generation"
+            title="Stop generation"
+          >
+            <X className="h-6 w-6" aria-hidden="true" />
+          </button>
+        </div>
       )}
 
       <div ref={ctaAnchorRef} aria-hidden="true" />
@@ -146,7 +112,7 @@ export default function GenerateControls({
           >
             <button
               type="button"
-              className={`inline-flex min-w-0 items-center justify-center font-serif-zh text-[15px] italic leading-none opacity-100 transition-[background-color,border-color,border-radius,box-shadow,color,height,padding,width] duration-200 ease-out focus:outline-none disabled:pointer-events-none disabled:opacity-50 ${ctaDocked ? 'h-12 w-full rounded-none border-b border-rose-line bg-paper px-4 text-rose-deep shadow-none hover:bg-rose-tint' : 'h-10 w-full rounded-full bg-rose px-5 text-white shadow-(--shadow-cta) hover:bg-rose-deep sm:px-6'} ${pulseCta && !disabled && !ctaDocked ? 'cta-attention-pulse' : ''}`}
+              className={`inline-flex min-w-0 items-center justify-center font-serif-zh text-[15px] italic leading-none opacity-100 transition-[background-color,border-color,border-radius,box-shadow,color,height,padding,width] duration-200 ease-out focus:outline-none disabled:pointer-events-none disabled:opacity-50 ${ctaDocked ? 'h-12 w-full rounded-none border-b border-rose-line bg-paper px-4 text-rose-deep shadow-none hover:bg-rose-tint' : 'h-10 w-full rounded-full bg-rose px-5 text-white shadow-(--shadow-cta) hover:bg-rose-deep sm:px-6'}`}
               onClick={onGenerate}
               disabled={disabled}
             >
@@ -162,59 +128,10 @@ export default function GenerateControls({
             model={model}
             onModelChange={onModelChange}
             disabled={streaming}
-            closeMenu={settingsOpen}
+            closeMenu={false}
             onMenuOpenChange={handleModelMenuOpenChange}
           />
         </div>
-      </div>
-
-      <div className={floatingSettingsButtonClass}>
-        <button
-          type="button"
-          className={`relative z-50 ${iconButtonClass} ${settingsOpen ? activeIconButtonClass : ''}`}
-          onClick={onToggleSettings}
-          aria-label={settingsOpen ? 'Close reading settings' : 'Open reading settings'}
-          title={settingsOpen ? 'Close reading settings' : 'Open reading settings'}
-          aria-expanded={settingsOpen}
-          aria-controls={settingsPanelId}
-        >
-          <span aria-hidden="true" className="font-serif-zh text-[15px] italic leading-none">
-            Aa
-          </span>
-        </button>
-
-        {settingsRendered && (
-          <>
-            <div
-              className={`fixed inset-0 z-40 bg-transparent transition-opacity duration-220 ${settingsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-              onClick={onCloseSettings}
-              aria-hidden="true"
-            />
-
-            <div
-              id={settingsPanelId}
-              className={`absolute bottom-full right-0 z-50 mb-2 w-[min(19rem,calc(100vw-2rem))] origin-bottom-right rounded-md border border-rose-line bg-paper/95 p-3 shadow-(--shadow-menu) transition-[opacity,transform] duration-220 ease-out ${settingsVisible ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-1 scale-[0.98] opacity-0'}`}
-              role="dialog"
-              aria-modal="false"
-              aria-label="Reading settings"
-              aria-hidden={!settingsOpen}
-            >
-              <span
-                aria-hidden="true"
-                className="absolute -bottom-1.75 right-4 h-3.5 w-3.5 rotate-45 border-b border-r border-rose-line bg-paper"
-              />
-              <SettingsPanel
-                open={settingsRendered}
-                readingSpeed={readingSpeed}
-                onReadingSpeedChange={onReadingSpeedChange}
-                readingFont={readingFont}
-                onReadingFontChange={onReadingFontChange}
-                readingFontSize={readingFontSize}
-                onReadingFontSizeChange={onReadingFontSizeChange}
-              />
-            </div>
-          </>
-        )}
       </div>
     </>
   )
@@ -224,6 +141,6 @@ function generateButtonLabel(phase: GenerationPhase, hasExistingPieces: boolean)
   if (phase === 'waiting_provider') return 'Waiting...'
   if (phase === 'thinking') return 'Thinking...'
   if (phase === 'writing') return 'Writing...'
-  if (!hasExistingPieces) return `Write first ${entityLabel('piece')}`
-  return `Write another ${entityLabel('piece')}`
+  if (!hasExistingPieces) return `First ${entityLabel('piece')}`
+  return `Another ${entityLabel('piece')}`
 }

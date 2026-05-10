@@ -17,6 +17,7 @@ interface OutputPanelProps {
   streaming: boolean
   displayComplete: boolean
   pieceMetaLabel: string | null
+  pieceFooterStatsLabel: string | null
   pieceNumber: number | null
   readingFont: ReadingFont
   readingFontSize: ReadingFontSize
@@ -28,6 +29,7 @@ export default function OutputPanel({
   streaming,
   displayComplete,
   pieceMetaLabel,
+  pieceFooterStatsLabel,
   pieceNumber,
   readingFont,
   readingFontSize,
@@ -56,9 +58,10 @@ export default function OutputPanel({
   }, [displayComplete])
 
   const wrapperClass = [
-    'min-h-[55vh] px-2 pt-2 text-sm transition-[padding-bottom] duration-200 ease-out',
+    'relative min-h-[55vh] px-2 pt-2 text-sm transition-[padding-bottom] duration-200 ease-out',
     streaming ? 'pb-[45vh]' : 'pb-2',
   ].join(' ')
+
   const previousTokenCount = previousTokenCountRef.current
   const outputTextClass = [
     'whitespace-pre-wrap',
@@ -66,7 +69,7 @@ export default function OutputPanel({
   ].join(' ')
   const outputTextStyle = READING_FONT_SIZE_BY_ID[readingFontSize].outputStyle
   const placeholderTextStyle = { ...outputTextStyle, color: 'var(--color-ink-4)' }
-  const outputLabel = `Generated ${entityLabel('piece', { capitalize: true })}`
+  const outputLabel = `${entityLabel('piece', { capitalize: true })}`
   const waitingForProvider = phase === 'waiting_provider' && streaming && !output
 
   function scrollToTop() {
@@ -94,7 +97,7 @@ export default function OutputPanel({
         </div>
         <div className="min-h-72 border-l border-rose-line/70 pl-5">
           <p className={outputTextClass} style={placeholderTextStyle}>
-            New text will appear here.
+            Your {entityLabel('piece')} will stream here once generation starts.
           </p>
         </div>
       </div>
@@ -130,7 +133,14 @@ export default function OutputPanel({
           <div className="fade-in-up mt-10">
             <div className="t-meta flex items-center gap-3">
               <span className="h-px flex-1 bg-rose-line" />
-              <span>{pieceNumber ? `End of ${entityLabel('piece', { capitalize: true })} #${pieceNumber}` : 'End'}</span>
+              <span className="flex shrink-0 flex-col items-center gap-1 text-center">
+                <span>{pieceNumber ? `End of ${entityLabel('piece', { capitalize: true })} #${pieceNumber}` : 'End'}</span>
+                {pieceFooterStatsLabel && (
+                  <span className="text-[12px] leading-none text-ink-4">
+                    {pieceFooterStatsLabel}
+                  </span>
+                )}
+              </span>
               <span className="h-px flex-1 bg-rose-line" />
             </div>
             <div className="mt-8 flex justify-center">

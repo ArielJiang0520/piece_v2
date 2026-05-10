@@ -306,7 +306,7 @@ export default function World() {
                 type="text"
                 value={searchInput}
                 onChange={event => setSearchInput(event.target.value)}
-                placeholder={`Search ${entityLabel('prompt', { plural: true })} by meaning...`}
+                placeholder={`Search ${entityLabel('prompt', { plural: true })}...`}
                 aria-label={`Search ${entityLabel('prompt', { plural: true })}`}
                 variant="search"
                 leadingAdornment={<Search aria-hidden="true" className="h-4 w-4 text-ink-4" />}
@@ -378,13 +378,13 @@ export default function World() {
 
         <Link
           to={`/worlds/${id}/generate`}
-          className="fixed bottom-[calc(1.75rem+env(safe-area-inset-bottom))] right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-rose font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 sm:right-7 sm:w-auto sm:gap-2.5 sm:pl-2.5 sm:pr-5"
+          className="fixed bottom-[calc(1.75rem+env(safe-area-inset-bottom))] right-5 z-40 inline-flex h-11 w-auto items-center justify-center gap-1.5 rounded-full bg-rose pl-2 pr-4 font-serif-zh text-[14px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 sm:right-7"
           aria-label={`New ${entityLabel('prompt', { capitalize: true })}`}
         >
-          <span className="grid h-7 w-7 place-items-center rounded-full">
-            <Plus aria-hidden="true" className="h-6 w-6 stroke-[1.8]" />
+          <span className="grid h-6 w-6 place-items-center rounded-full">
+            <Plus aria-hidden="true" className="h-5 w-5 stroke-[1.8]" />
           </span>
-          <span className="hidden sm:inline">New {entityLabel('prompt', { capitalize: true })}</span>
+          <span>New {entityLabel('prompt', { capitalize: true })}</span>
         </Link>
 
         {loadingSearch ? (

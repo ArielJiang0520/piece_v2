@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import ListEndMarker from '@/components/ListEndMarker'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { relativeTime } from '@/utils/time'
@@ -156,6 +157,7 @@ export default function WorldAbout() {
     : versionEntries.find(entry => entry.version.id === selectedVersionId)?.number ?? null
   const viewingHistory = selectedVersionId !== null
   const body = viewingHistory ? (selectedVersion?.body ?? '') : (world?.body ?? '')
+  const hasBody = body.trim().length > 0
   const currentVersionNumber = versionEntries[0]?.number ?? null
   const dropdownVersionNumber = viewingHistory ? selectedVersionNumber : currentVersionNumber
   const versionDropdownLabel = dropdownVersionNumber !== null ? `Version ${dropdownVersionNumber}` : 'Version'
@@ -329,15 +331,25 @@ export default function WorldAbout() {
           )}
         </div>
 
-        <article className="mt-9 whitespace-pre-wrap font-serif-zh text-[17px] leading-8 text-ink-2">
+        <header className="mt-8 border-b border-rose-line/70 pb-6">
+          <span className="t-eyebrow eyebrow-rule">World</span>
+          <h1 className="t-headline mt-4 wrap-break-word">
+            {world.name}
+          </h1>
+        </header>
+
+        <article className="mt-7 whitespace-pre-wrap font-serif-zh text-[17px] leading-8 text-ink-2">
           {viewingHistory && selectedVersionQuery.isLoading ? (
             <SkeletonText lineClassName="h-4" lines={8} />
-          ) : body.trim() ? (
+          ) : hasBody ? (
             body
           ) : (
             <p className="t-meta">No body yet.</p>
           )}
         </article>
+        {hasBody && (
+          <ListEndMarker label="End of world description" className="mt-10" />
+        )}
       </div>
 
       <ConfirmDialog

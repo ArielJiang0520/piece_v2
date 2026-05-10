@@ -40,7 +40,7 @@ export const READING_FONT_SIZE_BY_ID = Object.fromEntries(
   READING_FONT_SIZE_OPTIONS.map(option => [option.id, option]),
 ) as Record<ReadingFontSize, ReadingFontSizeOption>
 
-const DEFAULT_READING_FONT_SIZE: ReadingFontSize = 'medium'
+const DEFAULT_READING_FONT_SIZE: ReadingFontSize = 'large'
 
 function isReadingFontSize(value: unknown): value is ReadingFontSize {
   return READING_FONT_SIZE_OPTIONS.some(option => option.id === value)

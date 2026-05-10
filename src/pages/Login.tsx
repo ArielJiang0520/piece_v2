@@ -25,10 +25,9 @@ export default function Login() {
     <div className="page-fade-in min-h-screen bg-paper px-4">
       <div className="page-width flex min-h-screen flex-col justify-center">
         <header className="mb-10">
-          <p className="t-eyebrow eyebrow-rule mb-5">Private commissions</p>
-          <h1 className="t-display italic">Take #</h1>
-          <p className="t-meta mt-3 max-w-sm">
-            Custom AI-written romance and smut one-shots, made to your brief.
+          <h1 className="t-display italic">Take#</h1>
+          <p className="t-meta mt-3 max-w-none whitespace-nowrap text-[12px] min-[390px]:text-[0.8125rem]">
+            AI erotica, written on commission. Yours, no one else's.
           </p>
         </header>
         <div className="flex flex-col gap-4">

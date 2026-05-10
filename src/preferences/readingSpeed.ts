@@ -1,10 +1,9 @@
 import { createPreference } from './createPreference'
 
 export const DEFAULT_READING_SPEED_UNITS_PER_SECOND = 50
-export const MIN_READING_SPEED_UNITS_PER_SECOND = 10
+export const MIN_READING_SPEED_UNITS_PER_SECOND = 5
 export const MAX_READING_SPEED_UNITS_PER_SECOND = 60
 export const READING_SPEED_STEP = 5
-export const CHINESE_READING_SPEED_MULTIPLIER = 2
 
 const CHINESE_TEXT_PATTERN = /\p{Script=Han}/u
 
@@ -30,12 +29,6 @@ const readingSpeedPreference = createPreference<number>({
 
 export function containsChineseText(text: string) {
   return CHINESE_TEXT_PATTERN.test(text)
-}
-
-export function getHiddenReadingSpeedUnitsPerSecond(text: string, readingSpeedUnitsPerSecond: number) {
-  return containsChineseText(text)
-    ? readingSpeedUnitsPerSecond * CHINESE_READING_SPEED_MULTIPLIER
-    : readingSpeedUnitsPerSecond
 }
 
 export const setReadingSpeedUnitsPerSecond = readingSpeedPreference.set

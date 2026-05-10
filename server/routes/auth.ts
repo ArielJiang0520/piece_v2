@@ -38,7 +38,7 @@ auth.post('/auth/signup', async (c) => {
   })
 
   startSession(c, result.id, now)
-  return c.json({ username: result.username })
+  return c.json({ id: result.id, username: result.username })
 })
 
 auth.post('/auth/login', async (c) => {
@@ -52,7 +52,7 @@ auth.post('/auth/login', async (c) => {
   if (!valid) return c.json({ error: 'Invalid credentials' }, 401)
 
   startSession(c, user.id)
-  return c.json({ username: user.username })
+  return c.json({ id: user.id, username: user.username })
 })
 
 auth.post('/auth/logout', async (c) => {
@@ -80,9 +80,9 @@ auth.delete('/auth/account', authMiddleware, (c) => {
 
 auth.get('/me', authMiddleware, (c) => {
   const userId = getUserId(c)
-  const user = db.select({ username: users.username }).from(users).where(eq(users.id, userId)).get()
+  const user = db.select({ id: users.id, username: users.username }).from(users).where(eq(users.id, userId)).get()
   if (!user) return c.json({ error: 'Not found' }, 404)
-  return c.json({ username: user.username })
+  return c.json({ id: user.id, username: user.username })
 })
 
 export default auth

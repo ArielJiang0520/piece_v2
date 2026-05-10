@@ -6,10 +6,10 @@ const createWorldTips = [
     text: 'Done in five minutes is the right amount of effort. Worlds aren\'t supposed to be perfect. You\'ll learn what\'s missing after a few generations and come back to add it.',
   },
   {
-    text: 'Use the words you want to read back. The output matches your vocabulary \u2014 coy in, coy out. If you want it dirty, write it dirty.',
+    text: 'Use the words you want to read back. The output matches your vocabulary \u2014 if you want it dirty, write it dirty.',
   },
   {
-    text: 'Name what you want to read. If it\'s a known fandom, you don\'t need to explain it \u2014 the AI knows. Save your words for what makes your version specific.',
+    text: 'If it\'s a known fandom, you don\'t need to explain it \u2014 the AI knows. Save your words for what makes your version specific.',
   },
 ]
 
@@ -59,7 +59,7 @@ export default function CreateWorldTipsDialog({ open, onClose }: CreateWorldTips
       >
         <div className="mb-5 flex items-center justify-between gap-4">
           <div className="t-eyebrow eyebrow-rule">
-            <span>Tips for creating a world</span>
+            <span>Tips</span>
           </div>
           <div className="t-meta shrink-0">
             <span className="font-serif-zh text-rose">{activeTip + 1}</span>
@@ -111,7 +111,7 @@ export default function CreateWorldTipsDialog({ open, onClose }: CreateWorldTips
             className="rounded-full bg-rose px-5 py-2.5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
             onClick={onClose}
           >
-            Okay
+            Got it
           </button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { entityLabel } from '@/config'
+import { useAuth } from '@/auth'
 import CountIndicator from '@/components/CountIndicator'
 import ListEndMarker from '@/components/ListEndMarker'
 import RelativeTimeStatus from '@/components/RelativeTimeStatus'
@@ -38,8 +39,9 @@ function worldActivityTimestamp(world: World) {
 
 export default function WorldList() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const sampleWorldTipDismissed = useSampleWorldTipDismissed()
+  const sampleWorldTipDismissed = useSampleWorldTipDismissed(user?.id)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const sortParam = searchParams.get('sort')
   const sort: SortKey = SORT_OPTIONS.some(option => option.value === sortParam)
@@ -82,19 +84,10 @@ export default function WorldList() {
         {worldsQuery.isLoading ? (
           <Skeleton className="h-3 w-24" />
         ) : (
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
             <div className="t-eyebrow min-w-0">
               <span className="truncate">{worlds.length} {entityLabel('world', { plural: true, capitalize: true })}</span>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate('/worlds/new')}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-rose-line bg-paper px-3 font-serif-zh text-[14px] italic leading-none text-rose transition-[border-color,background-color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-tint/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-              aria-label={`New ${entityLabel('world', { capitalize: true })}`}
-            >
-              <Plus aria-hidden="true" className="h-3.5 w-3.5 stroke-[1.8]" />
-              New {entityLabel('world', { capitalize: true })}
-            </button>
           </div>
         )}
       </div>
@@ -163,8 +156,8 @@ export default function WorldList() {
         </div>
       )}
     </div>
-  ), [navigate, searchInput, sort, sortOpen, worlds.length, worldsQuery.isLoading])
-  useTopNavConfig({ bottomSlot: worldListNavSlot })
+  ), [searchInput, sort, sortOpen, worlds.length, worldsQuery.isLoading])
+  useTopNavConfig({ mainTitle: entityLabel('world', { plural: true, capitalize: true }), bottomSlot: worldListNavSlot })
 
   useEffect(() => {
     const updateScrollTopVisibility = () => {
@@ -235,16 +228,16 @@ export default function WorldList() {
                 <Sparkles aria-hidden="true" className="h-4 w-4" />
               </span>
               <div className="min-w-0">
-                <p className="font-serif-zh text-[15px] italic leading-snug text-ink">
+                {/* <p className="font-serif-zh text-[15px] italic leading-snug text-ink">
                   Sample {entityLabel('world', { plural: true, capitalize: true })}
-                </p>
+                </p> */}
                 <p className="mt-1 font-serif-zh text-[14px] leading-6 text-ink-2">
-                  Some samples are included so you can explore the app. Feel free to delete them or create your own {entityLabel('world', { plural: true })}!
+                  Some pre-made worlds are included so you can explore the app. Delete them whenever.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={dismissSampleWorldTip}
+                onClick={() => dismissSampleWorldTip(user?.id)}
                 className="-mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-4 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
                 aria-label="Hide sample world tip"
                 title="Hide tip"
@@ -334,6 +327,18 @@ export default function WorldList() {
           </>
         )}
       </main>
+
+      <button
+        type="button"
+        onClick={() => navigate('/worlds/new')}
+        className="fixed bottom-[calc(1.75rem+env(safe-area-inset-bottom))] right-5 z-40 inline-flex h-11 w-auto items-center justify-center gap-1.5 rounded-full bg-rose pl-2 pr-4 font-serif-zh text-[14px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 sm:right-7"
+        aria-label={`New ${entityLabel('world', { capitalize: true })}`}
+      >
+        <span className="grid h-6 w-6 place-items-center rounded-full">
+          <Plus aria-hidden="true" className="h-5 w-5 stroke-[1.8]" />
+        </span>
+        <span>New {entityLabel('world', { capitalize: true })}</span>
+      </button>
 
       {showScrollTop && (
         <button

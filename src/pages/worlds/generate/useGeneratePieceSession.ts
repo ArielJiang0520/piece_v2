@@ -58,6 +58,10 @@ export function useGeneratePieceSession({
   const [pieceView, setPieceView] = useState<PieceView>('saved')
   const [pendingPieceNumber, setPendingPieceNumber] = useState<number | null>(null)
   const [generatedAt, setGeneratedAt] = useState<number | null>(null)
+  const [generationDurationMs, setGenerationDurationMs] = useState<number | null>(null)
+  const [generatedStatsPieceId, setGeneratedStatsPieceId] = useState<number | null>(null)
+  const generationFirstOutputAtRef = useRef<number | null>(null)
+  const generationDurationMsRef = useRef<number | null>(null)
   const pendingSavedSelectionRef = useRef<{ promptId: string; pieceId: number } | null>(null)
   const previousModeKeyRef = useRef<string | null>(null)
   const resetGenerationRef = useRef(resetGeneration)
@@ -80,6 +84,14 @@ export function useGeneratePieceSession({
   const displayedPieceMetaLabel = displayedPieceCreatedAt
     ? `${relativeTime(displayedPieceCreatedAt)} - ${displayedOutputCountLabel}`
     : null
+  const displayedGenerationDurationMs = viewingPendingPiece
+    ? generationDurationMs ?? generationDurationMsRef.current
+    : selectedPieceId !== null && selectedPieceId === generatedStatsPieceId
+      ? generationDurationMs ?? generationDurationMsRef.current
+      : null
+  const displayedPieceFooterStatsLabel = displayedGenerationDurationMs !== null
+    ? `${displayedOutputCountLabel} generated in ${formatGenerationDuration(displayedGenerationDurationMs)}`
+    : `${displayedOutputCountLabel} generated`
 
   const canSave = viewingPendingPiece && !streaming && !!output && saveState !== 'saving' && saveState !== 'saved'
 
@@ -100,6 +112,9 @@ export function useGeneratePieceSession({
 
       setSaveState('saved')
       pendingSavedSelectionRef.current = { promptId: String(result.promptId), pieceId: result.pieceId }
+      if (generationDurationMsRef.current !== null) {
+        setGeneratedStatsPieceId(result.pieceId)
+      }
       setPieceView('saved')
       setPendingPieceNumber(null)
       queryClient.setQueryData(['piece', result.pieceId], {
@@ -159,12 +174,30 @@ export function useGeneratePieceSession({
   useEffect(() => {
     if (!output) {
       setGeneratedAt(null)
+      generationFirstOutputAtRef.current = null
+      generationDurationMsRef.current = null
+      setGenerationDurationMs(null)
+      setGeneratedStatsPieceId(null)
       return
     }
     if (displayComplete && completion === 'completed' && generatedAt === null) {
       setGeneratedAt(Date.now())
     }
   }, [completion, displayComplete, generatedAt, output])
+
+  useEffect(() => {
+    if (!viewingPendingPiece || !output) return
+
+    if (generationFirstOutputAtRef.current === null) {
+      generationFirstOutputAtRef.current = Date.now()
+    }
+
+    if (displayComplete && completion === 'completed' && generationDurationMsRef.current === null) {
+      const durationMs = Math.max(0, Date.now() - generationFirstOutputAtRef.current)
+      generationDurationMsRef.current = durationMs
+      setGenerationDurationMs(durationMs)
+    }
+  }, [completion, displayComplete, output, viewingPendingPiece])
 
   const modeKey = `${worldId ?? ''}:${queryPromptId ? `prompt:${queryPromptId}` : versionSourcePromptId ? `version-draft:${versionSourcePromptId}` : 'blank'}`
   useEffect(() => {
@@ -184,6 +217,10 @@ export function useGeneratePieceSession({
     setPendingPieceNumber(null)
     setSaveState('idle')
     setGeneratedAt(null)
+    generationFirstOutputAtRef.current = null
+    generationDurationMsRef.current = null
+    setGenerationDurationMs(null)
+    setGeneratedStatsPieceId(null)
     resetGenerationRef.current()
   }, [modeKey, queryPromptId])
 
@@ -203,6 +240,10 @@ export function useGeneratePieceSession({
     setPendingPieceNumber(pendingBasePieceCount + 1)
     setSaveState('idle')
     setGeneratedAt(null)
+    generationFirstOutputAtRef.current = null
+    generationDurationMsRef.current = null
+    setGenerationDurationMs(null)
+    setGeneratedStatsPieceId(null)
   }, [])
 
   const selectPiece = useCallback((pieceId: number) => {
@@ -222,6 +263,10 @@ export function useGeneratePieceSession({
     setSelectedPieceId(latestPieceId)
     setSaveState('idle')
     setGeneratedAt(null)
+    generationFirstOutputAtRef.current = null
+    generationDurationMsRef.current = null
+    setGenerationDurationMs(null)
+    setGeneratedStatsPieceId(null)
   }, [latestPieceId])
 
   return {
@@ -235,17 +280,30 @@ export function useGeneratePieceSession({
     displayedOutput,
     outputDisplayComplete,
     displayedPieceMetaLabel,
+    displayedPieceFooterStatsLabel,
     prepareGeneration,
     cancelPendingGeneration,
   }
 }
 
+function formatGenerationDuration(durationMs: number) {
+  const totalSeconds = Math.max(1, Math.round(durationMs / 1000))
+  if (totalSeconds < 60) return `${totalSeconds} ${totalSeconds === 1 ? 'second' : 'seconds'}`
+
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  const minuteLabel = `${totalMinutes} ${totalMinutes === 1 ? 'minute' : 'minutes'}`
+  if (seconds === 0) return minuteLabel
+
+  return `${minuteLabel} ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`
+}
+
 function outputCountLabel(text: string) {
   if (containsChineseText(text)) {
     const count = Array.from(text).filter(character => !/\s/u.test(character)).length
-    return `${count} ${count === 1 ? 'character' : 'characters'}`
+    return `${count.toLocaleString()} ${count === 1 ? 'character' : 'characters'}`
   }
 
   const count = text.match(/[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu)?.length ?? 0
-  return `${count} ${count === 1 ? 'word' : 'words'}`
+  return `${count.toLocaleString()} ${count === 1 ? 'word' : 'words'}`
 }
