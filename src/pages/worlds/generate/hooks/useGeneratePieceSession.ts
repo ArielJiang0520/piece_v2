@@ -13,7 +13,7 @@ import {
   type PromptPiecesResponse,
   type SaveResponse,
   type SaveState,
-} from './generateTypes'
+} from '../types'
 
 interface UseGeneratePieceSessionOptions {
   worldId: string | undefined

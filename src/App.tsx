@@ -5,10 +5,10 @@ import TopNavProvider from './components/TopNavProvider'
 import RouteScrollManager from './components/RouteScrollManager'
 import { ToastProvider } from './components/Toast'
 import Login from './pages/Login'
-import WorldList from './pages/worlds/WorldList'
-import World from './pages/worlds/World'
-import WorldAbout from './pages/worlds/WorldAbout'
-import WorldEditor from './pages/worlds/WorldEditor'
+import WorldList from './pages/worlds/list/WorldList'
+import WorldPrompts from './pages/worlds/prompts/WorldPrompts'
+import WorldAbout from './pages/worlds/about/WorldAbout'
+import WorldEditor from './pages/worlds/editor/WorldEditor'
 import Generate from './pages/worlds/generate/Generate'
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -32,7 +32,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/worlds" replace />} />
           <Route path="/worlds" element={<ProtectedLayout><WorldList /></ProtectedLayout>} />
           <Route path="/worlds/new" element={<ProtectedLayout><WorldEditor /></ProtectedLayout>} />
-          <Route path="/worlds/:id" element={<ProtectedLayout><World /></ProtectedLayout>} />
+          <Route path="/worlds/:id" element={<ProtectedLayout><WorldPrompts /></ProtectedLayout>} />
           <Route path="/worlds/:id/about" element={<ProtectedLayout><WorldAbout /></ProtectedLayout>} />
           <Route path="/worlds/:id/edit" element={<ProtectedLayout><WorldEditor /></ProtectedLayout>} />
           <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />

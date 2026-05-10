@@ -6,7 +6,7 @@ import {
   PIECE_STRIP_LIMIT,
   type ClusterResponse,
   type PromptPiecesResponse,
-} from './generateTypes'
+} from '../types'
 
 interface UseGenerateDataOptions {
   worldId: string | undefined

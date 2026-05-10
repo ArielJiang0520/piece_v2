@@ -9,7 +9,7 @@ import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { entityLabel } from '@/config'
 import { diffPromptInlineEdits, type PromptEditMark } from '@/utils/promptDiff'
 import { relativeTime } from '@/utils/time'
-import type { ClusterPrompt } from './generateTypes'
+import type { ClusterPrompt } from '../types'
 
 interface GenerateVersionsPanelProps {
   worldId: string | undefined

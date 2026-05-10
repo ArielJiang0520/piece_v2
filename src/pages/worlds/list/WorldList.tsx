@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, ArrowUpDown, Check, Plus, Search, Sparkles, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowUp, Plus, Search, Sparkles, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -12,6 +12,8 @@ import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import TextField from '@/components/TextField'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { dismissSampleWorldTip, useSampleWorldTipDismissed } from '@/preferences/sampleWorldTip'
+import WorldSortMenu from '../shared/WorldSortMenu'
+import { useScrollTopButton } from '../shared/useScrollTopButton'
 
 interface World {
   id: number
@@ -42,13 +44,11 @@ export default function WorldList() {
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const sampleWorldTipDismissed = useSampleWorldTipDismissed(user?.id)
-  const [showScrollTop, setShowScrollTop] = useState(false)
+  const { showScrollTop, scrollToTop } = useScrollTopButton()
   const sortParam = searchParams.get('sort')
   const sort: SortKey = SORT_OPTIONS.some(option => option.value === sortParam)
     ? sortParam as SortKey
     : 'latest'
-  const [sortOpen, setSortOpen] = useState(false)
-  const sortMenuRef = useRef<HTMLDivElement | null>(null)
   const queryParam = (searchParams.get('q') ?? '').trim()
   const [searchInput, setSearchInput] = useState(queryParam)
   const isSearching = queryParam.length > 0
@@ -117,57 +117,13 @@ export default function WorldList() {
                 )}
               />
             </div>
-            <div ref={sortMenuRef} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setSortOpen(open => !open)}
-                className="grid h-12 w-12 place-items-center rounded-full border border-rose-line/80 bg-paper/60 text-ink-3 shadow-[inset_0_0_24px_rgba(205,83,106,0.03)] transition-[border-color,background-color,color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-tint/45 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-                aria-label={`Sort by ${SORT_OPTIONS.find(option => option.value === sort)?.label}`}
-                title={`Sort by ${SORT_OPTIONS.find(option => option.value === sort)?.label}`}
-                aria-haspopup="menu"
-                aria-expanded={sortOpen}
-              >
-                <ArrowUpDown aria-hidden="true" className="h-4.5 w-4.5" />
-              </button>
-              {sortOpen && (
-                <div
-                  role="menu"
-                  className="absolute right-0 top-full z-20 mt-2 w-52 overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
-                >
-                  {SORT_OPTIONS.map(option => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={sort === option.value}
-                      onClick={() => handleSortChange(option.value)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left font-serif-zh text-sm italic text-ink-2 transition-colors hover:bg-rose-tint/50 hover:text-ink focus:outline-none focus:bg-rose-tint"
-                    >
-                      <span>{option.label}</span>
-                      {sort === option.value && (
-                        <Check aria-hidden="true" className="h-3.5 w-3.5 text-rose" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <WorldSortMenu options={SORT_OPTIONS} value={sort} onChange={handleSortChange} />
           </div>
         </div>
       )}
     </div>
-  ), [searchInput, sort, sortOpen, worlds.length, worldsQuery.isLoading])
+  ), [searchInput, sort, worlds.length, worldsQuery.isLoading])
   useTopNavConfig({ mainTitle: entityLabel('world', { plural: true, capitalize: true }), bottomSlot: worldListNavSlot })
-
-  useEffect(() => {
-    const updateScrollTopVisibility = () => {
-      setShowScrollTop(window.scrollY > 0)
-    }
-
-    updateScrollTopVisibility()
-    window.addEventListener('scroll', updateScrollTopVisibility, { passive: true })
-    return () => window.removeEventListener('scroll', updateScrollTopVisibility)
-  }, [])
 
   useEffect(() => {
     if (searchInput.trim() === queryParam) return
@@ -183,27 +139,7 @@ export default function WorldList() {
     return () => clearTimeout(t)
   }, [searchInput, queryParam, setSearchParams])
 
-  useEffect(() => {
-    if (!sortOpen) return
-
-    function handleClickOutside(event: PointerEvent) {
-      if (!sortMenuRef.current) return
-      if (!sortMenuRef.current.contains(event.target as Node)) setSortOpen(false)
-    }
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setSortOpen(false)
-    }
-
-    document.addEventListener('pointerdown', handleClickOutside)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('pointerdown', handleClickOutside)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [sortOpen])
-
   function handleSortChange(next: SortKey) {
-    setSortOpen(false)
     if (next === sort) return
     setSearchParams(prev => {
       const params = new URLSearchParams(prev)
@@ -212,10 +148,6 @@ export default function WorldList() {
       return params
     }, { replace: true })
     window.scrollTo({ top: 0 })
-  }
-
-  function scrollToTop() {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ArrowUpDown, Check, GitBranch, Search, Plus, X } from 'lucide-react'
+import { ArrowUp, GitBranch, Search, Plus, X } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -11,7 +11,9 @@ import RelativeTimeStatus from '@/components/RelativeTimeStatus'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import TextField from '@/components/TextField'
 import { useTopNavConfig } from '@/components/topNavConfig'
-import WorldTabs from './WorldTabs'
+import WorldSortMenu from '../shared/WorldSortMenu'
+import WorldTabs from '../shared/WorldTabs'
+import { useScrollTopButton } from '../shared/useScrollTopButton'
 
 interface ClusterGroup {
   id: number
@@ -86,7 +88,7 @@ function parseWorldReturnState(value: unknown) {
   }
 }
 
-export default function World() {
+export default function WorldPrompts() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
@@ -96,14 +98,12 @@ export default function World() {
     clear: clearWorldReturnState,
     save: saveWorldReturnState,
   } = useScrollReturn(id ? `world-return:${id}` : null, parseWorldReturnState)
-  const [showScrollTop, setShowScrollTop] = useState(false)
+  const { showScrollTop, scrollToTop } = useScrollTopButton()
   const [searchParams, setSearchParams] = useSearchParams()
   const sortParam = searchParams.get('sort')
   const sort: SortKey = SORT_OPTIONS.some(o => o.value === sortParam)
     ? sortParam as SortKey
     : 'latest'
-  const [sortOpen, setSortOpen] = useState(false)
-  const sortMenuRef = useRef<HTMLDivElement | null>(null)
   const queryParam = (searchParams.get('q') ?? '').trim()
   const [searchInput, setSearchInput] = useState(queryParam)
   const isSearching = queryParam.length > 0
@@ -149,37 +149,7 @@ export default function World() {
     if (errored) navigate('/')
   }, [errored, navigate])
 
-  useEffect(() => {
-    const updateScrollTopVisibility = () => {
-      setShowScrollTop(window.scrollY > 0)
-    }
-
-    updateScrollTopVisibility()
-    window.addEventListener('scroll', updateScrollTopVisibility, { passive: true })
-    return () => window.removeEventListener('scroll', updateScrollTopVisibility)
-  }, [])
-
-  useEffect(() => {
-    if (!sortOpen) return
-
-    function handleClickOutside(event: PointerEvent) {
-      if (!sortMenuRef.current) return
-      if (!sortMenuRef.current.contains(event.target as Node)) setSortOpen(false)
-    }
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setSortOpen(false)
-    }
-
-    document.addEventListener('pointerdown', handleClickOutside)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('pointerdown', handleClickOutside)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [sortOpen])
-
   function handleSortChange(next: SortKey) {
-    setSortOpen(false)
     if (next === sort) return
     setSearchParams(prev => {
       const params = new URLSearchParams(prev)
@@ -256,10 +226,6 @@ export default function World() {
     })
   }
 
-  function scrollToTop() {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
   const firstPage = pages[0]
   const totalClusters = firstPage?.total ?? 0
   const searchTotal = searchQuery.data?.items.length ?? 0
@@ -323,41 +289,7 @@ export default function World() {
                 )}
               />
             </div>
-            <div ref={sortMenuRef} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setSortOpen(open => !open)}
-                className="grid h-12 w-12 place-items-center rounded-full border border-rose-line/80 bg-paper/60 text-ink-3 shadow-[inset_0_0_24px_rgba(205,83,106,0.03)] transition-[border-color,background-color,color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-tint/45 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-                aria-label={`Sort by ${SORT_OPTIONS.find(o => o.value === sort)?.label}`}
-                title={`Sort by ${SORT_OPTIONS.find(o => o.value === sort)?.label}`}
-                aria-haspopup="menu"
-                aria-expanded={sortOpen}
-              >
-                <ArrowUpDown aria-hidden="true" className="h-4.5 w-4.5" />
-              </button>
-              {sortOpen && (
-                <div
-                  role="menu"
-                  className="absolute right-0 top-full z-20 mt-2 w-52 overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
-                >
-                  {SORT_OPTIONS.map(option => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={sort === option.value}
-                      onClick={() => handleSortChange(option.value)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left font-serif-zh text-sm italic text-ink-2 transition-colors hover:bg-rose-tint/50 hover:text-ink focus:outline-none focus:bg-rose-tint"
-                    >
-                      <span>{option.label}</span>
-                      {sort === option.value && (
-                        <Check aria-hidden="true" className="h-3.5 w-3.5 text-rose" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <WorldSortMenu options={SORT_OPTIONS} value={sort} onChange={handleSortChange} />
           </div>
         </div>
 

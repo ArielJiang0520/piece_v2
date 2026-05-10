@@ -10,15 +10,15 @@ import {
   setReadingSpeedUnitsPerSecond,
   useReadingSpeedUnitsPerSecond,
 } from '@/preferences/readingSpeed'
-import PromptCard from './PromptCard'
-import PieceStrip from './PieceStrip'
-import OutputPanel from './OutputPanel'
-import GenerateControls from './GenerateControls'
-import GenerateVersionsPanel from './VersionsPanel'
-// import ReadingSettingsButton from './ReadingSettingsButton'
-import { useGenerateData } from './useGenerateData'
-import { useGeneratePieceSession } from './useGeneratePieceSession'
-import type { ClusterPrompt } from './generateTypes'
+import PromptCard from './components/PromptCard'
+import PieceStrip from './components/PieceStrip'
+import OutputPanel from './components/OutputPanel'
+import GenerateControls from './components/GenerateControls'
+import GenerateVersionsPanel from './components/VersionsPanel'
+// import ReadingSettingsButton from './components/ReadingSettingsButton'
+import { useGenerateData } from './hooks/useGenerateData'
+import { useGeneratePieceSession } from './hooks/useGeneratePieceSession'
+import type { ClusterPrompt } from './types'
 
 const GENERATION_TEMPERATURE = 1
 const USE_THINKING = false

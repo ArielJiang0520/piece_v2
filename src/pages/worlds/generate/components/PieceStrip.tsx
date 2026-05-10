@@ -1,5 +1,5 @@
 import { entityLabel } from '@/config'
-import type { PieceStripPiece } from './generateTypes'
+import type { PieceStripPiece } from '../types'
 
 interface PieceStripProps {
   pieces: PieceStripPiece[]

@@ -8,7 +8,7 @@ import ListEndMarker from '@/components/ListEndMarker'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { relativeTime } from '@/utils/time'
-import WorldTabs from './WorldTabs'
+import WorldTabs from '../shared/WorldTabs'
 
 const ONE_HOUR_MS = 60 * 60 * 1e3
 
