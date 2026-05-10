@@ -1,7 +1,7 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { MODELS, type ModelOption } from '../src/preferences/generationModel'
-import { db, worldVersions, worlds } from './db'
+import { db, worlds } from './db'
 
 export function getUserId(c: Context): number {
   return c.get('userId') as number
@@ -31,15 +31,6 @@ export function findUserWorldId(userId: number, worldId: number) {
     .from(worlds)
     .where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId)))
     .get()
-}
-
-export function findCurrentWorldVersionId(worldId: number) {
-  return db
-    .select({ id: worldVersions.id })
-    .from(worldVersions)
-    .where(eq(worldVersions.world_id, worldId))
-    .orderBy(desc(worldVersions.created_at), desc(worldVersions.id))
-    .get()?.id ?? null
 }
 
 const MODELS_BY_ID = new Map<string, ModelOption>(MODELS.map(model => [model.id, model]))

@@ -16,6 +16,8 @@ interface GenerateVersionsPanelProps {
   currentPromptId: string | null
   prompts: ClusterPrompt[]
   loading: boolean
+  showDiff: boolean
+  onShowDiffChange: (showDiff: boolean) => void
   onViewPrompt: () => void
 }
 
@@ -68,11 +70,12 @@ export default function GenerateVersionsPanel({
   currentPromptId,
   prompts,
   loading,
+  showDiff,
+  onShowDiffChange,
   onViewPrompt,
 }: GenerateVersionsPanelProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [showDiff, setShowDiff] = useState(true)
   const [openMenuPromptId, setOpenMenuPromptId] = useState<number | null>(null)
   const [confirmPrompt, setConfirmPrompt] = useState<PromptVersionEntry | null>(null)
   const [deleteError, setDeleteError] = useState('')
@@ -203,24 +206,24 @@ export default function GenerateVersionsPanel({
 
   return (
     <div className="relative">
-      <div className="mb-5 flex justify-end px-2">
+      <div className="sticky top-23 z-20 -mx-4 mb-3 flex h-8 items-center justify-end border-b border-rose-line/70 bg-paper/95 px-6 backdrop-blur">
         <label className="t-meta inline-flex cursor-pointer items-center gap-2 text-ink-3 transition-colors hover:text-ink">
           <input
             type="checkbox"
             className="h-3.5 w-3.5 rounded-xs border-rose-line accent-rose focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
             checked={showDiff}
-            onChange={event => setShowDiff(event.target.checked)}
+            onChange={event => onShowDiffChange(event.target.checked)}
           />
           <span>Show changes</span>
         </label>
       </div>
 
-      <span
-        aria-hidden="true"
-        className="absolute bottom-8 left-7 top-2 w-px bg-rose-line/45 sm:left-9.5"
-      />
+      <div className="relative">
+        <span
+          aria-hidden="true"
+          className="absolute bottom-8 left-7 top-2 w-px bg-rose-line/45 sm:left-9.5"
+        />
 
-      <div>
         {entries.map(entry => {
           const { prompt, number, isCurrent, editMarks } = entry
           const clickable = !isCurrent && !!worldId

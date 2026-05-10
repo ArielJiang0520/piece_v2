@@ -131,8 +131,7 @@ export default function OutputPanel({
         </p>
         {endRevealed && (
           <div className="fade-in-up mt-10">
-            <div className="t-meta flex items-center gap-3">
-              <span className="h-px flex-1 bg-rose-line" />
+            <div className="t-meta flex justify-center">
               <span className="flex shrink-0 flex-col items-center gap-1 text-center">
                 <span>{pieceNumber ? `End of ${entityLabel('piece', { capitalize: true })} #${pieceNumber}` : 'End'}</span>
                 {pieceFooterStatsLabel && (
@@ -141,7 +140,6 @@ export default function OutputPanel({
                   </span>
                 )}
               </span>
-              <span className="h-px flex-1 bg-rose-line" />
             </div>
             <div className="mt-8 flex justify-center">
               <button

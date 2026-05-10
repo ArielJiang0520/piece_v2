@@ -14,7 +14,6 @@ pieceRoutes.get('/:id', authMiddleware, (c) => {
       id: pieces.id,
       user_id: pieces.user_id,
       world_id: pieces.world_id,
-      world_version_id: pieces.world_version_id,
       prompt_id: pieces.prompt_id,
       prompt: prompts.text,
       body: pieces.body,

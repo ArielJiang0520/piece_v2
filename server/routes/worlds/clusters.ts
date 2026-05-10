@@ -7,11 +7,15 @@ import { cosineSimilarity, embedPrompt, parseEmbedding } from '../../prompt-clus
 
 const clusterRoutes = new Hono<{ Variables: Variables }>()
 
+const clusterActivityAt = sql<number>`coalesce(max(${pieces.created_at}), ${promptClusters.updated_at})`
+
 const SORT_ORDERS = {
-  latest_updated: [desc(promptClusters.updated_at), desc(promptClusters.id)],
-  oldest_updated: [asc(promptClusters.updated_at), asc(promptClusters.id)],
-  most_pieces: [desc(promptClusters.piece_count), desc(promptClusters.updated_at), desc(promptClusters.id)],
-  most_variations: [desc(promptClusters.prompt_count), desc(promptClusters.updated_at), desc(promptClusters.id)],
+  latest: [desc(clusterActivityAt), desc(promptClusters.id)],
+  latest_updated: [desc(clusterActivityAt), desc(promptClusters.id)],
+  oldest: [asc(clusterActivityAt), asc(promptClusters.id)],
+  oldest_updated: [asc(clusterActivityAt), asc(promptClusters.id)],
+  most_pieces: [desc(promptClusters.piece_count), desc(clusterActivityAt), desc(promptClusters.id)],
+  most_variations: [desc(promptClusters.prompt_count), desc(clusterActivityAt), desc(promptClusters.id)],
 } as const
 
 type SortKey = keyof typeof SORT_ORDERS
@@ -167,7 +171,24 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
       updated_at: promptClusters.updated_at,
     })
     .from(promptClusters)
+    .leftJoin(prompts, and(
+      eq(prompts.cluster_id, promptClusters.id),
+      eq(prompts.world_id, worldId),
+      eq(prompts.user_id, userId),
+    ))
+    .leftJoin(pieces, and(
+      eq(pieces.prompt_id, prompts.id),
+      eq(pieces.world_id, worldId),
+      eq(pieces.user_id, userId),
+    ))
     .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .groupBy(
+      promptClusters.id,
+      promptClusters.prompt_count,
+      promptClusters.piece_count,
+      promptClusters.latest_prompt_id,
+      promptClusters.updated_at,
+    )
     .orderBy(...SORT_ORDERS[sortKey])
     .limit(limit + 1)
     .offset(offset)

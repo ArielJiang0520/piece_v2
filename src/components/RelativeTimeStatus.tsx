@@ -6,7 +6,7 @@ function recencyClasses(timestamp: number | null | undefined) {
   if (!timestamp) return { dot: 'bg-ink-4/50' }
 
   const age = Date.now() - timestamp
-  if (age < ONE_HOUR_MS) return { dot: 'bg-rose' }
+  if (age < ONE_HOUR_MS) return { dot: 'bg-signal-green' }
   return { dot: 'bg-ink-4/50' }
 }
 

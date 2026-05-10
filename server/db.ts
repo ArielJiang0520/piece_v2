@@ -54,7 +54,6 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
     cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE SET NULL,
     text TEXT NOT NULL,
     embedding TEXT,
@@ -68,7 +67,6 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
     prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
     body TEXT NOT NULL,
     model TEXT,
@@ -134,6 +132,61 @@ function rebuildWorldVersionsTable() {
   }
 }
 
+function rebuildPromptsTable() {
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run('DROP TABLE IF EXISTS prompts_new;')
+    sqlite.run(`
+      CREATE TABLE IF NOT EXISTS prompts_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+        cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE SET NULL,
+        text TEXT NOT NULL,
+        embedding TEXT,
+        piece_count INTEGER NOT NULL DEFAULT 0,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, text, embedding, piece_count, is_favorite, created_at, updated_at)
+      SELECT id, user_id, world_id, cluster_id, text, embedding, piece_count, is_favorite, created_at, updated_at FROM prompts;
+    `)
+    sqlite.run('DROP TABLE prompts;')
+    sqlite.run('ALTER TABLE prompts_new RENAME TO prompts;')
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
+  }
+}
+
+function rebuildPiecesTable() {
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run('DROP TABLE IF EXISTS pieces_new;')
+    sqlite.run(`
+      CREATE TABLE IF NOT EXISTS pieces_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+        prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        model TEXT,
+        created_at INTEGER NOT NULL
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, model, created_at)
+      SELECT id, user_id, world_id, prompt_id, body, model, created_at FROM pieces;
+    `)
+    sqlite.run('DROP TABLE pieces;')
+    sqlite.run('ALTER TABLE pieces_new RENAME TO pieces;')
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
+  }
+}
+
 function dropColumnIfPresent(table: string, column: string) {
   const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   if (rows.some(row => row.name === column)) {
@@ -148,6 +201,14 @@ function dropColumnIfPresent(table: string, column: string) {
         rebuildWorldVersionsTable()
         return
       }
+      if (table === 'prompts' && column === 'world_version_id') {
+        rebuildPromptsTable()
+        return
+      }
+      if (table === 'pieces' && column === 'world_version_id') {
+        rebuildPiecesTable()
+        return
+      }
       throw error
     }
   }
@@ -155,8 +216,10 @@ function dropColumnIfPresent(table: string, column: string) {
 
 addColumnIfMissing('worlds', 'is_example', 'is_example INTEGER NOT NULL DEFAULT 0')
 addColumnIfMissing('world_versions', 'restored_from_version_id', 'restored_from_version_id INTEGER')
-addColumnIfMissing('prompts', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')
-addColumnIfMissing('pieces', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')
+sqlite.run('DROP INDEX IF EXISTS idx_pieces_world_version;')
+sqlite.run('DROP INDEX IF EXISTS idx_prompts_world_version;')
+dropColumnIfPresent('prompts', 'world_version_id')
+dropColumnIfPresent('pieces', 'world_version_id')
 dropColumnIfPresent('world_versions', 'name')
 dropColumnIfPresent('worlds', 'language')
 dropColumnIfPresent('worlds', 'summary')
@@ -171,10 +234,8 @@ sqlite.run(`
 
 sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_pieces_world_version ON pieces(world_version_id);
   CREATE INDEX IF NOT EXISTS idx_pieces_prompt_created ON pieces(prompt_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_world_updated ON prompts(user_id, world_id, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_prompts_world_version ON prompts(world_version_id);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster ON prompts(cluster_id);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster_created ON prompts(cluster_id, created_at DESC, id DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_updated ON prompt_clusters(user_id, world_id, updated_at DESC);
@@ -262,7 +323,6 @@ export const prompts = sqliteTable('prompts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
-  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   cluster_id: integer('cluster_id').references(() => promptClusters.id),
   text: text('text').notNull(),
   embedding: text('embedding'),
@@ -276,7 +336,6 @@ export const pieces = sqliteTable('pieces', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
-  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   prompt_id: integer('prompt_id').notNull().references(() => prompts.id),
   body: text('body').notNull(),
   model: text('model'),

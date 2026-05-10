@@ -25,6 +25,8 @@ const floatingActionDockClass =
 const floatingActionButtonClass =
   'pointer-events-auto grid h-14 w-14 shrink-0 place-items-center rounded-full border border-rose-line bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20'
 
+const CTA_DOCK_HYSTERESIS_PX = 32
+
 export default function GenerateControls({
   phase,
   streaming,
@@ -53,7 +55,7 @@ export default function GenerateControls({
       const anchorTop = ctaAnchorRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY
       setCtaDocked(current => (
         current
-          ? anchorTop <= stickyTopOffset + 8
+          ? anchorTop <= stickyTopOffset + CTA_DOCK_HYSTERESIS_PX
           : anchorTop <= stickyTopOffset
       ))
     }

@@ -71,6 +71,7 @@ export default function Generate() {
   const versionSourcePromptId = !lockedMode ? versionDraft?.sourcePromptId ?? null : null
   const versionSourceClusterId = !lockedMode ? versionDraft?.sourceClusterId ?? null : null
   const [activeTab, setActiveTab] = useState<GenerateTab>('prompt')
+  const [showVersionDiff, setShowVersionDiff] = useState(false)
   const [prompt, setPrompt] = useState(draftPrompt)
   const normalizedPrompt = prompt.trim()
   const readingSpeed = useReadingSpeedUnitsPerSecond()
@@ -157,9 +158,8 @@ export default function Generate() {
   const showPieceStrip = lockedMode && (activePromptPieceCount > 0 || pendingPieceNumber !== null)
   const showHeaderRow = (lockedMode && !!activePrompt) || (!lockedMode && !!versionDraft)
   const headerLabel = lockedMode
-    ? hasMultipleVersions && activeVersionNumber != null ? `Version ${activeVersionNumber}` : ''
+    ? hasMultipleVersions && activeVersionNumber != null ? `Version ${activeVersionNumber} of ${clusterPrompts.length}` : ''
     : 'Editing scene — new version'
-  const showLatestVersionTag = lockedMode && activeVersionNumber === clusterPrompts.length
   const showPromptTab = useCallback(() => {
     setActiveTab('prompt')
     requestAnimationFrame(() => window.scrollTo({ top: 0 }))
@@ -274,7 +274,7 @@ export default function Generate() {
   }
 
   return (
-    <div className={`page-fade-in min-h-screen page-width px-4 pt-6 ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}`}>
+    <div className={`page-fade-in min-h-screen page-width px-4 ${visibleActiveTab === 'versions' ? 'pt-0' : 'pt-6'} ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}`}>
       {visibleActiveTab === 'prompt' ? (
         <>
           <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''} bg-paper/95 pb-1`}>
@@ -283,11 +283,6 @@ export default function Generate() {
                 {headerLabel && (
                   <span className="t-meta flex min-w-0 items-center gap-1.5 truncate text-ink-3">
                     {headerLabel}
-                    {showLatestVersionTag && (
-                      <span className="shrink-0 font-serif-zh text-[12px] italic normal-case tracking-normal text-rose-deep">
-                        (latest)
-                      </span>
-                    )}
                   </span>
                 )}
                 {!headerLabel && (
@@ -367,12 +362,14 @@ export default function Generate() {
           </section>
         </>
       ) : (
-        <section className="bg-paper/95 pb-6 pt-1">
+        <section className="bg-paper/95 pb-6">
           <GenerateVersionsPanel
             worldId={id}
             currentPromptId={queryPromptId}
             prompts={clusterPrompts}
             loading={clusterLoading || promptDetailsLoading}
+            showDiff={showVersionDiff}
+            onShowDiffChange={setShowVersionDiff}
             onViewPrompt={showPromptTab}
           />
         </section>

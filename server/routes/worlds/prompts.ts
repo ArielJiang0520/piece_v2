@@ -16,7 +16,6 @@ promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
   const prompt = db
     .select({
       id: prompts.id,
-      world_version_id: prompts.world_version_id,
       cluster_id: prompts.cluster_id,
       text: prompts.text,
       piece_count: prompts.piece_count,
@@ -32,7 +31,6 @@ promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
   const rows = db
     .select({
       id: pieces.id,
-      world_version_id: pieces.world_version_id,
       preview: sql<string>`substr(${pieces.body}, 1, 200)`,
       created_at: pieces.created_at,
     })
