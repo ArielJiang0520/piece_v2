@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useUiText } from '@/i18n'
 import SettingsPanel from './SettingsPanel'
 import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
@@ -19,6 +20,7 @@ export default function ReadingSettingsButton({
   readingFontSize,
   onReadingFontSizeChange,
 }: ReadingSettingsButtonProps) {
+  const t = useUiText()
   const panelId = useId()
   const [open, setOpen] = useState(false)
   const [rendered, setRendered] = useState(false)
@@ -51,8 +53,8 @@ export default function ReadingSettingsButton({
         type="button"
         className={`${className} font-serif-zh text-[17px] italic leading-none ${open ? 'border-rose/40 bg-rose-pale' : ''}`}
         onClick={() => setOpen(value => !value)}
-        aria-label={open ? 'Close reading display settings' : 'Reading display settings'}
-        title="Reading display settings"
+        aria-label={open ? t.closeReadingDisplaySettings : t.readingDisplaySettings}
+        title={t.readingDisplaySettings}
         aria-expanded={open}
         aria-controls={panelId}
       >
@@ -75,7 +77,7 @@ export default function ReadingSettingsButton({
               }`}
             role="dialog"
             aria-modal="false"
-            aria-label="Reading display settings"
+            aria-label={t.readingDisplaySettings}
             aria-hidden={!open}
           >
             <div className="page-width flex justify-end">

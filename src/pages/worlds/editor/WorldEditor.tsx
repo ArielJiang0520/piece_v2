@@ -4,9 +4,11 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { entityLabel } from '@/config'
+import { useUiText } from '@/i18n'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import Skeleton from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
+import { useLanguageId } from '@/preferences/language'
 import CreateWorldTipsDialog from './CreateWorldTipsDialog'
 
 interface World {
@@ -22,6 +24,8 @@ interface WorldListItem {
 }
 
 export default function WorldEditor() {
+  const language = useLanguageId()
+  const t = useUiText()
   const { id } = useParams<{ id: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -54,8 +58,8 @@ export default function WorldEditor() {
       <button
         type="button"
         className="relative grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-        aria-label={`Show ${entityLabel('world')} tips`}
-        title={`${entityLabel('world', { capitalize: true })} tips`}
+        aria-label={t.showEntityTips(entityLabel('world', {}, language))}
+        title={t.entityTips(entityLabel('world', { capitalize: true }, language))}
         onClick={() => setTipsOpen(true)}
       >
         <Lightbulb aria-hidden="true" className="h-5 w-5" />
@@ -64,7 +68,7 @@ export default function WorldEditor() {
         )}
       </button>
     )
-  }, [isFirstUserWorld, isNewWorld])
+  }, [isFirstUserWorld, isNewWorld, language, t])
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
@@ -157,14 +161,14 @@ export default function WorldEditor() {
       navigate('/worlds')
     },
     onError: error => {
-      setDeleteError(error instanceof Error ? error.message : `Could not delete ${entityLabel('world')}`)
+      setDeleteError(error instanceof Error ? error.message : t.couldNotDelete(entityLabel('world', {}, language)))
     },
   })
 
   const saveError = useMemo(() => {
     if (!saveMutation.isError) return ''
-    return saveMutation.error instanceof Error ? saveMutation.error.message : `Could not save ${entityLabel('world')}`
-  }, [saveMutation.error, saveMutation.isError])
+    return saveMutation.error instanceof Error ? saveMutation.error.message : t.couldNotSave(entityLabel('world', {}, language))
+  }, [language, saveMutation.error, saveMutation.isError, t])
 
   const editorActions = useMemo(() => (
     <div className="page-width border-b border-rose-line/80 px-4 pb-2">
@@ -176,7 +180,7 @@ export default function WorldEditor() {
               className="inline-flex h-10 shrink-0 items-center justify-center rounded-full px-3.5 font-serif-zh text-[15px] italic leading-none text-ink-3 transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-paper-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-4/50"
               onClick={cancel}
             >
-              Cancel
+              {t.cancel}
             </button>
             {!isNewWorld && (
               <div ref={actionsMenuRef} className="relative shrink-0">
@@ -184,8 +188,8 @@ export default function WorldEditor() {
                   type="button"
                   className="grid h-10 w-10 place-items-center rounded-full text-ink-3 transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-paper-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
                   onClick={() => setActionsOpen(open => !open)}
-                  aria-label={`${entityLabel('world', { capitalize: true })} actions`}
-                  title={`${entityLabel('world', { capitalize: true })} actions`}
+                  aria-label={t.entityActions(entityLabel('world', { capitalize: true }, language))}
+                  title={t.entityActions(entityLabel('world', { capitalize: true }, language))}
                   aria-haspopup="menu"
                   aria-expanded={actionsOpen}
                 >
@@ -207,7 +211,7 @@ export default function WorldEditor() {
                       }}
                     >
                       <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      Delete this {entityLabel('world')}
+                      {t.deleteThis(entityLabel('world', {}, language))}
                     </button>
                   </div>
                 )}
@@ -219,7 +223,7 @@ export default function WorldEditor() {
                 aria-hidden="true"
               />
               <span className="t-meta truncate text-ink-3">
-                {dirty ? 'Unsaved changes' : 'No changes'}
+                {dirty ? t.unsavedChanges : t.noChanges}
               </span>
             </div>
             <div className="flex-1 sm:hidden" aria-hidden="true" />
@@ -229,7 +233,7 @@ export default function WorldEditor() {
               onClick={save}
               disabled={!canSave || saveMutation.isPending}
             >
-              {saveMutation.isPending ? 'Saving...' : 'Save'}
+              {saveMutation.isPending ? t.saving : t.save}
             </button>
           </>
         ) : (
@@ -241,11 +245,11 @@ export default function WorldEditor() {
         )}
       </div>
     </div>
-  ), [actionsOpen, body, canSave, dirty, initialized, isNewWorld, name, saveMutation.isPending])
+  ), [actionsOpen, body, canSave, dirty, initialized, isNewWorld, language, name, saveMutation.isPending, t])
 
   useTopNavConfig({
-    mainTitle: isNewWorld ? `Create ${entityLabel('world', { capitalize: true })}` : undefined,
-    secondaryTitle: isNewWorld ? undefined : `Edit ${entityLabel('world', { capitalize: true })}`,
+    mainTitle: isNewWorld ? t.createEntity(entityLabel('world', { capitalize: true }, language)) : undefined,
+    secondaryTitle: isNewWorld ? undefined : t.editEntity(entityLabel('world', { capitalize: true }, language)),
     backHref: id ? `/worlds/${id}/about` : '/worlds',
     rightAction: tipsAction,
     bottomSlot: editorActions,
@@ -292,36 +296,36 @@ export default function WorldEditor() {
           {isFirstUserWorld && (
             <div className="rounded-md border border-rose-line bg-rose-pale/45 px-4 py-3">
               <p className="flex flex-col items-start gap-1 font-serif-zh text-[16px] leading-7 text-ink">
-                First {entityLabel('world')}?
+                {t.firstEntityQuestion(entityLabel('world', {}, language))}
                 <button
                   type="button"
                   className="italic text-rose underline decoration-rose/35 underline-offset-4 transition-colors hover:text-rose-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
                   onClick={() => setTipsOpen(true)}
                 >
-                  Read the tips first.
+                  {t.readTipsFirst}
                 </button>
               </p>
             </div>
           )}
 
           <label className={isFirstUserWorld ? 'mt-8 block' : 'block'}>
-            <span className="t-eyebrow eyebrow-rule">Name</span>
+            <span className="t-eyebrow eyebrow-rule">{t.name}</span>
             <input
               value={name}
               onChange={event => setName(event.target.value)}
               className="mt-4 block w-full bg-transparent px-0 py-1 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:outline-none focus-visible:outline focus-visible:outline-offset-4 focus-visible:outline-ink-4/70"
-              placeholder={`${entityLabel('world', { capitalize: true })} name`}
+              placeholder={t.worldNamePlaceholder(entityLabel('world', { capitalize: true }, language))}
               autoFocus
             />
           </label>
 
           <label className="mt-10 flex min-h-0 flex-1 flex-col">
-            <span className="t-eyebrow eyebrow-rule">Details</span>
+            <span className="t-eyebrow eyebrow-rule">{t.details}</span>
             <textarea
               value={body}
               onChange={event => setBody(event.target.value)}
               className="mt-4 min-h-[55svh] flex-1 resize-none border-l border-rose-line bg-transparent py-1 pl-5 pr-0 font-serif-zh text-[17px] leading-8 text-ink placeholder:text-ink-4 focus:outline-none focus-visible:border-ink-4"
-              placeholder={`Setting, characters, tone, dynamic, dirty details. Whatever the AI needs to know.`}
+              placeholder={t.worldDetailsPlaceholder}
             />
           </label>
 
@@ -335,18 +339,21 @@ export default function WorldEditor() {
 
       <ConfirmDialog
         open={confirmCancel}
-        title="Discard changes?"
-        description="Your unsaved edits will be lost."
-        confirmLabel="Discard"
+        title={t.discardChangesTitle}
+        description={t.discardChangesDescription}
+        confirmLabel={t.discard}
         onConfirm={() => navigate(isNewWorld ? '/worlds' : `/worlds/${id}/about`)}
         onClose={() => setConfirmCancel(false)}
       />
       <ConfirmDialog
         open={confirmDelete}
-        title={`Delete this ${entityLabel('world')}?`}
-        description={`This will delete the ${entityLabel('world')} and all of its ${entityLabel('piece', { plural: true })}.`}
-        confirmLabel="Yes, delete"
-        pendingLabel="Deleting..."
+        title={t.deleteThisTitle(entityLabel('world', {}, language))}
+        description={t.deleteWorldDescription(
+          entityLabel('world', {}, language),
+          entityLabel('piece', { plural: true }, language),
+        )}
+        confirmLabel={t.yesDelete}
+        pendingLabel={t.deleting}
         isPending={deleteMutation.isPending}
         error={deleteError}
         onConfirm={deleteWorld}

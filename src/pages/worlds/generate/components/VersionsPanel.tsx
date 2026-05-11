@@ -6,7 +6,9 @@ import { apiFetch } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import CountIndicator from '@/components/CountIndicator'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
-import { entityLabel } from '@/config'
+import { entityLabel, formatEntityCount } from '@/config'
+import { useUiText, type UiText } from '@/i18n'
+import { useLanguageId, type LanguageId } from '@/preferences/language'
 import { diffPromptInlineEdits, type PromptEditMark } from '@/utils/promptDiff'
 import { relativeTime } from '@/utils/time'
 import type { ClusterPrompt } from '../types'
@@ -74,6 +76,8 @@ export default function GenerateVersionsPanel({
   onShowDiffChange,
   onViewPrompt,
 }: GenerateVersionsPanelProps) {
+  const language = useLanguageId()
+  const t = useUiText()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [openMenuPromptId, setOpenMenuPromptId] = useState<number | null>(null)
@@ -97,7 +101,7 @@ export default function GenerateVersionsPanel({
   )
   const deletingLastClusterPrompt = !!confirmPrompt && entries.length === 1
   const deleteDescription = confirmPrompt
-    ? promptDeleteDescription(confirmPrompt, deletingLastClusterPrompt)
+    ? promptDeleteDescription(confirmPrompt, deletingLastClusterPrompt, t, language)
     : undefined
 
   useEffect(() => {
@@ -127,7 +131,7 @@ export default function GenerateVersionsPanel({
 
   const deleteMutation = useMutation({
     mutationFn: (entry: PromptVersionEntry) => {
-      if (!worldId) throw new Error(`Missing ${entityLabel('world')} id`)
+      if (!worldId) throw new Error(t.missingWorldId(entityLabel('world', {}, language)))
       return apiFetch(`/api/worlds/${worldId}/prompts/${entry.prompt.id}`, { method: 'DELETE' }) as Promise<DeletePromptResponse>
     },
     onSuccess: (result, deletedEntry) => {
@@ -156,7 +160,7 @@ export default function GenerateVersionsPanel({
       }
     },
     onError: error => {
-      setDeleteError(error instanceof Error ? error.message : `Could not delete ${entityLabel('prompt')}`)
+      setDeleteError(error instanceof Error ? error.message : t.couldNotDelete(entityLabel('prompt', {}, language)))
     },
   })
 
@@ -201,7 +205,7 @@ export default function GenerateVersionsPanel({
   }
 
   if (entries.length === 0) {
-    return <p className="t-meta px-2 py-6">No versions yet.</p>
+    return <p className="t-meta px-2 py-6">{t.noVersionsYet}</p>
   }
 
   return (
@@ -214,7 +218,7 @@ export default function GenerateVersionsPanel({
             checked={showDiff}
             onChange={event => onShowDiffChange(event.target.checked)}
           />
-          <span>Show changes</span>
+          <span>{t.showChanges}</span>
         </label>
       </div>
 
@@ -266,7 +270,7 @@ export default function GenerateVersionsPanel({
               <div className="min-w-0">
                 <div className="t-meta flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="truncate not-italic text-ink-3">{relativeTime(prompt.updated_at)}</span>
+                    <span className="truncate not-italic text-ink-3">{relativeTime(prompt.updated_at, language)}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <CountIndicator count={prompt.piece_count} className="justify-end gap-x-2" />
@@ -274,8 +278,8 @@ export default function GenerateVersionsPanel({
                       <button
                         type="button"
                         className="grid h-7 w-7 place-items-center rounded-full text-ink-3 transition-[background-color,color] hover:bg-paper-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-                        aria-label={`${entityLabel('prompt', { capitalize: true })} actions`}
-                        title={`${entityLabel('prompt', { capitalize: true })} actions`}
+                        aria-label={t.promptActions(entityLabel('prompt', { capitalize: true }, language))}
+                        title={t.promptActions(entityLabel('prompt', { capitalize: true }, language))}
                         aria-haspopup="menu"
                         aria-expanded={openMenuPromptId === prompt.id}
                         onClick={event => {
@@ -301,7 +305,7 @@ export default function GenerateVersionsPanel({
                             }}
                           >
                             <Trash2 aria-hidden="true" className="h-4 w-4" />
-                            Delete this {entityLabel('prompt')}
+                            {t.deleteThis(entityLabel('prompt', {}, language))}
                           </button>
                         </div>
                       )}
@@ -319,10 +323,10 @@ export default function GenerateVersionsPanel({
       </div>
       <ConfirmDialog
         open={!!confirmPrompt}
-        title={`Delete this ${entityLabel('prompt')}?`}
+        title={t.deleteThisTitle(entityLabel('prompt', {}, language))}
         description={deleteDescription}
-        confirmLabel="Yes, delete"
-        pendingLabel="Deleting..."
+        confirmLabel={t.yesDelete}
+        pendingLabel={t.deleting}
         isPending={deleteMutation.isPending}
         error={deleteError}
         onConfirm={deletePrompt}
@@ -340,10 +344,18 @@ function versionEntryClass() {
   return 'grid grid-cols-[3rem_minmax(0,1fr)] gap-3 px-1 py-6 sm:grid-cols-[3.75rem_minmax(0,1fr)] sm:gap-4 sm:px-2 sm:py-7'
 }
 
-function promptDeleteDescription(entry: PromptVersionEntry, deletesCluster: boolean) {
+function promptDeleteDescription(
+  entry: PromptVersionEntry,
+  deletesCluster: boolean,
+  t: UiText,
+  language: LanguageId,
+) {
   const pieceCount = entry.prompt.piece_count
-  const base = `This will delete the ${entityLabel('prompt')} and ${pieceCount} ${entityLabel('piece', { plural: pieceCount !== 1 })}.`
+  const base = t.deletePromptDescription(
+    entityLabel('prompt', {}, language),
+    formatEntityCount(pieceCount, 'piece', language),
+  )
   return deletesCluster
-    ? `${base} This is the last version in its cluster, so the cluster will be deleted too.`
+    ? `${base} ${t.deleteLastPromptClusterNotice}`
     : base
 }

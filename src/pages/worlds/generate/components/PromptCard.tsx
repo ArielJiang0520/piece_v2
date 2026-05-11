@@ -1,5 +1,7 @@
 import Skeleton from '@/components/Skeleton'
 import { entityLabel } from '@/config'
+import { useUiText } from '@/i18n'
+import { useLanguageId } from '@/preferences/language'
 
 interface PromptCardProps {
   prompt: string
@@ -18,7 +20,9 @@ export default function PromptCard({
   error,
   locked = false,
 }: PromptCardProps) {
-  const promptLabel = entityLabel('prompt', { capitalize: true })
+  const language = useLanguageId()
+  const t = useUiText()
+  const promptLabel = entityLabel('prompt', { capitalize: true }, language)
   const editorFrameClass =
     'rounded-lg border border-rose-line/80 bg-paper px-4 py-4 shadow-[inset_0_0_38px_rgba(205,83,106,0.055)] transition-colors focus-within:border-rose/60 focus-within:shadow-[inset_0_0_42px_rgba(205,83,106,0.085)]'
   const editorTextClass =
@@ -47,7 +51,7 @@ export default function PromptCard({
                 aria-label={promptLabel}
                 className={`${editorTextClass} h-44 w-full resize-y bg-transparent placeholder:text-ink-4 focus:outline-none focus:ring-0 disabled:opacity-50 [scrollbar-color:var(--color-rose)_transparent] [scrollbar-width:thin]`}
                 rows={6}
-                placeholder={`Write a scene. Start with 'Write...' (e.g. Write the night Elena finally breaks)`}
+                placeholder={t.promptPlaceholder}
                 value={prompt}
                 onChange={e => onPromptChange(e.target.value)}
                 disabled={streaming}

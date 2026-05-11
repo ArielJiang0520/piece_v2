@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Check, ChevronDown, ThumbsUp } from 'lucide-react'
 import { MODELS } from '@/preferences/generationModel'
+import { useUiText } from '@/i18n'
 
 interface ModelSelectorProps {
   model: string
@@ -17,6 +18,7 @@ export default function ModelSelector({
   closeMenu,
   onMenuOpenChange,
 }: ModelSelectorProps) {
+  const t = useUiText()
   const modelButtonId = useId()
   const modelListboxId = `${modelButtonId}-listbox`
   const modelMenuRef = useRef<HTMLDivElement | null>(null)
@@ -70,7 +72,7 @@ export default function ModelSelector({
         onClick={() => setMenuOpen(current => !current)}
         disabled={disabled}
       >
-        <span className="shrink-0 text-ink-4">AI Model:</span>
+        <span className="shrink-0 text-ink-4">{t.model}:</span>
         <span className="min-w-0 truncate text-ink-3">{selectedModel.label}</span>
         <ChevronDown
           className={`size-3 shrink-0 text-ink-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`}

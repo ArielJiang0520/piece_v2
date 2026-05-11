@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/auth'
 import { apiFetch } from '@/api'
 import { entityLabel } from '@/config'
+import { useUiText } from '@/i18n'
+import { LANGUAGE_OPTIONS, setLanguageId, useLanguageId } from '@/preferences/language'
 import { THEME_OPTIONS, setThemeId, useThemeId } from '@/preferences/theme'
 import ConfirmDialog from './ConfirmDialog'
 import { useCurrentTopNavConfig } from './topNavConfig'
@@ -31,6 +33,8 @@ export default function TopNav() {
   const navigate = useNavigate()
   const location = useLocation()
   const config = useCurrentTopNavConfig()
+  const language = useLanguageId()
+  const t = useUiText()
   const themeId = useThemeId()
 
   const worldId = useMemo(() => {
@@ -44,7 +48,7 @@ export default function TopNav() {
     queryFn: () => apiFetch(`/api/worlds/${worldId}`) as Promise<World>,
     enabled: !!worldId,
   })
-  const mainTitle = currentWorldQuery.data?.name ?? (worldId ? '' : config.mainTitle ?? 'Home')
+  const mainTitle = currentWorldQuery.data?.name ?? (worldId ? '' : config.mainTitle ?? t.home)
   const secondaryTitle = config.secondaryTitle ?? ''
 
   const worldsQuery = useQuery({
@@ -110,8 +114,8 @@ export default function TopNav() {
             <Link
               to={config.backHref}
               className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink"
-              aria-label="Back"
-              title="Back"
+              aria-label={t.back}
+              title={t.back}
             >
               <ArrowLeft aria-hidden="true" className="h-5 w-5" />
             </Link>
@@ -128,8 +132,8 @@ export default function TopNav() {
             <button
               type="button"
               className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-              aria-label="Open menu"
-              title="Open menu"
+              aria-label={t.openMenu}
+              title={t.openMenu}
               ref={menuButtonRef}
               onClick={() => setOpen(true)}
             >
@@ -160,12 +164,33 @@ export default function TopNav() {
             }`}
           aria-hidden={!open}
         >
-          <div className="flex items-center gap-2 border-b border-rose-line px-6 py-5">
-            <span className="font-serif-zh text-lg text-ink">{user?.username ?? ''}</span>
+          <div className="flex items-center gap-3 border-b border-rose-line px-6 py-5">
+            <span className="min-w-0 flex-1 truncate font-serif-zh text-lg text-ink">{user?.username ?? ''}</span>
+            <div
+              className="grid w-20 shrink-0 grid-cols-2 overflow-hidden rounded-full border border-rose-line p-0.5"
+              aria-label={t.language}
+            >
+              {LANGUAGE_OPTIONS.map(option => {
+                const selected = option.id === language
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`grid h-6 place-items-center rounded-full font-serif-zh text-[10px] italic leading-none transition-colors ${selected ? 'bg-rose-pale text-rose-deep' : 'text-ink-3 hover:text-ink'
+                      }`}
+                    aria-label={option.label}
+                    aria-pressed={selected}
+                    onClick={() => setLanguageId(option.id)}
+                  >
+                    {option.shortLabel}
+                  </button>
+                )
+              })}
+            </div>
             <button
               type="button"
-              className="ml-auto grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
-              aria-label="Close menu"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+              aria-label={t.closeMenu}
               onClick={closeMenu}
             >
               <X aria-hidden="true" className="h-5 w-5" />
@@ -178,7 +203,7 @@ export default function TopNav() {
               className="t-eyebrow mb-4 flex w-full items-center justify-between transition-colors hover:text-ink"
               onClick={goToWorldList}
             >
-              <span>Your {entityLabel('world', { plural: true, capitalize: true })}</span>
+              <span>{t.yourEntities(entityLabel('world', { plural: true, capitalize: true }, language))}</span>
               <ChevronRight aria-hidden="true" className="h-4 w-4" />
             </button>
             {worldsQuery.isLoading ? (
@@ -190,7 +215,7 @@ export default function TopNav() {
                 ))}
               </ul>
             ) : recentWorlds.length === 0 ? (
-              <p className="t-meta">No {entityLabel('world', { plural: true })} yet.</p>
+              <p className="t-meta">{t.noEntitiesYet(entityLabel('world', { plural: true }, language))}</p>
             ) : (
               <ul className="flex flex-col">
                 {recentWorlds.map(w => (
@@ -206,27 +231,29 @@ export default function TopNav() {
                 ))}
               </ul>
             )}
-            <div
-              className="mt-auto grid w-24 grid-cols-2 self-end overflow-hidden rounded-full border border-rose-line p-0.5"
-              aria-label="Color mode"
-            >
-              {THEME_OPTIONS.map(option => {
-                const selected = option.id === themeId
-                const Icon = themeIconByName[option.icon]
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={`grid h-8 place-items-center rounded-full transition-colors ${selected ? 'bg-rose-pale text-rose-deep' : 'text-ink-3 hover:text-ink'
-                      }`}
-                    aria-label={`${option.label} mode`}
-                    aria-pressed={selected}
-                    onClick={() => setThemeId(option.id)}
-                  >
-                    <Icon aria-hidden="true" className="h-4 w-4" />
-                  </button>
-                )
-              })}
+            <div className="mt-auto flex items-center justify-end gap-3">
+              <div
+                className="grid w-24 grid-cols-2 overflow-hidden rounded-full border border-rose-line p-0.5"
+                aria-label={t.colorMode}
+              >
+                {THEME_OPTIONS.map(option => {
+                  const selected = option.id === themeId
+                  const Icon = themeIconByName[option.icon]
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`grid h-8 place-items-center rounded-full transition-colors ${selected ? 'bg-rose-pale text-rose-deep' : 'text-ink-3 hover:text-ink'
+                        }`}
+                      aria-label={`${option.label} mode`}
+                      aria-pressed={selected}
+                      onClick={() => setThemeId(option.id)}
+                    >
+                      <Icon aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
 
@@ -236,15 +263,15 @@ export default function TopNav() {
               className="t-meta text-left transition-colors hover:text-ink"
               onClick={handleLogout}
             >
-              Log out
+              {t.logout}
             </button>
             <div className="relative">
               <button
                 type="button"
                 className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
-                aria-label="Account options"
+                aria-label={t.accountOptions}
                 aria-expanded={accountMenuOpen}
-                title="Account options"
+                title={t.accountOptions}
                 onClick={() => setAccountMenuOpen(value => !value)}
               >
                 <Ellipsis aria-hidden="true" className="h-5 w-5" />
@@ -257,7 +284,7 @@ export default function TopNav() {
                     onClick={openDeleteAccountDialog}
                   >
                     <Trash2 aria-hidden="true" className="h-4 w-4" />
-                    <span>Delete account</span>
+                    <span>{t.deleteAccount}</span>
                   </button>
                 </div>
               )}
@@ -268,10 +295,14 @@ export default function TopNav() {
 
       <ConfirmDialog
         open={confirmDeleteAccount}
-        title="Are you sure?"
-        description={`This will permanently delete your account and all associated ${entityLabel('world', { plural: true })}, ${entityLabel('prompt', { plural: true })}, and ${entityLabel('piece', { plural: true })}.`}
-        confirmLabel="Yes, delete account"
-        pendingLabel="Deleting..."
+        title={t.deleteAccountTitle}
+        description={t.deleteAccountDescription(
+          entityLabel('world', { plural: true }, language),
+          entityLabel('prompt', { plural: true }, language),
+          entityLabel('piece', { plural: true }, language),
+        )}
+        confirmLabel={t.deleteAccountConfirm}
+        pendingLabel={t.deleting}
         isPending={deleteAccountPending}
         error={deleteAccountError}
         onConfirm={handleDeleteAccount}

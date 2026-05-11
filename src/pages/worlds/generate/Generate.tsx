@@ -3,7 +3,9 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { useGeneration } from '@/hooks/useGeneration'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel } from '@/config'
+import { useUiText } from '@/i18n'
 import { setGenerationModel, useGenerationModel } from '@/preferences/generationModel'
+import { useLanguageId } from '@/preferences/language'
 import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
 import {
@@ -59,6 +61,8 @@ function parseVersionDraft(value: unknown): VersionDraftState | null {
 }
 
 export default function Generate() {
+  const language = useLanguageId()
+  const t = useUiText()
   const { id } = useParams<{ id: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -158,8 +162,8 @@ export default function Generate() {
   const showPieceStrip = lockedMode && (activePromptPieceCount > 0 || pendingPieceNumber !== null)
   const showHeaderRow = (lockedMode && !!activePrompt) || (!lockedMode && !!versionDraft)
   const headerLabel = lockedMode
-    ? hasMultipleVersions && activeVersionNumber != null ? `Version ${activeVersionNumber} of ${clusterPrompts.length}` : ''
-    : 'Editing scene — new version'
+    ? hasMultipleVersions && activeVersionNumber != null ? t.versionOf(activeVersionNumber, clusterPrompts.length) : ''
+    : t.editingPromptNewVersion
   const showPromptTab = useCallback(() => {
     setActiveTab('prompt')
     requestAnimationFrame(() => window.scrollTo({ top: 0 }))
@@ -170,25 +174,25 @@ export default function Generate() {
     return (
       <nav
         className="page-width border-b border-rose-line/80"
-        aria-label="Generate view"
+        aria-label={t.generateView}
       >
         <div
           className={`grid px-4 ${hasMultipleVersions ? 'grid-cols-2' : 'grid-cols-1'}`}
           role="tablist"
-          aria-label="Generate view"
+          aria-label={t.generateView}
         >
           <GenerateTabButton
             active={visibleActiveTab === 'prompt'}
             onClick={showPromptTab}
           >
-            {entityLabel('prompt')}
+            {entityLabel('prompt', {}, language)}
           </GenerateTabButton>
           {hasMultipleVersions && (
             <GenerateTabButton
               active={visibleActiveTab === 'versions'}
               onClick={() => setActiveTab('versions')}
             >
-              <span>Versions</span>
+              <span>{t.versions}</span>
               <span className="inline-flex min-w-5 justify-center rounded-full bg-paper-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none tracking-normal text-ink-3 ring-1 ring-paper-3/70">
                 {clusterPrompts.length}
               </span>
@@ -197,7 +201,7 @@ export default function Generate() {
         </div>
       </nav>
     )
-  }, [clusterPrompts.length, hasMultipleVersions, showGenerateTabs, showPromptTab, visibleActiveTab])
+  }, [clusterPrompts.length, hasMultipleVersions, language, showGenerateTabs, showPromptTab, t, visibleActiveTab])
   // const readingSettingsAction = useMemo(() => (
   //   <ReadingSettingsButton
   //     className={navReadingButtonClass}
@@ -224,7 +228,7 @@ export default function Generate() {
     if (!showGenerateTabs || !hasMultipleVersions) setActiveTab('prompt')
   }, [hasMultipleVersions, showGenerateTabs])
 
-  const promptError = promptDetailsError ? `Could not load ${entityLabel('prompt')}` : ''
+  const promptError = promptDetailsError ? t.couldNotLoad(entityLabel('prompt', {}, language)) : ''
   const error = generationError || promptError
   const generateDisabled =
     streaming ||
@@ -295,7 +299,7 @@ export default function Generate() {
                     onClick={handleEditActivePrompt}
                     disabled={streaming || activeClusterId == null}
                   >
-                    Edit
+                    {t.edit}
                   </button>
                 ) : (
                   <button
@@ -304,7 +308,7 @@ export default function Generate() {
                     onClick={handleCancelVersionDraft}
                     disabled={streaming}
                   >
-                    Cancel
+                    {t.cancel}
                   </button>
                 )}
               </div>

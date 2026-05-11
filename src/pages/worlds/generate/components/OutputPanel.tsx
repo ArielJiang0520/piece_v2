@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
-import { entityLabel } from '@/config'
+import { entityLabel, formatEndOfPiece } from '@/config'
 import type { GenerationPhase } from '@/hooks/useGeneration'
+import { useUiText } from '@/i18n'
+import { useLanguageId } from '@/preferences/language'
 import type { ReadingFont } from '@/preferences/readingFont'
 import { READING_FONT_BY_ID } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
@@ -34,6 +36,8 @@ export default function OutputPanel({
   readingFont,
   readingFontSize,
 }: OutputPanelProps) {
+  const language = useLanguageId()
+  const t = useUiText()
   const [endRevealed, setEndRevealed] = useState(false)
   const [outputRun, setOutputRun] = useState(0)
   const previousOutputRef = useRef('')
@@ -69,7 +73,7 @@ export default function OutputPanel({
   ].join(' ')
   const outputTextStyle = READING_FONT_SIZE_BY_ID[readingFontSize].outputStyle
   const placeholderTextStyle = { ...outputTextStyle, color: 'var(--color-ink-4)' }
-  const outputLabel = `${entityLabel('piece', { capitalize: true })}`
+  const outputLabel = t.outputLabel
   const waitingForProvider = phase === 'waiting_provider' && streaming && !output
 
   function scrollToTop() {
@@ -97,7 +101,7 @@ export default function OutputPanel({
         </div>
         <div className="min-h-72 border-l border-rose-line/70 pl-5">
           <p className={outputTextClass} style={placeholderTextStyle}>
-            Your {entityLabel('piece')} will stream here once generation starts.
+            {t.outputEmpty(entityLabel('piece', {}, language))}
           </p>
         </div>
       </div>
@@ -133,7 +137,7 @@ export default function OutputPanel({
           <div className="fade-in-up mt-10">
             <div className="t-meta flex justify-center">
               <span className="flex shrink-0 flex-col items-center gap-1 text-center">
-                <span>{pieceNumber ? `End of ${entityLabel('piece', { capitalize: true })} #${pieceNumber}` : 'End'}</span>
+                <span>{formatEndOfPiece(pieceNumber, language)}</span>
                 {pieceFooterStatsLabel && (
                   <span className="text-[12px] leading-none text-ink-4">
                     {pieceFooterStatsLabel}
@@ -148,7 +152,7 @@ export default function OutputPanel({
                 onClick={scrollToTop}
               >
                 <ArrowUp aria-hidden="true" className="h-4 w-4" />
-                <span>Back to top</span>
+                <span>{t.backToTop}</span>
               </button>
             </div>
           </div>

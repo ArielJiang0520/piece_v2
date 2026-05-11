@@ -1,4 +1,5 @@
 import { useEffect, useId } from 'react'
+import { useUiText } from '@/i18n'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -17,14 +18,15 @@ export default function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   pendingLabel,
   isPending = false,
   error,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  const t = useUiText()
   const titleId = useId()
 
   useEffect(() => {
@@ -78,7 +80,7 @@ export default function ConfirmDialog({
             onClick={onClose}
             disabled={isPending}
           >
-            {cancelLabel}
+            {cancelLabel ?? t.cancel}
           </button>
           <button
             type="button"
@@ -86,7 +88,7 @@ export default function ConfirmDialog({
             onClick={onConfirm}
             disabled={isPending}
           >
-            {isPending && pendingLabel ? pendingLabel : confirmLabel}
+            {isPending && pendingLabel ? pendingLabel : confirmLabel ?? t.confirm}
           </button>
         </div>
       </div>

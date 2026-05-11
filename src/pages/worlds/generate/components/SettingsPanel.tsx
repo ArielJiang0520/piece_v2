@@ -1,4 +1,5 @@
 import { Rabbit, Turtle } from 'lucide-react'
+import { useUiText } from '@/i18n'
 import { READING_FONT_OPTIONS, type ReadingFont } from '@/preferences/readingFont'
 import { READING_FONT_SIZE_OPTIONS, type ReadingFontSize } from '@/preferences/readingFontSize'
 import {
@@ -29,6 +30,7 @@ export default function SettingsPanel({
   readingFontSize,
   onReadingFontSizeChange,
 }: SettingsPanelProps) {
+  const t = useUiText()
   const readingDisabled = !open
 
   if (!open) return null
@@ -36,12 +38,12 @@ export default function SettingsPanel({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <span className="t-eyebrow shrink-0">Reading display</span>
+        <span className="t-eyebrow shrink-0">{t.readingDisplay}</span>
         <span aria-hidden="true" className="h-px flex-1 bg-rose-line/70" />
       </div>
 
       <div>
-        <span className="t-eyebrow mb-1.5 inline-flex">Size</span>
+        <span className="t-eyebrow mb-1.5 inline-flex">{t.size}</span>
         <div className="grid h-10 grid-cols-5 overflow-hidden rounded-md border border-rose-line bg-paper/50 p-0.5">
           {READING_FONT_SIZE_OPTIONS.map(option => {
             const selected = option.id === readingFontSize
@@ -70,7 +72,7 @@ export default function SettingsPanel({
       </div>
 
       <div>
-        <span className="t-eyebrow mb-1.5 inline-flex">Font</span>
+        <span className="t-eyebrow mb-1.5 inline-flex">{t.font}</span>
         <div className="grid h-10 grid-cols-2 overflow-hidden rounded-md border border-rose-line bg-paper/50 p-0.5">
           {READING_FONT_OPTIONS.map(option => {
             const selected = option.id === readingFont
@@ -104,10 +106,12 @@ export function ReadingSpeedSlider({
   readingSpeed,
   onReadingSpeedChange,
 }: ReadingSpeedSliderProps) {
+  const t = useUiText()
+
   return (
     <div>
       <label htmlFor={id} className="t-eyebrow mb-1.5 inline-flex">
-        Text Speed
+        {t.textSpeed}
       </label>
       <div className="flex h-10 items-center gap-3 rounded-md border border-rose-line bg-paper/50 px-3">
         <Turtle aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
@@ -121,7 +125,7 @@ export function ReadingSpeedSlider({
           value={readingSpeed}
           onChange={event => onReadingSpeedChange(Number(event.target.value))}
           disabled={disabled}
-          aria-label="Reading speed"
+          aria-label={t.readingSpeed}
         />
         <Rabbit aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
       </div>

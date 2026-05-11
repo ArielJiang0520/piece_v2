@@ -2,10 +2,14 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth'
 import TextField from '@/components/TextField'
+import { useUiText } from '@/i18n'
+import { LANGUAGE_OPTIONS, setLanguageId, useLanguageId } from '@/preferences/language'
 
 export default function Login() {
   const { login, signup } = useAuth()
   const navigate = useNavigate()
+  const language = useLanguageId()
+  const t = useUiText()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -23,18 +27,18 @@ export default function Login() {
       if (mode === 'login') await login(username, password)
       else {
         if (!passwordLongEnough) {
-          setError('Password must be at least 8 characters.')
+          setError(t.passwordMin)
           return
         }
         if (!passwordsMatch) {
-          setError('Passwords do not match.')
+          setError(t.passwordMismatch)
           return
         }
         await signup(username, password)
       }
       navigate('/worlds')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(e instanceof Error ? e.message : t.loginGenericError)
     }
   }
 
@@ -46,29 +50,50 @@ export default function Login() {
 
   return (
     <div className="page-fade-in min-h-screen bg-paper px-4">
-      <div className="page-width flex min-h-screen flex-col justify-center">
+      <div className="page-width relative flex min-h-screen flex-col justify-center py-16">
+        <div
+          className="absolute right-4 top-5 grid w-28 grid-cols-2 overflow-hidden rounded-full border border-rose-line p-0.5"
+          aria-label={t.language}
+        >
+          {LANGUAGE_OPTIONS.map(option => {
+            const selected = option.id === language
+            return (
+              <button
+                key={option.id}
+                type="button"
+                className={`grid h-8 place-items-center rounded-full font-serif-zh text-[12px] italic leading-none transition-colors ${selected ? 'bg-rose-pale text-rose-deep' : 'text-ink-3 hover:text-ink'
+                  }`}
+                aria-label={option.label}
+                aria-pressed={selected}
+                onClick={() => setLanguageId(option.id)}
+              >
+                {option.shortLabel}
+              </button>
+            )
+          })}
+        </div>
         <header className="mb-10">
-          <h1 className="t-display italic">Take #</h1>
+          <h1 className="t-display italic">{t.appTitle}</h1>
           <p className="t-meta mt-3 max-w-none whitespace-nowrap text-[15px]">
-            AI erotica, written on commission. Yours, no one else's.
+            {t.loginTagline}
           </p>
         </header>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <div>
-            <p className="t-eyebrow eyebrow-rule">{isSignup ? 'Create account' : 'Welcome back'}</p>
+            <p className="t-eyebrow eyebrow-rule">{isSignup ? t.loginCreateAccount : t.loginWelcomeBack}</p>
             <p className="t-meta mt-3">
-              {isSignup ? 'Register to start writing.' : 'Log in to continue.'}
+              {isSignup ? t.loginRegisterIntro : t.loginContinueIntro}
             </p>
           </div>
           <TextField
-            placeholder="Username"
+            placeholder={t.username}
             value={username}
             onChange={e => setUsername(e.target.value)}
             autoFocus
           />
           <TextField
             type="password"
-            placeholder="Password"
+            placeholder={t.password}
             value={password}
             onChange={e => setPassword(e.target.value)}
           />
@@ -79,17 +104,17 @@ export default function Login() {
                   className={`t-meta ${password ? 'text-rose-deep' : 'text-ink-3'}`}
                   aria-live="polite"
                 >
-                  Password must be at least 8 characters.
+                  {t.passwordMin}
                 </p>
               )}
               <TextField
                 type="password"
-                placeholder="Retype password"
+                placeholder={t.retypePassword}
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
               />
               {confirmPassword && !passwordsMatch && (
-                <p className="t-meta text-rose-deep">Passwords do not match.</p>
+                <p className="t-meta text-rose-deep">{t.passwordMismatch}</p>
               )}
             </>
           )}
@@ -100,16 +125,16 @@ export default function Login() {
               disabled={!canSubmit}
               className="h-12 w-full rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 disabled:pointer-events-none disabled:opacity-50"
             >
-              {isSignup ? 'Create account' : 'Log in'}
+              {isSignup ? t.loginCreateAccount : t.logIn}
             </button>
             <p className="t-meta text-center">
-              {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
+              {isSignup ? t.alreadyHaveAccount : t.dontHaveAccount}{' '}
               <button
                 type="button"
                 className="font-serif-zh italic text-rose-deep underline decoration-rose-line underline-offset-4 transition-colors hover:text-rose focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
                 onClick={() => switchMode(isSignup ? 'login' : 'signup')}
               >
-                {isSignup ? 'Log in' : 'Register'}
+                {isSignup ? t.logIn : t.register}
               </button>
             </p>
           </div>

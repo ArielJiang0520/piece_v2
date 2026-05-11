@@ -1,4 +1,5 @@
-import { entityLabel, type EntityKey } from '@/config'
+import { formatEntityCount, type EntityKey } from '@/config'
+import { useLanguageId } from '@/preferences/language'
 
 const DEFAULT_MAX_DOTS = 8
 const DEFAULT_UNITS_PER_DOT = 2
@@ -17,10 +18,6 @@ interface CountIndicatorProps {
   entity?: EntityKey
   maxDots?: number
   unitsPerDot?: number
-}
-
-function countLabel(count: number, entity: EntityKey) {
-  return `${count} ${entityLabel(entity, { plural: count !== 1 })}`
 }
 
 function countDotStyles(count: number, color: string, maxDots: number, unitsPerDot: number) {
@@ -49,6 +46,7 @@ export default function CountIndicator({
   maxDots = DEFAULT_MAX_DOTS,
   unitsPerDot = DEFAULT_UNITS_PER_DOT,
 }: CountIndicatorProps) {
+  const language = useLanguageId()
   const dotStyles = countDotStyles(count, color, maxDots, unitsPerDot)
 
   return (
@@ -60,7 +58,7 @@ export default function CountIndicator({
           ))}
         </span>
       )}
-      <span className="shrink-0">{countLabel(count, entity)}</span>
+      <span className="shrink-0">{formatEntityCount(count, entity, language)}</span>
     </div>
   )
 }

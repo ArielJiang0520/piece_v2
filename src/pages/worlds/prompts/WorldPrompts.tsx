@@ -4,6 +4,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { entityLabel } from '@/config'
+import { useUiText } from '@/i18n'
 import { useScrollReturn } from '@/hooks/useScrollReturn'
 import CountIndicator from '@/components/CountIndicator'
 import ListEndMarker from '@/components/ListEndMarker'
@@ -11,6 +12,7 @@ import RelativeTimeStatus from '@/components/RelativeTimeStatus'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import TextField from '@/components/TextField'
 import { useTopNavConfig } from '@/components/topNavConfig'
+import { useLanguageId } from '@/preferences/language'
 import WorldSortMenu from '../shared/WorldSortMenu'
 import WorldTabs from '../shared/WorldTabs'
 import { useScrollTopButton } from '../shared/useScrollTopButton'
@@ -48,14 +50,9 @@ interface WorldReturnState {
 
 const PAGE_SIZE = 20
 
-const SORT_OPTIONS = [
-  { value: 'latest', label: 'Latest' },
-  { value: 'most_pieces', label: `Most ${entityLabel('piece', { plural: true })}` },
-  { value: 'most_variations', label: `Most ${entityLabel('prompt')} variations` },
-  { value: 'oldest', label: 'Oldest' },
-] as const
+const SORT_VALUES = ['latest', 'most_pieces', 'most_variations', 'oldest'] as const
 
-type SortKey = typeof SORT_OPTIONS[number]['value']
+type SortKey = typeof SORT_VALUES[number]
 
 function ClusterCardSkeletons({ count = 4 }: { count?: number }) {
   return (
@@ -89,6 +86,8 @@ function parseWorldReturnState(value: unknown) {
 }
 
 export default function WorldPrompts() {
+  const language = useLanguageId()
+  const t = useUiText()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
@@ -101,7 +100,7 @@ export default function WorldPrompts() {
   const { showScrollTop, scrollToTop } = useScrollTopButton()
   const [searchParams, setSearchParams] = useSearchParams()
   const sortParam = searchParams.get('sort')
-  const sort: SortKey = SORT_OPTIONS.some(o => o.value === sortParam)
+  const sort: SortKey = SORT_VALUES.some(value => value === sortParam)
     ? sortParam as SortKey
     : 'latest'
   const queryParam = (searchParams.get('q') ?? '').trim()
@@ -178,6 +177,12 @@ export default function WorldPrompts() {
   const pages = clustersQuery.data?.pages ?? []
   const listGroups = useMemo(() => pages.flatMap(page => page.items), [pages])
   const groups = isSearching ? (searchQuery.data?.items ?? []) : listGroups
+  const sortOptions = useMemo(() => [
+    { value: 'latest', label: t.latest },
+    { value: 'most_pieces', label: t.mostEntities(entityLabel('piece', { plural: true }, language)) },
+    { value: 'most_variations', label: t.mostPromptVariations(entityLabel('prompt', {}, language)) },
+    { value: 'oldest', label: t.oldest },
+  ] as const, [language, t])
 
   const activeData = isSearching ? searchQuery.data : clustersQuery.data
   const loadingSearch = isSearching && searchQuery.isLoading
@@ -272,8 +277,8 @@ export default function WorldPrompts() {
                 type="text"
                 value={searchInput}
                 onChange={event => setSearchInput(event.target.value)}
-                placeholder={`Search ${entityLabel('prompt', { plural: true })}...`}
-                aria-label={`Search ${entityLabel('prompt', { plural: true })}`}
+                placeholder={t.searchEntities(entityLabel('prompt', { plural: true }, language))}
+                aria-label={t.searchEntities(entityLabel('prompt', { plural: true }, language))}
                 variant="search"
                 leadingAdornment={<Search aria-hidden="true" className="h-4 w-4 text-ink-4" />}
                 trailingAdornment={searchInput && (
@@ -281,15 +286,15 @@ export default function WorldPrompts() {
                     type="button"
                     onClick={() => setSearchInput('')}
                     className="grid h-6 w-6 place-items-center rounded-full text-ink-4 hover:text-ink-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
-                    aria-label="Clear search"
-                    title="Clear search"
+                    aria-label={t.clearSearch}
+                    title={t.clearSearch}
                   >
                     <X aria-hidden="true" className="h-3.5 w-3.5" />
                   </button>
                 )}
               />
             </div>
-            <WorldSortMenu options={SORT_OPTIONS} value={sort} onChange={handleSortChange} />
+            <WorldSortMenu options={sortOptions} value={sort} onChange={handleSortChange} />
           </div>
         </div>
 
@@ -301,7 +306,7 @@ export default function WorldPrompts() {
               ) : (
                 <>
                   <span className="text-rose">{searchTotal}</span>{' '}
-                  {searchTotal === 1 ? 'match' : 'matches'}
+                  {t.matchCount(searchTotal).replace(String(searchTotal), '').trim()}
                 </>
               )}
             </div>
@@ -311,12 +316,12 @@ export default function WorldPrompts() {
         <Link
           to={`/worlds/${id}/generate`}
           className="fixed bottom-[calc(1.75rem+env(safe-area-inset-bottom))] right-5 z-40 inline-flex h-11 w-auto items-center justify-center gap-1.5 rounded-full bg-rose pl-2 pr-4 font-serif-zh text-[14px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 sm:right-7"
-          aria-label={`New ${entityLabel('prompt', { capitalize: true })}`}
+          aria-label={t.newEntity(entityLabel('prompt', { capitalize: true }, language))}
         >
           <span className="grid h-6 w-6 place-items-center rounded-full">
             <Plus aria-hidden="true" className="h-5 w-5 stroke-[1.8]" />
           </span>
-          <span>New {entityLabel('prompt', { capitalize: true })}</span>
+          <span>{t.newEntity(entityLabel('prompt', { capitalize: true }, language))}</span>
         </Link>
 
         {loadingSearch ? (
@@ -325,8 +330,8 @@ export default function WorldPrompts() {
           <div className="pt-16 text-center">
             <p className="t-meta mb-5">
               {isSearching
-                ? 'No matches.'
-                : `No ${entityLabel('prompt', { plural: true })} yet.`}
+                ? t.noMatches
+                : t.noEntitiesYet(entityLabel('prompt', { plural: true }, language))}
             </p>
           </div>
         ) : (
@@ -352,7 +357,7 @@ export default function WorldPrompts() {
                     <RelativeTimeStatus
                       className="mb-3"
                       timestamp={group.latest_piece_at}
-                      emptyLabel={`No ${entityLabel('piece', { plural: true })}`}
+                      emptyLabel={t.noEntitiesYet(entityLabel('piece', { plural: true }, language))}
                     />
                     <p className="font-serif-zh text-[16px] leading-7 text-ink-2 line-clamp-4">
                       {group.title}
@@ -363,7 +368,7 @@ export default function WorldPrompts() {
                         <div className="flex shrink-0 items-center gap-1.5">
                           <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
                           <span>
-                            {group.prompt_count} {group.prompt_count === 1 ? 'version' : 'versions'}
+                            {t.versionCount(group.prompt_count)}
                           </span>
                         </div>
                       )}
@@ -386,12 +391,12 @@ export default function WorldPrompts() {
                   )}
                 </div>
                 {!hasNextPage && groups.length > 0 && (
-                  <ListEndMarker label={`End of ${entityLabel('prompt', { plural: true })}`} />
+                  <ListEndMarker label={t.endOfEntities(entityLabel('prompt', { plural: true }, language))} />
                 )}
               </>
             )}
             {isSearching && groups.length > 0 && (
-              <ListEndMarker label="End of matches" />
+              <ListEndMarker label={t.endOfMatches} />
             )}
           </>
         )}
@@ -402,8 +407,8 @@ export default function WorldPrompts() {
           type="button"
           onClick={scrollToTop}
           className="fixed bottom-7 left-1/2 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-x-1/2 hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20"
-          aria-label="Scroll to top"
-          title="Scroll to top"
+          aria-label={t.scrollToTop}
+          title={t.scrollToTop}
         >
           <ArrowUp aria-hidden="true" className="h-6 w-6" />
         </button>

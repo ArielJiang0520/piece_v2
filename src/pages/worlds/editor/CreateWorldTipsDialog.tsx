@@ -1,17 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { entityLabel } from '@/config'
-
-const createWorldTips = [
-  {
-    text: 'Done in five minutes is the right amount of effort. Worlds aren\'t supposed to be perfect. You\'ll learn what\'s missing after a few generations and come back to add it.',
-  },
-  {
-    text: 'Use the words you want to read back. The output matches your vocabulary \u2014 if you want it dirty, write it dirty.',
-  },
-  {
-    text: 'If it\'s a known fandom, you don\'t need to explain it \u2014 the AI knows. Save your words for what makes your version specific.',
-  },
-]
+import { useUiText } from '@/i18n'
+import { useLanguageId } from '@/preferences/language'
 
 interface CreateWorldTipsDialogProps {
   open: boolean
@@ -19,6 +9,8 @@ interface CreateWorldTipsDialogProps {
 }
 
 export default function CreateWorldTipsDialog({ open, onClose }: CreateWorldTipsDialogProps) {
+  const language = useLanguageId()
+  const t = useUiText()
   const [activeTip, setActiveTip] = useState(0)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
 
@@ -53,17 +45,17 @@ export default function CreateWorldTipsDialog({ open, onClose }: CreateWorldTips
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`Create ${entityLabel('world')} tips`}
+        aria-label={t.entityTips(t.createEntity(entityLabel('world', {}, language)))}
         className="page-fade-in w-full max-w-xl rounded-lg bg-paper px-6 py-6 shadow-(--shadow-menu)"
         onClick={event => event.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between gap-4">
           <div className="t-eyebrow eyebrow-rule">
-            <span>Tips</span>
+            <span>{t.tips}</span>
           </div>
           <div className="t-meta shrink-0">
             <span className="font-serif-zh text-rose">{activeTip + 1}</span>
-            <span className="text-ink-4"> / {createWorldTips.length}</span>
+            <span className="text-ink-4"> / {t.createWorldTips.length}</span>
           </div>
         </div>
 
@@ -73,10 +65,10 @@ export default function CreateWorldTipsDialog({ open, onClose }: CreateWorldTips
           onScroll={event => {
             const target = event.currentTarget
             const nextIndex = Math.round(target.scrollLeft / target.clientWidth)
-            setActiveTip(Math.max(0, Math.min(createWorldTips.length - 1, nextIndex)))
+            setActiveTip(Math.max(0, Math.min(t.createWorldTips.length - 1, nextIndex)))
           }}
         >
-          {createWorldTips.map(({ text }, index) => (
+          {t.createWorldTips.map((text, index) => (
             <div key={index} className="w-full shrink-0 snap-center px-6">
               <article className="flex min-h-72 flex-col items-center justify-center border-y border-rose-line px-2 py-10 text-center">
                 <span className="font-serif-zh text-5xl italic leading-none text-rose">
@@ -91,14 +83,14 @@ export default function CreateWorldTipsDialog({ open, onClose }: CreateWorldTips
           ))}
         </div>
 
-        <div className="mt-5 flex items-center justify-center gap-3" aria-label="Tips">
-          {createWorldTips.map((_, index) => (
+        <div className="mt-5 flex items-center justify-center gap-3" aria-label={t.tips}>
+          {t.createWorldTips.map((_, index) => (
             <button
               key={index}
               type="button"
               className={`h-1.5 rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 ${activeTip === index ? 'w-8 bg-rose' : 'w-1.5 bg-ink-4/45 hover:bg-ink-4/75'
                 }`}
-              aria-label={`Show tip ${index + 1}`}
+              aria-label={t.showTip(index + 1)}
               aria-current={activeTip === index}
               onClick={() => scrollToTip(index)}
             />
@@ -111,7 +103,7 @@ export default function CreateWorldTipsDialog({ open, onClose }: CreateWorldTips
             className="rounded-full bg-rose px-5 py-2.5 font-serif-zh text-[15px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25"
             onClick={onClose}
           >
-            Got it
+            {t.gotIt}
           </button>
         </div>
       </div>

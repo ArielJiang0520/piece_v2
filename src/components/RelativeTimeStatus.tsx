@@ -1,4 +1,6 @@
 import { relativeTime } from '@/utils/time'
+import { useUiText } from '@/i18n'
+import { useLanguageId } from '@/preferences/language'
 
 const ONE_HOUR_MS = 60 * 60 * 1e3
 
@@ -20,11 +22,13 @@ interface RelativeTimeStatusProps {
 export default function RelativeTimeStatus({
   timestamp,
   className = 'mb-4',
-  emptyLabel = 'No activity',
+  emptyLabel = '',
   prefix = '',
 }: RelativeTimeStatusProps) {
+  const language = useLanguageId()
+  const t = useUiText()
   const classes = recencyClasses(timestamp)
-  const label = timestamp ? `${prefix}${relativeTime(timestamp)}` : emptyLabel
+  const label = timestamp ? `${prefix}${relativeTime(timestamp, language)}` : emptyLabel || t.noActivity
 
   return (
     <div className={`${className} t-meta flex items-center gap-2.5 leading-none`}>

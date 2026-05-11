@@ -1,4 +1,5 @@
-import { entityLabel } from '@/config'
+import { formatPieceTitle } from '@/config'
+import { useLanguageId } from '@/preferences/language'
 import type { PieceStripPiece } from '../types'
 
 interface PieceStripProps {
@@ -22,6 +23,7 @@ export default function PieceStrip({
   onSelectPending,
   onSelectPiece,
 }: PieceStripProps) {
+  const language = useLanguageId()
   const showPendingPiece = pendingPieceNumber !== null
   const showOverflowHint = pieces.length + (showPendingPiece ? 1 : 0) > 2
 
@@ -43,7 +45,7 @@ export default function PieceStrip({
             aria-pressed={pendingSelected}
           >
             <span className={pendingSelected ? 'whitespace-nowrap font-serif-zh text-sm italic text-rose-deep' : 'whitespace-nowrap font-serif-zh text-sm italic text-ink-3'}>
-              {entityLabel('piece', { capitalize: true })} #{pendingPieceNumber}
+              {formatPieceTitle(pendingPieceNumber, language)}
             </span>
             {pendingSelected && <SelectedHairline />}
           </button>
@@ -63,7 +65,7 @@ export default function PieceStrip({
               aria-pressed={selected}
             >
               <span className={selected ? 'whitespace-nowrap font-serif-zh text-sm italic text-rose-deep' : 'whitespace-nowrap font-serif-zh text-sm italic text-ink-3'}>
-                {entityLabel('piece', { capitalize: true })} #{pieceNumber}
+                {formatPieceTitle(pieceNumber, language)}
               </span>
               {selected && <SelectedHairline />}
             </button>

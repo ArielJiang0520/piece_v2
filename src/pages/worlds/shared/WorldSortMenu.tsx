@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowUpDown, Check } from 'lucide-react'
+import { useUiText } from '@/i18n'
 
 export interface WorldSortOption<T extends string> {
   value: T
@@ -17,6 +18,7 @@ export default function WorldSortMenu<T extends string>({
   value,
   onChange,
 }: WorldSortMenuProps<T>) {
+  const t = useUiText()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const activeOption = options.find(option => option.value === value)
@@ -51,8 +53,8 @@ export default function WorldSortMenu<T extends string>({
         type="button"
         onClick={() => setOpen(open => !open)}
         className="grid h-12 w-12 place-items-center rounded-full border border-rose-line/80 bg-paper/60 text-ink-3 shadow-[inset_0_0_24px_rgba(205,83,106,0.03)] transition-[border-color,background-color,color,transform] duration-200 hover:-translate-y-px hover:border-rose/40 hover:bg-rose-tint/45 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"
-        aria-label={`Sort by ${activeOption?.label}`}
-        title={`Sort by ${activeOption?.label}`}
+        aria-label={t.sortBy(activeOption?.label)}
+        title={t.sortBy(activeOption?.label)}
         aria-haspopup="menu"
         aria-expanded={open}
       >

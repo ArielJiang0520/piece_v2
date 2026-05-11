@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { useToast } from '@/components/Toast'
 import type { GenerationCompletion } from '@/hooks/useGeneration'
+import { useLanguageId, type LanguageId } from '@/preferences/language'
 import { containsChineseText } from '@/preferences/readingSpeed'
 import { relativeTime } from '@/utils/time'
 import {
@@ -50,6 +51,7 @@ export function useGeneratePieceSession({
   promptPieces,
   resetGeneration,
 }: UseGeneratePieceSessionOptions) {
+  const language = useLanguageId()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -80,9 +82,9 @@ export function useGeneratePieceSession({
   const displayedOutput = viewingPendingPiece ? output : viewingSavedPiece ? selectedPiece?.body ?? '' : ''
   const outputDisplayComplete = viewingPendingPiece ? displayComplete : viewingSavedPiece ? !!selectedPiece : false
   const displayedPieceCreatedAt = viewingPendingPiece ? generatedAt : selectedPiece?.created_at ?? null
-  const displayedOutputCountLabel = outputCountLabel(displayedOutput)
+  const displayedOutputCountLabel = outputCountLabel(displayedOutput, language)
   const displayedPieceMetaLabel = displayedPieceCreatedAt
-    ? `${relativeTime(displayedPieceCreatedAt)} - ${displayedOutputCountLabel}`
+    ? `${relativeTime(displayedPieceCreatedAt, language)} - ${displayedOutputCountLabel}`
     : null
   const displayedGenerationDurationMs = viewingPendingPiece
     ? generationDurationMs ?? generationDurationMsRef.current
@@ -90,8 +92,12 @@ export function useGeneratePieceSession({
       ? generationDurationMs ?? generationDurationMsRef.current
       : null
   const displayedPieceFooterStatsLabel = displayedGenerationDurationMs !== null
-    ? `${displayedOutputCountLabel} generated in ${formatGenerationDuration(displayedGenerationDurationMs)}`
-    : `${displayedOutputCountLabel} generated`
+    ? language === 'zh'
+      ? `${displayedOutputCountLabel}，生成用时 ${formatGenerationDuration(displayedGenerationDurationMs, language)}`
+      : `${displayedOutputCountLabel} generated in ${formatGenerationDuration(displayedGenerationDurationMs, language)}`
+    : language === 'zh'
+      ? `${displayedOutputCountLabel}已生成`
+      : `${displayedOutputCountLabel} generated`
 
   const canSave = viewingPendingPiece && !streaming && !!output && saveState !== 'saving' && saveState !== 'saved'
 
@@ -286,8 +292,15 @@ export function useGeneratePieceSession({
   }
 }
 
-function formatGenerationDuration(durationMs: number) {
+function formatGenerationDuration(durationMs: number, language: LanguageId) {
   const totalSeconds = Math.max(1, Math.round(durationMs / 1000))
+  if (language === 'zh') {
+    if (totalSeconds < 60) return `${totalSeconds}秒`
+    const totalMinutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return seconds === 0 ? `${totalMinutes}分钟` : `${totalMinutes}分钟${seconds}秒`
+  }
+
   if (totalSeconds < 60) return `${totalSeconds} ${totalSeconds === 1 ? 'second' : 'seconds'}`
 
   const totalMinutes = Math.floor(totalSeconds / 60)
@@ -298,7 +311,12 @@ function formatGenerationDuration(durationMs: number) {
   return `${minuteLabel} ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`
 }
 
-function outputCountLabel(text: string) {
+function outputCountLabel(text: string, language: LanguageId) {
+  if (language === 'zh') {
+    const count = Array.from(text).filter(character => !/\s/u.test(character)).length
+    return `${count.toLocaleString()}个字`
+  }
+
   if (containsChineseText(text)) {
     const count = Array.from(text).filter(character => !/\s/u.test(character)).length
     return `${count.toLocaleString()} ${count === 1 ? 'character' : 'characters'}`

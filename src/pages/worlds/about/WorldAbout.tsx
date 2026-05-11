@@ -7,6 +7,9 @@ import ConfirmDialog from '@/components/ConfirmDialog'
 import ListEndMarker from '@/components/ListEndMarker'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
+import { entityLabel } from '@/config'
+import { useUiText } from '@/i18n'
+import { useLanguageId } from '@/preferences/language'
 import { relativeTime } from '@/utils/time'
 import WorldTabs from '../shared/WorldTabs'
 
@@ -39,6 +42,8 @@ interface CachedPromptPages {
 }
 
 export default function WorldAbout() {
+  const language = useLanguageId()
+  const t = useUiText()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -95,7 +100,7 @@ export default function WorldAbout() {
       }
     },
     onError: error => {
-      setRestoreError(error instanceof Error ? error.message : 'Could not restore version')
+      setRestoreError(error instanceof Error ? error.message : t.couldNotRestoreVersion)
     },
   })
 
@@ -160,12 +165,11 @@ export default function WorldAbout() {
   const hasBody = body.trim().length > 0
   const currentVersionNumber = versionEntries[0]?.number ?? null
   const dropdownVersionNumber = viewingHistory ? selectedVersionNumber : currentVersionNumber
-  const versionDropdownLabel = dropdownVersionNumber !== null ? `Version ${dropdownVersionNumber}` : 'Version'
   const versionDropdownLoading = versionsQuery.isLoading && dropdownVersionNumber === null
   function restoredFromLabel(restoredFromVersionId: number | null | undefined) {
     if (!restoredFromVersionId) return ''
     const sourceEntry = versionEntries.find(entry => entry.version.id === restoredFromVersionId)
-    return sourceEntry ? `Restored from Version ${sourceEntry.number}` : 'Restored from another version'
+    return sourceEntry ? t.restoredFromVersion(sourceEntry.number) : t.restoredFromAnotherVersion
   }
 
   function versionDotClass(timestamp: number) {
@@ -205,14 +209,14 @@ export default function WorldAbout() {
                   <History aria-hidden="true" className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block t-eyebrow truncate leading-none">Version history</span>
+                  <span className="block t-eyebrow truncate leading-none">{t.versionHistory}</span>
                   {versionDropdownLoading ? (
                     <Skeleton className="mt-1.5 h-4 w-20" />
                   ) : (
                     <span className="mt-1 block truncate font-serif-zh text-[15px] italic leading-none text-ink">
-                      {versionDropdownLabel}
+                      {dropdownVersionNumber !== null ? t.versionLabel(dropdownVersionNumber) : t.version}
                       {!viewingHistory && currentVersionNumber !== null && (
-                        <span className="ml-2 text-rose-deep">current</span>
+                        <span className="ml-2 text-rose-deep">{t.current}</span>
                       )}
                     </span>
                   )}
@@ -230,7 +234,7 @@ export default function WorldAbout() {
                       <Skeleton className="h-4 w-36" />
                     </div>
                   ) : versionEntries.length === 0 ? (
-                    <div className="t-meta px-4 py-3">No versions yet.</div>
+                    <div className="t-meta px-4 py-3">{t.noVersionsYet}</div>
                   ) : (
                     <div className="max-h-80 overflow-y-auto py-1">
                       {versionEntries.map(({ version, number }, index) => {
@@ -255,16 +259,16 @@ export default function WorldAbout() {
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className="flex min-w-0 items-center gap-2 font-serif-zh text-[15px] italic leading-snug text-ink">
-                                <span className="truncate">Version {number}</span>
+                                <span className="truncate">{t.versionLabel(number)}</span>
                                 {isCurrent && (
                                   <span className="shrink-0 font-serif-zh text-xs italic text-rose-deep">
-                                    current
+                                    {t.current}
                                   </span>
                                 )}
                               </span>
                               <span className="mt-1 flex min-w-0 items-center gap-2 font-serif-zh text-xs italic leading-none text-ink-3">
                                 <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${versionDotClass(version.created_at)}`} />
-                                <span className="truncate">{relativeTime(version.created_at)}</span>
+                                <span className="truncate">{relativeTime(version.created_at, language)}</span>
                               </span>
                               {version.restored_from_version_id && (
                                 <span className="mt-1 block truncate font-serif-zh text-xs italic leading-snug text-rose-deep">
@@ -291,7 +295,7 @@ export default function WorldAbout() {
               <span className="grid h-7 w-7 place-items-center rounded-full bg-rose-pale text-rose-deep">
                 <Pencil aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
               </span>
-              <span className="text-ink">Edit</span>
+              <span className="text-ink">{t.edit}</span>
             </Link>
           </div>
 
@@ -299,16 +303,16 @@ export default function WorldAbout() {
             <div className="flex flex-wrap items-center justify-between gap-4 border-t border-rose-line/70 py-3.5">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="t-eyebrow">Viewing history</span>
+                  <span className="t-eyebrow">{t.viewingHistory}</span>
                   {selectedVersionNumber !== null && (
                     <span className="rounded-full bg-rose-pale px-2 py-0.5 font-sans text-[10px] font-semibold uppercase leading-none tracking-[0.08em] text-rose-deep">
-                      Version {selectedVersionNumber}
+                      {t.versionLabel(selectedVersionNumber)}
                     </span>
                   )}
                 </div>
                 <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-serif-zh text-xs italic leading-none text-ink-3">
                   <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${versionDotClass(selectedVersion.created_at)}`} />
-                  <span>{relativeTime(selectedVersion.created_at)}</span>
+                  <span>{relativeTime(selectedVersion.created_at, language)}</span>
                   {selectedVersion.restored_from_version_id && (
                     <span className="text-rose-deep">
                       {restoredFromLabel(selectedVersion.restored_from_version_id)}
@@ -325,14 +329,14 @@ export default function WorldAbout() {
                 }}
               >
                 <RotateCcw aria-hidden="true" className="h-4 w-4" />
-                Restore
+                {t.restore}
               </button>
             </div>
           )}
         </div>
 
         <header className="mt-8 border-b border-rose-line/70 pb-6">
-          <span className="t-eyebrow eyebrow-rule">World</span>
+          <span className="t-eyebrow eyebrow-rule">{entityLabel('world', { capitalize: true }, language)}</span>
           <h1 className="t-headline mt-4 wrap-break-word">
             {world.name}
           </h1>
@@ -344,20 +348,20 @@ export default function WorldAbout() {
           ) : hasBody ? (
             body
           ) : (
-            <p className="t-meta">No body yet.</p>
+            <p className="t-meta">{t.noBodyYet}</p>
           )}
         </article>
         {hasBody && (
-          <ListEndMarker label="End of world description" className="mt-10" />
+          <ListEndMarker label={t.endOfWorldDescription} className="mt-10" />
         )}
       </div>
 
       <ConfirmDialog
         open={confirmRestore}
-        title={`Restore ${selectedVersionNumber !== null ? `Version ${selectedVersionNumber}` : 'this version'}?`}
-        description="This will replace the current body with this saved version. The world name will stay unchanged."
-        confirmLabel="Restore"
-        pendingLabel="Restoring..."
+        title={t.restoreVersionTitle(selectedVersionNumber)}
+        description={t.restoreVersionDescription}
+        confirmLabel={t.restore}
+        pendingLabel={t.restoring}
         isPending={restoreMutation.isPending}
         error={restoreError}
         onConfirm={restoreVersion}

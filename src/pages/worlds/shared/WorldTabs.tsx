@@ -1,4 +1,6 @@
 import { entityLabel } from '@/config'
+import { useUiText } from '@/i18n'
+import { useLanguageId } from '@/preferences/language'
 import { Link } from 'react-router-dom'
 
 export type WorldTab = 'prompts' | 'about'
@@ -9,16 +11,18 @@ interface Props {
   promptCount?: number
 }
 
-const tabs: Array<{ id: WorldTab; label: string; path: (worldId: string | number | undefined) => string }> = [
-  { id: 'about', label: 'About', path: worldId => `/worlds/${worldId}/about` },
-  { id: 'prompts', label: entityLabel('prompt', { capitalize: true, plural: true }), path: worldId => `/worlds/${worldId}` },
-]
-
 export default function WorldTabs({ active, worldId, promptCount }: Props) {
+  const language = useLanguageId()
+  const t = useUiText()
+  const tabs: Array<{ id: WorldTab; label: string; path: (worldId: string | number | undefined) => string }> = [
+    { id: 'about', label: t.about, path: worldId => `/worlds/${worldId}/about` },
+    { id: 'prompts', label: entityLabel('prompt', { capitalize: true, plural: true }, language), path: worldId => `/worlds/${worldId}` },
+  ]
+
   return (
     <nav
       className="page-width border-b border-rose-line/80"
-      aria-label="World sections"
+      aria-label={t.yourEntities(entityLabel('world', { plural: true }, language))}
     >
       <div className="grid grid-cols-2 px-6">
         {tabs.map(tab => {

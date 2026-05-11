@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { GenerationPhase } from '@/hooks/useGeneration'
+import { useUiText, type UiText } from '@/i18n'
+import { useLanguageId, type LanguageId } from '@/preferences/language'
 import ModelSelector from './ModelSelector'
 import ReadingSpeedButton from './ReadingSpeedButton'
 import { entityLabel } from '@/config'
@@ -40,6 +42,8 @@ export default function GenerateControls({
   onStop,
   stickyTopOffset = 48,
 }: GenerateControlsProps) {
+  const language = useLanguageId()
+  const t = useUiText()
   const ctaAnchorRef = useRef<HTMLDivElement>(null)
   const [ctaDocked, setCtaDocked] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
@@ -90,8 +94,8 @@ export default function GenerateControls({
             type="button"
             className={floatingActionButtonClass}
             onClick={onStop}
-            aria-label="Stop generation"
-            title="Stop generation"
+            aria-label={t.stopGeneration}
+            title={t.stopGeneration}
           >
             <X className="h-6 w-6" aria-hidden="true" />
           </button>
@@ -118,7 +122,7 @@ export default function GenerateControls({
               onClick={onGenerate}
               disabled={disabled}
             >
-              <span className="min-w-0 truncate">{generateButtonLabel(phase, hasExistingPieces)}</span>
+              <span className="min-w-0 truncate">{generateButtonLabel(phase, hasExistingPieces, t, language)}</span>
             </button>
           </div>
         </div>
@@ -139,10 +143,16 @@ export default function GenerateControls({
   )
 }
 
-function generateButtonLabel(phase: GenerationPhase, hasExistingPieces: boolean) {
-  if (phase === 'waiting_provider') return 'Waiting...'
-  if (phase === 'thinking') return 'Thinking...'
-  if (phase === 'writing') return 'Writing...'
-  if (!hasExistingPieces) return `First ${entityLabel('piece')}`
-  return `Another ${entityLabel('piece')}`
+function generateButtonLabel(
+  phase: GenerationPhase,
+  hasExistingPieces: boolean,
+  t: UiText,
+  language: LanguageId,
+) {
+  if (phase === 'waiting_provider') return t.waiting
+  if (phase === 'thinking') return t.thinking
+  if (phase === 'writing') return t.writing
+  const piece = entityLabel('piece', {}, language)
+  if (!hasExistingPieces) return t.firstPiece(piece)
+  return t.anotherPiece(piece)
 }
