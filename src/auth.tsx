@@ -12,7 +12,7 @@ interface AuthCtx {
   user: User | null
   loading: boolean
   login: (username: string, password: string) => Promise<void>
-  signup: (username: string, password: string) => Promise<void>
+  signup: (username: string, password: string, language: string) => Promise<void>
   logout: () => Promise<void>
   deleteAccount: () => Promise<void>
 }
@@ -40,10 +40,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(u)
   }
 
-  async function signup(username: string, password: string) {
+  async function signup(username: string, password: string, language: string) {
     const u = await apiFetch('/api/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, language }),
     })
     queryClient.clear()
     setUser(u)

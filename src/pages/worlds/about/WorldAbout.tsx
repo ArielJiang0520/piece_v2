@@ -351,9 +351,7 @@ export default function WorldAbout() {
             <p className="t-meta">{t.noBodyYet}</p>
           )}
         </article>
-        {hasBody && (
-          <ListEndMarker label={t.endOfWorldDescription} className="mt-10" />
-        )}
+
       </div>
 
       <ConfirmDialog

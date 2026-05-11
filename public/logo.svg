@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Mee-fan</title>
+  <text
+    x="50%"
+    y="50%"
+    fill="oklch(62% 0.14 12)"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="50"
+    font-style="italic"
+    font-weight="600"
+    text-anchor="middle"
+    dominant-baseline="central"
+  >M</text>
+</svg>

@@ -337,45 +337,52 @@ export default function WorldPrompts() {
         ) : (
           <>
             <ul className="hairline-list mt-2 flex flex-col [&>li:first-child>a]:pt-5">
-              {groups.map((group, index) => (
-                <li
-                  key={group.id}
-                  data-cluster-id={group.id}
-                  className="list-item-reveal"
-                  style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
-                >
-                  <Link
-                    to={
-                      group.latest_prompt_id
-                        ? `/worlds/${id}/generate?promptId=${group.latest_prompt_id}`
-                        : `/worlds/${id}/generate`
-                    }
-                    state={{ fromWorldList: true }}
-                    onClick={event => saveClusterReturnState(group.id, event)}
-                    className="block py-7 transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
+              {groups.map((group, index) => {
+                const hasPieces = group.piece_count > 0
+                const hasVariations = group.prompt_count > 1
+
+                return (
+                  <li
+                    key={group.id}
+                    data-cluster-id={group.id}
+                    className="list-item-reveal"
+                    style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
                   >
-                    <RelativeTimeStatus
-                      className="mb-3"
-                      timestamp={group.latest_piece_at}
-                      emptyLabel={t.noEntitiesYet(entityLabel('piece', { plural: true }, language))}
-                    />
-                    <p className="font-serif-zh text-[16px] leading-7 text-ink-2 line-clamp-4">
-                      {group.title}
-                    </p>
-                    <div className="t-meta mt-4 flex items-center justify-between gap-4">
-                      <CountIndicator count={group.piece_count} />
-                      {group.prompt_count > 1 && (
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
-                          <span>
-                            {t.versionCount(group.prompt_count)}
-                          </span>
+                    <Link
+                      to={
+                        group.latest_prompt_id
+                          ? `/worlds/${id}/generate?promptId=${group.latest_prompt_id}`
+                          : `/worlds/${id}/generate`
+                      }
+                      state={{ fromWorldList: true }}
+                      onClick={event => saveClusterReturnState(group.id, event)}
+                      className="block py-7 transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
+                    >
+                      <RelativeTimeStatus
+                        className="mb-3"
+                        timestamp={group.latest_piece_at}
+                        emptyLabel={t.noEntitiesYet(entityLabel('piece', { plural: true }, language))}
+                      />
+                      <p className="font-serif-zh text-[16px] leading-7 text-ink-2 line-clamp-4">
+                        {group.title}
+                      </p>
+                      {(hasPieces || hasVariations) && (
+                        <div className="t-meta mt-4 flex items-center justify-between gap-4">
+                          {hasPieces && <CountIndicator count={group.piece_count} />}
+                          {hasVariations && (
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
+                              <span>
+                                {t.versionCount(group.prompt_count)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
-                  </Link>
-                </li>
-              ))}
+                    </Link>
+                  </li>
+                )
+              })}
             </ul>
 
             {!isSearching && (

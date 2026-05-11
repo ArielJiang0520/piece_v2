@@ -15,6 +15,12 @@ import { createExampleWorldsForUser } from '../example-worlds'
 
 const auth = new Hono<{ Variables: Variables }>()
 
+function signupExampleLanguage(value: unknown) {
+  if (typeof value !== 'string') return 'en'
+  const normalized = value.toLowerCase()
+  return normalized === 'zh' ? 'zh' : 'en'
+}
+
 function startSession(c: any, userId: number, now = Date.now()) {
   const sid = generateSessionId()
   db.insert(sessions).values({ id: sid, user_id: userId, expires_at: now + SESSION_TTL_MS }).run()
@@ -22,7 +28,7 @@ function startSession(c: any, userId: number, now = Date.now()) {
 }
 
 auth.post('/auth/signup', async (c) => {
-  const { username, password } = await c.req.json()
+  const { username, password, language } = await c.req.json()
   if (!username || !password) return c.json({ error: 'Missing fields' }, 400)
   if (password.length < 8) return c.json({ error: 'Password must be at least 8 characters' }, 400)
 
@@ -33,7 +39,7 @@ auth.post('/auth/signup', async (c) => {
   const now = Date.now()
   const result = db.transaction((tx) => {
     const user = tx.insert(users).values({ username, password_hash: hash, created_at: now }).returning().get()
-    createExampleWorldsForUser(tx, user.id, now)
+    createExampleWorldsForUser(tx, user.id, now, signupExampleLanguage(language))
     return user
   })
 

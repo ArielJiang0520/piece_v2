@@ -1,13 +1,21 @@
-import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth'
 import TextField from '@/components/TextField'
 import { useUiText } from '@/i18n'
-import { LANGUAGE_OPTIONS, setLanguageId, useLanguageId } from '@/preferences/language'
+import { LANGUAGE_OPTIONS, setLanguageId, useLanguageId, type LanguageId } from '@/preferences/language'
+
+function languageFromParam(value: string | null): LanguageId | null {
+  const normalized = value?.toLowerCase()
+  if (normalized === 'zh') return 'zh'
+  if (normalized === 'eng' || normalized === 'en') return 'en'
+  return null
+}
 
 export default function Login() {
   const { login, signup } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const language = useLanguageId()
   const t = useUiText()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
@@ -19,6 +27,11 @@ export default function Login() {
   const passwordLongEnough = password.length >= 8
   const passwordsMatch = password === confirmPassword
   const canSubmit = !isSignup || (passwordLongEnough && passwordsMatch)
+
+  useEffect(() => {
+    const paramLanguage = languageFromParam(searchParams.get('language'))
+    if (paramLanguage && paramLanguage !== language) setLanguageId(paramLanguage)
+  }, [language, searchParams])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -34,7 +47,7 @@ export default function Login() {
           setError(t.passwordMismatch)
           return
         }
-        await signup(username, password)
+        await signup(username, password, language)
       }
       navigate('/worlds')
     } catch (e) {

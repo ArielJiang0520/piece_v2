@@ -16,10 +16,15 @@ interface ExampleWorld {
 }
 
 const EXAMPLES_DIR = join(import.meta.dir, '..', 'examples')
+type ExampleLanguage = 'en' | 'zh'
 
-function readExampleWorlds() {
+function readExampleWorlds(language: ExampleLanguage) {
   return readdirSync(EXAMPLES_DIR, { withFileTypes: true })
-    .filter(entry => entry.isFile() && entry.name.endsWith('.json'))
+    .filter(entry => {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) return false
+      const isZhExample = entry.name.endsWith('_zh.json')
+      return language === 'zh' ? isZhExample : !isZhExample
+    })
     .map(entry => entry.name)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
     .map(file => {
@@ -28,12 +33,15 @@ function readExampleWorlds() {
     })
 }
 
-const exampleWorlds = readExampleWorlds()
+const exampleWorldsByLanguage: Record<ExampleLanguage, ExampleWorld[]> = {
+  en: readExampleWorlds('en'),
+  zh: readExampleWorlds('zh'),
+}
 
-export function createExampleWorldsForUser(tx: any, userId: number, now = Date.now()) {
+export function createExampleWorldsForUser(tx: any, userId: number, now = Date.now(), language: ExampleLanguage = 'en') {
   let timestamp = now
 
-  for (const example of exampleWorlds) {
+  for (const example of exampleWorldsByLanguage[language]) {
     timestamp += 1
     const worldBody = example.body ?? ''
     const world = tx.insert(worlds).values({
