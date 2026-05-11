@@ -10,6 +10,7 @@ import WorldPrompts from './pages/worlds/prompts/WorldPrompts'
 import WorldAbout from './pages/worlds/about/WorldAbout'
 import WorldEditor from './pages/worlds/editor/WorldEditor'
 import Generate from './pages/worlds/generate/Generate'
+import AdminDashboard from './pages/admin/AdminDashboard'
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/worlds/:id/about" element={<ProtectedLayout><WorldAbout /></ProtectedLayout>} />
           <Route path="/worlds/:id/edit" element={<ProtectedLayout><WorldEditor /></ProtectedLayout>} />
           <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />
+          <Route path="/admin" element={<ProtectedLayout><AdminDashboard /></ProtectedLayout>} />
         </Routes>
       </TopNavProvider>
     </ToastProvider>
