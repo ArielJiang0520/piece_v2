@@ -73,6 +73,31 @@ sqlite.run(`
     created_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS model_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    world_id INTEGER REFERENCES worlds(id) ON DELETE SET NULL,
+    prompt_id INTEGER REFERENCES prompts(id) ON DELETE SET NULL,
+    piece_id INTEGER REFERENCES pieces(id) ON DELETE SET NULL,
+    local_generation_id TEXT NOT NULL,
+    openrouter_generation_id TEXT,
+    requested_model TEXT NOT NULL,
+    resolved_model TEXT,
+    provider_name TEXT,
+    status TEXT NOT NULL,
+    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_microcredits INTEGER NOT NULL DEFAULT 0,
+    raw_usage TEXT,
+    raw_metadata TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
 `)
 
 function addColumnIfMissing(table: string, column: string, ddl: string) {
@@ -245,6 +270,10 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_world_versions_world_created ON world_versions(world_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_world_versions_world_restored_from ON world_versions(world_id, restored_from_version_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_model_usage_user_created ON model_usage(user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_model_usage_user_model ON model_usage(user_id, resolved_model, requested_model);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_model_usage_user_local_generation
+    ON model_usage(user_id, local_generation_id);
 `)
 
 sqlite.run(`
@@ -342,4 +371,29 @@ export const pieces = sqliteTable('pieces', {
   created_at: integer('created_at').notNull(),
 })
 
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces } })
+export const modelUsage = sqliteTable('model_usage', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  world_id: integer('world_id').references(() => worlds.id, { onDelete: 'set null' }),
+  prompt_id: integer('prompt_id').references(() => prompts.id, { onDelete: 'set null' }),
+  piece_id: integer('piece_id').references(() => pieces.id, { onDelete: 'set null' }),
+  local_generation_id: text('local_generation_id').notNull(),
+  openrouter_generation_id: text('openrouter_generation_id'),
+  requested_model: text('requested_model').notNull(),
+  resolved_model: text('resolved_model'),
+  provider_name: text('provider_name'),
+  status: text('status').notNull(),
+  prompt_tokens: integer('prompt_tokens').notNull().default(0),
+  completion_tokens: integer('completion_tokens').notNull().default(0),
+  total_tokens: integer('total_tokens').notNull().default(0),
+  reasoning_tokens: integer('reasoning_tokens').notNull().default(0),
+  cached_tokens: integer('cached_tokens').notNull().default(0),
+  cache_write_tokens: integer('cache_write_tokens').notNull().default(0),
+  cost_microcredits: integer('cost_microcredits').notNull().default(0),
+  raw_usage: text('raw_usage'),
+  raw_metadata: text('raw_metadata'),
+  created_at: integer('created_at').notNull(),
+  updated_at: integer('updated_at').notNull(),
+})
+
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, modelUsage } })

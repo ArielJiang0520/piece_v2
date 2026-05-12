@@ -24,6 +24,7 @@ interface UseGeneratePieceSessionOptions {
   normalizedPrompt: string
   output: string
   model: string
+  generationId: string | null
   streaming: boolean
   displayComplete: boolean
   completion: GenerationCompletion
@@ -43,6 +44,7 @@ export function useGeneratePieceSession({
   normalizedPrompt,
   output,
   model,
+  generationId,
   streaming,
   displayComplete,
   completion,
@@ -113,6 +115,7 @@ export function useGeneratePieceSession({
           versionSourcePromptId,
           body: output,
           model,
+          generationId,
         }),
       }) as SaveResponse
 
@@ -165,6 +168,7 @@ export function useGeneratePieceSession({
   }, [
     canSave,
     lockedMode,
+    generationId,
     model,
     navigate,
     normalizedPrompt,

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context, Next } from 'hono'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
-import { db, promptClusters, prompts, users, worlds } from '../db'
+import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+import { db, modelUsage, promptClusters, prompts, users, worlds } from '../db'
 import { type Variables, authMiddleware } from '../middleware'
 import { getUserId, paramInt } from '../route-helpers'
 
@@ -24,6 +24,35 @@ async function requireAdmin(c: Context, next: Next) {
 
   if (!user || !allowed.has(user.username)) return c.json({ error: 'Forbidden' }, 403)
   await next()
+}
+
+function padMonthPart(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function monthWindow(value: string | undefined) {
+  const match = typeof value === 'string' ? /^(\d{4})-(\d{2})$/.exec(value) : null
+  const now = new Date()
+  let year = now.getFullYear()
+  let monthIndex = now.getMonth()
+
+  if (match) {
+    const parsedYear = Number(match[1])
+    const parsedMonth = Number(match[2])
+    if (Number.isInteger(parsedYear) && parsedMonth >= 1 && parsedMonth <= 12) {
+      year = parsedYear
+      monthIndex = parsedMonth - 1
+    }
+  }
+
+  const start = new Date(year, monthIndex, 1)
+  const end = new Date(year, monthIndex + 1, 1)
+
+  return {
+    month: `${year}-${padMonthPart(monthIndex + 1)}`,
+    start_at: start.getTime(),
+    end_at: end.getTime(),
+  }
 }
 
 adminRoutes.use('*', authMiddleware, requireAdmin)
@@ -190,6 +219,80 @@ adminRoutes.get('/users/:userId/worlds', (c) => {
       is_example: Boolean(world.is_example),
       clusters: clustersByWorld.get(world.id) ?? [],
     })),
+  })
+})
+
+adminRoutes.get('/users/:userId/usage', (c) => {
+  const targetUserId = paramInt(c, 'userId')
+  if (!Number.isInteger(targetUserId) || targetUserId < 1) {
+    return c.json({ error: 'Invalid user id' }, 400)
+  }
+
+  const targetUser = db
+    .select({ id: users.id, username: users.username })
+    .from(users)
+    .where(eq(users.id, targetUserId))
+    .get()
+  if (!targetUser) return c.json({ error: 'User not found' }, 404)
+
+  const window = monthWindow(c.req.query('month'))
+  const usageFilter = and(
+    eq(modelUsage.user_id, targetUserId),
+    gte(modelUsage.created_at, window.start_at),
+    lt(modelUsage.created_at, window.end_at),
+  )
+
+  const total = db
+    .select({
+      request_count: sql<number>`count(*)`,
+      prompt_tokens: sql<number>`coalesce(sum(${modelUsage.prompt_tokens}), 0)`,
+      completion_tokens: sql<number>`coalesce(sum(${modelUsage.completion_tokens}), 0)`,
+      total_tokens: sql<number>`coalesce(sum(${modelUsage.total_tokens}), 0)`,
+      reasoning_tokens: sql<number>`coalesce(sum(${modelUsage.reasoning_tokens}), 0)`,
+      cached_tokens: sql<number>`coalesce(sum(${modelUsage.cached_tokens}), 0)`,
+      cache_write_tokens: sql<number>`coalesce(sum(${modelUsage.cache_write_tokens}), 0)`,
+      cost_microcredits: sql<number>`coalesce(sum(${modelUsage.cost_microcredits}), 0)`,
+    })
+    .from(modelUsage)
+    .where(usageFilter)
+    .get()
+
+  const modelName = sql<string>`coalesce(${modelUsage.resolved_model}, ${modelUsage.requested_model})`
+  const models = db
+    .select({
+      model: modelName,
+      request_count: sql<number>`count(*)`,
+      prompt_tokens: sql<number>`coalesce(sum(${modelUsage.prompt_tokens}), 0)`,
+      completion_tokens: sql<number>`coalesce(sum(${modelUsage.completion_tokens}), 0)`,
+      total_tokens: sql<number>`coalesce(sum(${modelUsage.total_tokens}), 0)`,
+      reasoning_tokens: sql<number>`coalesce(sum(${modelUsage.reasoning_tokens}), 0)`,
+      cached_tokens: sql<number>`coalesce(sum(${modelUsage.cached_tokens}), 0)`,
+      cache_write_tokens: sql<number>`coalesce(sum(${modelUsage.cache_write_tokens}), 0)`,
+      cost_microcredits: sql<number>`coalesce(sum(${modelUsage.cost_microcredits}), 0)`,
+    })
+    .from(modelUsage)
+    .where(usageFilter)
+    .groupBy(modelName)
+    .orderBy(
+      desc(sql<number>`sum(${modelUsage.cost_microcredits})`),
+      desc(sql<number>`sum(${modelUsage.total_tokens})`),
+    )
+    .all()
+
+  return c.json({
+    user: targetUser,
+    window,
+    total: total ?? {
+      request_count: 0,
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      reasoning_tokens: 0,
+      cached_tokens: 0,
+      cache_write_tokens: 0,
+      cost_microcredits: 0,
+    },
+    models,
   })
 })
 

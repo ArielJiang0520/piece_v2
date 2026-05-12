@@ -4,6 +4,13 @@ import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { normalizePromptInput } from '../../prompt-text'
 import { readServerSentEvents } from '../../../src/utils/sse'
+import {
+  buildModelUsageFromGenerationMetadata,
+  buildModelUsageFromOpenRouterResponse,
+  fetchOpenRouterGenerationMetadata,
+  type ModelUsageStatus,
+  writeModelUsage,
+} from '../../model-usage'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
 const activeGenerations = new Map<string, AbortController>()
@@ -75,6 +82,10 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   return streamSSE(c, async (stream) => {
     const controller = new AbortController()
     const key = generationKey(userId, worldId, generationToken)
+    const requestStartedAt = Date.now()
+    let openrouterGenerationId: string | null = null
+    let usagePersisted = false
+    let finalStatus: ModelUsageStatus = 'error'
     activeGenerations.get(key)?.abort()
     activeGenerations.set(key, controller)
 
@@ -112,6 +123,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
       if (!response.ok || !response.body) {
         const message = await readOpenRouterError(response)
+        finalStatus = 'error'
         console.error('[OpenRouter generate error]', {
           status: response.status,
           statusText: response.statusText,
@@ -125,15 +137,37 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
       for await (const data of readServerSentEvents(response.body)) {
         if (data === '[DONE]') {
+          finalStatus = 'completed'
           await stream.writeSSE({ data: JSON.stringify({ type: 'done' }) })
           return
         }
         try {
           const parsed = JSON.parse(data)
+          if (typeof parsed?.id === 'string') {
+            openrouterGenerationId = parsed.id
+          }
+
+          if (parsed?.usage) {
+            const usageEvent = buildModelUsageFromOpenRouterResponse({
+              userId,
+              worldId,
+              localGenerationId: generationToken,
+              requestedModel: modelOption.id,
+              status: 'completed',
+              response: parsed,
+              createdAt: requestStartedAt,
+            })
+            if (usageEvent) {
+              writeModelUsage(usageEvent)
+              usagePersisted = true
+            }
+          }
+
           if (parsed?.error) {
             const message = typeof parsed.error?.message === 'string'
               ? parsed.error.message
               : JSON.stringify(parsed.error)
+            finalStatus = 'error'
             console.error('[OpenRouter generate stream error]', {
               model: modelOption.id,
               provider,
@@ -160,11 +194,31 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
         }
       }
     } catch (err) {
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) {
+        finalStatus = 'cancelled'
+        return
+      }
 
+      finalStatus = 'error'
       const msg = err instanceof Error ? err.message : 'Unknown error'
       await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: msg }) })
     } finally {
+      if (!usagePersisted && openrouterGenerationId) {
+        const metadata = await fetchOpenRouterGenerationMetadata(apiKey, openrouterGenerationId)
+        const usageEvent = buildModelUsageFromGenerationMetadata({
+          userId,
+          worldId,
+          localGenerationId: generationToken,
+          requestedModel: modelOption.id,
+          status: finalStatus,
+          metadata,
+          createdAt: requestStartedAt,
+        })
+        if (usageEvent) {
+          writeModelUsage(usageEvent)
+        }
+      }
+
       c.req.raw.signal.removeEventListener('abort', abortOpenRouter)
       if (activeGenerations.get(key) === controller) {
         activeGenerations.delete(key)
