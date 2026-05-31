@@ -22,7 +22,7 @@ export const MODELS: ModelOption[] = [
     recommended: true,
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['deepinfra/fp4', 'together', 'venice'],
+    preferredProviders: [],
   },
   {
     id: 'deepseek/deepseek-v4-flash',
@@ -30,7 +30,7 @@ export const MODELS: ModelOption[] = [
     recommended: false,
     attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['parasail/fp8', 'deepinfra/fp4'],
+    preferredProviders: [],
   },
   {
     id: 'z-ai/glm-5',

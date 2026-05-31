@@ -22,6 +22,8 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
 
   if (!isValidModelId(body.model)) return c.json({ error: 'Invalid model' }, 400)
   const model = body.model
+  const providerRaw = typeof body.provider === 'string' ? body.provider.trim() : ''
+  const provider = providerRaw ? providerRaw : null
   const generationToken = typeof body.generationId === 'string' ? body.generationId.trim() : ''
 
   let existingPromptId: number | undefined
@@ -104,6 +106,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     prompt_id: promptRow.id,
     body: pieceBody,
     model,
+    provider,
     created_at: now,
   }).returning({ id: pieces.id }).get()
 

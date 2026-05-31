@@ -5,6 +5,7 @@ import { apiFetch } from '@/api'
 import { useToast } from '@/components/Toast'
 import type { GenerationCompletion } from '@/hooks/useGeneration'
 import { useLanguageId, type LanguageId } from '@/preferences/language'
+import { MODELS } from '@/preferences/generationModel'
 import { containsChineseText } from '@/preferences/readingSpeed'
 import { relativeTime } from '@/utils/time'
 import {
@@ -24,6 +25,7 @@ interface UseGeneratePieceSessionOptions {
   normalizedPrompt: string
   output: string
   model: string
+  provider: string
   generationId: string | null
   streaming: boolean
   displayComplete: boolean
@@ -44,6 +46,7 @@ export function useGeneratePieceSession({
   normalizedPrompt,
   output,
   model,
+  provider,
   generationId,
   streaming,
   displayComplete,
@@ -88,6 +91,11 @@ export function useGeneratePieceSession({
   const displayedPieceMetaLabel = displayedPieceCreatedAt
     ? `${relativeTime(displayedPieceCreatedAt, language)} - ${displayedOutputCountLabel}`
     : null
+  const displayedPieceModel = viewingPendingPiece ? model : selectedPiece?.model ?? null
+  const displayedPieceProvider = viewingPendingPiece ? provider : selectedPiece?.provider ?? null
+  const displayedPieceModelLabel = displayedPieceModel
+    ? `${MODELS.find(m => m.id === displayedPieceModel)?.label ?? displayedPieceModel} (${displayedPieceProvider || 'Unknown Provider'})`
+    : null
   const displayedGenerationDurationMs = viewingPendingPiece
     ? generationDurationMs ?? generationDurationMsRef.current
     : selectedPieceId !== null && selectedPieceId === generatedStatsPieceId
@@ -115,6 +123,7 @@ export function useGeneratePieceSession({
           versionSourcePromptId,
           body: output,
           model,
+          provider: provider || undefined,
           generationId,
         }),
       }) as SaveResponse
@@ -130,6 +139,7 @@ export function useGeneratePieceSession({
         id: result.pieceId,
         body: output,
         model,
+        provider: provider || null,
         created_at: Date.now(),
       })
       queryClient.setQueryData<PromptPiecesResponse>(
@@ -170,6 +180,7 @@ export function useGeneratePieceSession({
     lockedMode,
     generationId,
     model,
+    provider,
     navigate,
     normalizedPrompt,
     output,
@@ -290,6 +301,7 @@ export function useGeneratePieceSession({
     displayedOutput,
     outputDisplayComplete,
     displayedPieceMetaLabel,
+    displayedPieceModelLabel,
     displayedPieceFooterStatsLabel,
     prepareGeneration,
     cancelPendingGeneration,

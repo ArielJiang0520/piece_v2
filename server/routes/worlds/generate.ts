@@ -95,10 +95,12 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
-      const provider = {
+      const provider: Record<string, unknown> = {
         sort: 'latency',
         require_parameters: true,
-        only: modelOption.preferredProviders,
+      }
+      if (modelOption.preferredProviders.length > 0) {
+        provider.only = modelOption.preferredProviders
       }
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -135,6 +137,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
         return
       }
 
+      let providerEmitted = false
       for await (const data of readServerSentEvents(response.body)) {
         if (data === '[DONE]') {
           finalStatus = 'completed'
@@ -145,6 +148,11 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           const parsed = JSON.parse(data)
           if (typeof parsed?.id === 'string') {
             openrouterGenerationId = parsed.id
+          }
+
+          if (!providerEmitted && typeof parsed?.provider === 'string' && parsed.provider) {
+            providerEmitted = true
+            await stream.writeSSE({ data: JSON.stringify({ type: 'provider', name: parsed.provider }) })
           }
 
           if (parsed?.usage) {

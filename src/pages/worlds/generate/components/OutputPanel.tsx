@@ -18,7 +18,9 @@ interface OutputPanelProps {
   phase: GenerationPhase
   streaming: boolean
   displayComplete: boolean
+  provider?: string
   pieceMetaLabel: string | null
+  pieceModelLabel: string | null
   pieceFooterStatsLabel: string | null
   pieceNumber: number | null
   readingFont: ReadingFont
@@ -30,7 +32,9 @@ export default function OutputPanel({
   phase,
   streaming,
   displayComplete,
+  provider = '',
   pieceMetaLabel,
+  pieceModelLabel,
   pieceFooterStatsLabel,
   pieceNumber,
   readingFont,
@@ -111,11 +115,22 @@ export default function OutputPanel({
   return (
     <div className={wrapperClass}>
       <div>
-        {displayComplete && pieceMetaLabel && (
-          <div className="fade-in-up t-meta mb-4 flex items-center gap-3">
-            {pieceMetaLabel}
+        {displayComplete && pieceMetaLabel ? (
+          <div className="fade-in-up mb-4">
+            <div className="t-meta flex items-center gap-3">
+              {pieceMetaLabel}
+            </div>
+            {pieceModelLabel && (
+              <div className="t-meta mt-0.5 text-ink-4">
+                {pieceModelLabel}
+              </div>
+            )}
           </div>
-        )}
+        ) : streaming && provider ? (
+          <div className="fade-in-up t-meta mb-4 flex items-center gap-3">
+            Provider: {provider}
+          </div>
+        ) : null}
         <p className={outputTextClass} style={outputTextStyle}>
           {outputTokens.map((token, index) => {
             if (/^\s+$/.test(token)) return token

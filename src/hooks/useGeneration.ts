@@ -18,29 +18,33 @@ interface State {
   output: string
   error: string
   completion: GenerationCompletion
+  provider: string
 }
 
 type Action =
   | { type: 'start' }
   | { type: 'phase'; phase: GenerationPhase }
+  | { type: 'provider'; name: string }
   | { type: 'chunk'; content: string }
   | { type: 'error'; message: string }
   | { type: 'done' }
   | { type: 'stop' }
   | { type: 'reset' }
 
-const initialState: State = { phase: 'idle', output: '', error: '', completion: 'none' }
+const initialState: State = { phase: 'idle', output: '', error: '', completion: 'none', provider: '' }
 const DISPLAY_FLUSH_MS = 80
 const MAX_DISPLAY_UNITS_PER_FLUSH = 10
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'start':
-      return { ...state, phase: 'waiting_provider', output: '', error: '', completion: 'none' }
+      return { ...state, phase: 'waiting_provider', output: '', error: '', completion: 'none', provider: '' }
     case 'phase':
       // 'thinking' must not downgrade an already-writing stream
       if (action.phase === 'thinking' && state.phase === 'writing') return state
       return { ...state, phase: action.phase }
+    case 'provider':
+      return { ...state, provider: action.name }
     case 'chunk':
       return { ...state, phase: 'writing', output: state.output + action.content }
     case 'error':
@@ -48,7 +52,7 @@ function reducer(state: State, action: Action): State {
     case 'done':
       return { ...state, phase: 'idle', completion: 'completed' }
     case 'stop':
-      return { ...state, phase: 'idle', output: '', error: '', completion: 'cancelled' }
+      return { ...state, phase: 'idle', output: '', error: '', completion: 'cancelled', provider: '' }
     case 'reset':
       return initialState
   }
@@ -223,6 +227,10 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
           const msg = JSON.parse(data)
           if (msg.type === 'status' && msg.status === 'waiting_provider') {
             dispatch({ type: 'phase', phase: 'waiting_provider' })
+          } else if (msg.type === 'provider') {
+            if (typeof msg.name === 'string' && msg.name) {
+              dispatch({ type: 'provider', name: msg.name })
+            }
           } else if (msg.type === 'thinking') {
             dispatch({ type: 'phase', phase: 'thinking' })
           } else if (msg.type === 'chunk') {
@@ -298,6 +306,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     output: state.output,
     error: state.error,
     completion: state.completion,
+    provider: state.provider,
     generationId: lastGenerationId,
     displayComplete: state.phase === 'idle' && state.completion === 'completed',
     streaming,

@@ -18,6 +18,7 @@ pieceRoutes.get('/:id', authMiddleware, (c) => {
       prompt: prompts.text,
       body: pieces.body,
       model: pieces.model,
+      provider: pieces.provider,
       created_at: pieces.created_at,
     })
     .from(pieces)

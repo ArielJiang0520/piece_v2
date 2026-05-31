@@ -70,6 +70,7 @@ sqlite.run(`
     prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
     body TEXT NOT NULL,
     model TEXT,
+    provider TEXT,
     created_at INTEGER NOT NULL
   );
 
@@ -198,12 +199,13 @@ function rebuildPiecesTable() {
         prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
         body TEXT NOT NULL,
         model TEXT,
+        provider TEXT,
         created_at INTEGER NOT NULL
       );
     `)
     sqlite.run(`
-      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, model, created_at)
-      SELECT id, user_id, world_id, prompt_id, body, model, created_at FROM pieces;
+      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, model, provider, created_at)
+      SELECT id, user_id, world_id, prompt_id, body, model, provider, created_at FROM pieces;
     `)
     sqlite.run('DROP TABLE pieces;')
     sqlite.run('ALTER TABLE pieces_new RENAME TO pieces;')
@@ -241,6 +243,7 @@ function dropColumnIfPresent(table: string, column: string) {
 
 addColumnIfMissing('worlds', 'is_example', 'is_example INTEGER NOT NULL DEFAULT 0')
 addColumnIfMissing('world_versions', 'restored_from_version_id', 'restored_from_version_id INTEGER')
+addColumnIfMissing('pieces', 'provider', 'provider TEXT')
 sqlite.run('DROP INDEX IF EXISTS idx_pieces_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_prompts_world_version;')
 dropColumnIfPresent('prompts', 'world_version_id')
@@ -368,6 +371,7 @@ export const pieces = sqliteTable('pieces', {
   prompt_id: integer('prompt_id').notNull().references(() => prompts.id),
   body: text('body').notNull(),
   model: text('model'),
+  provider: text('provider'),
   created_at: integer('created_at').notNull(),
 })
 

@@ -31,6 +31,7 @@ export interface PieceDetail {
   id: number
   body: string
   model: string | null
+  provider: string | null
   created_at: number
 }
 

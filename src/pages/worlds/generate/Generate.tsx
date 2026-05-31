@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Check, Copy } from 'lucide-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useTopNavConfig } from '@/components/topNavConfig'
@@ -89,6 +90,7 @@ export default function Generate() {
     output,
     error: generationError,
     completion,
+    provider,
     generationId,
     displayComplete,
     streaming,
@@ -123,6 +125,7 @@ export default function Generate() {
     displayedOutput,
     outputDisplayComplete,
     displayedPieceMetaLabel,
+    displayedPieceModelLabel,
     displayedPieceFooterStatsLabel,
     prepareGeneration,
     cancelPendingGeneration,
@@ -134,6 +137,7 @@ export default function Generate() {
     normalizedPrompt,
     output,
     model,
+    provider,
     generationId,
     streaming,
     displayComplete,
@@ -279,6 +283,32 @@ export default function Generate() {
     navigate(`/worlds/${id}/generate?promptId=${versionDraft.sourcePromptId}`, { replace: true })
   }
 
+  const [promptCopied, setPromptCopied] = useState(false)
+  const promptCopyResetRef = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (promptCopyResetRef.current != null) window.clearTimeout(promptCopyResetRef.current)
+  }, [])
+
+  async function handleCopyPrompt() {
+    if (!prompt) return
+    try {
+      await navigator.clipboard.writeText(prompt)
+    } catch {
+      const fallback = document.createElement('textarea')
+      fallback.value = prompt
+      fallback.setAttribute('readonly', '')
+      fallback.style.position = 'fixed'
+      fallback.style.opacity = '0'
+      document.body.appendChild(fallback)
+      fallback.select()
+      try { document.execCommand('copy') } catch { /* noop */ }
+      document.body.removeChild(fallback)
+    }
+    setPromptCopied(true)
+    if (promptCopyResetRef.current != null) window.clearTimeout(promptCopyResetRef.current)
+    promptCopyResetRef.current = window.setTimeout(() => setPromptCopied(false), 1500)
+  }
+
   return (
     <div className={`page-fade-in min-h-screen page-width px-4 ${visibleActiveTab === 'versions' ? 'pt-0' : 'pt-6'} ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}`}>
       {visibleActiveTab === 'prompt' ? (
@@ -294,25 +324,38 @@ export default function Generate() {
                 {!headerLabel && (
                   <span aria-hidden="true" className="h-px flex-1 bg-paper-3/70" />
                 )}
-                {lockedMode ? (
+                <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
-                    className={headerTextActionClass}
-                    onClick={handleEditActivePrompt}
-                    disabled={streaming || activeClusterId == null}
+                    aria-label={promptCopied ? t.copied : t.copy}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-ink-3 transition-opacity active:text-ink active:opacity-70 disabled:pointer-events-none disabled:opacity-40"
+                    onClick={handleCopyPrompt}
+                    disabled={!prompt}
                   >
-                    {t.edit}
+                    {promptCopied
+                      ? <Check aria-hidden="true" className="h-4 w-4" />
+                      : <Copy aria-hidden="true" className="h-4 w-4" />}
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={headerTextActionClass}
-                    onClick={handleCancelVersionDraft}
-                    disabled={streaming}
-                  >
-                    {t.cancel}
-                  </button>
-                )}
+                  {lockedMode ? (
+                    <button
+                      type="button"
+                      className={headerTextActionClass}
+                      onClick={handleEditActivePrompt}
+                      disabled={streaming || activeClusterId == null}
+                    >
+                      {t.edit}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={headerTextActionClass}
+                      onClick={handleCancelVersionDraft}
+                      disabled={streaming}
+                    >
+                      {t.cancel}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -359,7 +402,9 @@ export default function Generate() {
               phase={phase}
               streaming={streaming}
               displayComplete={outputDisplayComplete}
+              provider={viewingPendingPiece ? provider : ''}
               pieceMetaLabel={displayedPieceMetaLabel}
+              pieceModelLabel={displayedPieceModelLabel}
               pieceFooterStatsLabel={displayedPieceFooterStatsLabel}
               pieceNumber={displayedPieceNumber}
               readingFont={readingFont}
