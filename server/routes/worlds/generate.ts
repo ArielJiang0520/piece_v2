@@ -3,6 +3,7 @@ import { streamSSE } from 'hono/streaming'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { normalizePromptInput } from '../../prompt-text'
+import { BLACKLISTED_PROVIDERS } from '../../../src/preferences/generationModel'
 import { readServerSentEvents } from '../../../src/utils/sse'
 import {
   buildModelUsageFromGenerationMetadata,
@@ -101,6 +102,9 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
       }
       if (modelOption.preferredProviders.length > 0) {
         provider.only = modelOption.preferredProviders
+      }
+      if (BLACKLISTED_PROVIDERS.length > 0) {
+        provider.ignore = BLACKLISTED_PROVIDERS
       }
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {

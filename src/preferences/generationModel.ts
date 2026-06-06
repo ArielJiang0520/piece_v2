@@ -52,6 +52,8 @@ export const MODELS: ModelOption[] = [
 
 export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
+export const BLACKLISTED_PROVIDERS: string[] = ['alibaba', 'together']
+
 function isModelId(value: unknown): value is string {
   return typeof value === 'string' && MODELS.some(model => model.id === value)
 }
