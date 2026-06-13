@@ -25,6 +25,7 @@ interface OutputPanelProps {
   pieceNumber: number | null
   readingFont: ReadingFont
   readingFontSize: ReadingFontSize
+  onScrollToTop?: () => void
 }
 
 export default function OutputPanel({
@@ -39,6 +40,7 @@ export default function OutputPanel({
   pieceNumber,
   readingFont,
   readingFontSize,
+  onScrollToTop,
 }: OutputPanelProps) {
   const language = useLanguageId()
   const t = useUiText()
@@ -81,6 +83,10 @@ export default function OutputPanel({
   const waitingForProvider = phase === 'waiting_provider' && streaming && !output
 
   function scrollToTop() {
+    if (onScrollToTop) {
+      onScrollToTop()
+      return
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 

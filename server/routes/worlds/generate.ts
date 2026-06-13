@@ -99,6 +99,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
       const provider: Record<string, unknown> = {
         sort: 'latency',
         require_parameters: true,
+        preferred_min_throughput: 30
       }
       if (modelOption.preferredProviders.length > 0) {
         provider.only = modelOption.preferredProviders

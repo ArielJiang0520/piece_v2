@@ -9,13 +9,10 @@ import { setGenerationModel, useGenerationModel } from '@/preferences/generation
 import { useLanguageId } from '@/preferences/language'
 import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
-import {
-  setReadingSpeedUnitsPerSecond,
-  useReadingSpeedUnitsPerSecond,
-} from '@/preferences/readingSpeed'
 import PromptCard from './components/PromptCard'
 import PieceStrip from './components/PieceStrip'
 import OutputPanel from './components/OutputPanel'
+import GenerateOverlay from './components/GenerateOverlay'
 import GenerateControls from './components/GenerateControls'
 import GenerateVersionsPanel from './components/VersionsPanel'
 // import ReadingSettingsButton from './components/ReadingSettingsButton'
@@ -78,8 +75,8 @@ export default function Generate() {
   const [activeTab, setActiveTab] = useState<GenerateTab>('prompt')
   const [showVersionDiff, setShowVersionDiff] = useState(false)
   const [prompt, setPrompt] = useState(draftPrompt)
+  const [overlayOpen, setOverlayOpen] = useState(false)
   const normalizedPrompt = prompt.trim()
-  const readingSpeed = useReadingSpeedUnitsPerSecond()
   const readingFont = useReadingFont()
   const readingFontSize = useReadingFontSize()
   const model = useGenerationModel()
@@ -129,6 +126,7 @@ export default function Generate() {
     displayedPieceFooterStatsLabel,
     prepareGeneration,
     cancelPendingGeneration,
+    commitPendingPiece,
   } = useGeneratePieceSession({
     worldId: id,
     queryPromptId,
@@ -244,6 +242,7 @@ export default function Generate() {
 
   function handleGenerate() {
     if (generateDisabled) return
+    setOverlayOpen(true)
     prepareGeneration(activePromptPieceCount)
     generate({
       prompt,
@@ -253,7 +252,10 @@ export default function Generate() {
     })
   }
 
-  function handleStop() {
+  function handleOverlayExit(committed: boolean) {
+    setOverlayOpen(false)
+    if (committed) return
+    // Exited before finishing the reveal: abort the backend stream and discard.
     stop()
     cancelPendingGeneration()
   }
@@ -375,11 +377,8 @@ export default function Generate() {
             disabled={generateDisabled}
             hasExistingPieces={activePromptPieceCount > 0}
             model={model}
-            readingSpeed={readingSpeed}
             onModelChange={setGenerationModel}
-            onReadingSpeedChange={setReadingSpeedUnitsPerSecond}
             onGenerate={handleGenerate}
-            onStop={handleStop}
             stickyTopOffset={showGenerateTabs ? 92 : 48}
           />
 
@@ -424,6 +423,24 @@ export default function Generate() {
             onViewPrompt={showPromptTab}
           />
         </section>
+      )}
+
+      {overlayOpen && (
+        <GenerateOverlay
+          output={output}
+          phase={phase}
+          displayComplete={displayComplete}
+          provider={provider}
+          error={generationError}
+          pieceMetaLabel={displayedPieceMetaLabel}
+          pieceModelLabel={displayedPieceModelLabel}
+          pieceFooterStatsLabel={displayedPieceFooterStatsLabel}
+          pieceNumber={displayedPieceNumber}
+          readingFont={readingFont}
+          readingFontSize={readingFontSize}
+          onRevealComplete={commitPendingPiece}
+          onExit={handleOverlayExit}
+        />
       )}
     </div>
   )

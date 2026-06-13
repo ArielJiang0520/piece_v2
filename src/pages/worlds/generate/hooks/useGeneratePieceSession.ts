@@ -250,10 +250,10 @@ export function useGeneratePieceSession({
     setSelectedPieceId(latestPieceId)
   }, [latestPieceId, lockedMode, selectedPieceId, viewingPendingPiece])
 
-  useEffect(() => {
-    if (!displayComplete || completion !== 'completed' || !output || generationError || saveState !== 'idle') return
+  const commitPendingPiece = useCallback(() => {
+    if (!output || generationError || saveState !== 'idle') return
     void handleSave()
-  }, [completion, displayComplete, generationError, handleSave, output, saveState])
+  }, [generationError, handleSave, output, saveState])
 
   const prepareGeneration = useCallback((pendingBasePieceCount: number) => {
     setSelectedPieceId(null)
@@ -305,6 +305,7 @@ export function useGeneratePieceSession({
     displayedPieceFooterStatsLabel,
     prepareGeneration,
     cancelPendingGeneration,
+    commitPendingPiece,
   }
 }
 

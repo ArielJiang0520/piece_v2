@@ -1,12 +1,6 @@
-import { Rabbit, Turtle } from 'lucide-react'
 import { useUiText } from '@/i18n'
 import { READING_FONT_OPTIONS, type ReadingFont } from '@/preferences/readingFont'
 import { READING_FONT_SIZE_OPTIONS, type ReadingFontSize } from '@/preferences/readingFontSize'
-import {
-  MAX_READING_SPEED_UNITS_PER_SECOND,
-  MIN_READING_SPEED_UNITS_PER_SECOND,
-  READING_SPEED_STEP,
-} from '@/preferences/readingSpeed'
 
 interface SettingsPanelProps {
   open: boolean
@@ -14,13 +8,6 @@ interface SettingsPanelProps {
   onReadingFontChange: (readingFont: ReadingFont) => void
   readingFontSize: ReadingFontSize
   onReadingFontSizeChange: (readingFontSize: ReadingFontSize) => void
-}
-
-interface ReadingSpeedSliderProps {
-  id?: string
-  disabled?: boolean
-  readingSpeed: number
-  onReadingSpeedChange: (readingSpeed: number) => void
 }
 
 export default function SettingsPanel({
@@ -95,39 +82,6 @@ export default function SettingsPanel({
             )
           })}
         </div>
-      </div>
-    </div>
-  )
-}
-
-export function ReadingSpeedSlider({
-  id = 'reading-speed',
-  disabled = false,
-  readingSpeed,
-  onReadingSpeedChange,
-}: ReadingSpeedSliderProps) {
-  const t = useUiText()
-
-  return (
-    <div>
-      <label htmlFor={id} className="t-eyebrow mb-1.5 inline-flex">
-        {t.textSpeed}
-      </label>
-      <div className="flex h-10 items-center gap-3 rounded-md border border-rose-line bg-paper/50 px-3">
-        <Turtle aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
-        <input
-          id={id}
-          className="min-w-0 flex-1 accent-rose disabled:opacity-50"
-          type="range"
-          min={MIN_READING_SPEED_UNITS_PER_SECOND}
-          max={MAX_READING_SPEED_UNITS_PER_SECOND}
-          step={READING_SPEED_STEP}
-          value={readingSpeed}
-          onChange={event => onReadingSpeedChange(Number(event.target.value))}
-          disabled={disabled}
-          aria-label={t.readingSpeed}
-        />
-        <Rabbit aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
       </div>
     </div>
   )
