@@ -11,7 +11,7 @@ import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
 import PromptCard from './components/PromptCard'
 import PieceStrip from './components/PieceStrip'
-import OutputPanel from './components/OutputPanel'
+import PieceView from './components/PieceView'
 import GenerateOverlay from './components/GenerateOverlay'
 import GenerateControls from './components/GenerateControls'
 import GenerateVersionsPanel from './components/VersionsPanel'
@@ -92,6 +92,7 @@ export default function Generate() {
     displayComplete,
     streaming,
     generate,
+    expand,
     stop,
     reset,
   } = useGeneration({ worldId: id })
@@ -264,6 +265,17 @@ export default function Generate() {
     cancelPendingGeneration()
   }
 
+  function handleOverlayExpand(priorText: string) {
+    // Replaces the in-flight stream with one anchored on the selected paragraph.
+    expand({
+      prompt,
+      model,
+      temperature: GENERATION_TEMPERATURE,
+      useThinking: USE_THINKING,
+      priorText,
+    })
+  }
+
   function handleEditFromPrompt(sourcePrompt: ClusterPrompt) {
     if (!id || activeClusterId == null || streaming) return
     showPromptTab()
@@ -400,12 +412,9 @@ export default function Generate() {
               />
             )}
 
-            <OutputPanel
-              output={displayedOutput}
-              phase={phase}
-              streaming={streaming}
-              displayComplete={outputDisplayComplete}
-              provider={viewingPendingPiece ? provider : ''}
+            <PieceView
+              body={displayedOutput}
+              complete={outputDisplayComplete}
               pieceMetaLabel={displayedPieceMetaLabel}
               pieceModelLabel={displayedPieceModelLabel}
               pieceFooterStatsLabel={displayedPieceFooterStatsLabel}
@@ -436,14 +445,11 @@ export default function Generate() {
           displayComplete={displayComplete}
           provider={provider}
           error={generationError}
-          pieceMetaLabel={displayedPieceMetaLabel}
-          pieceModelLabel={displayedPieceModelLabel}
-          pieceFooterStatsLabel={displayedPieceFooterStatsLabel}
-          pieceNumber={displayedPieceNumber}
           readingFont={readingFont}
           readingFontSize={readingFontSize}
           onSave={handleOverlaySave}
           onExit={handleOverlayExit}
+          onExpand={handleOverlayExpand}
         />
       )}
     </div>

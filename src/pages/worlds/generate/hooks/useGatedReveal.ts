@@ -9,6 +9,10 @@ interface UseGatedRevealOptions {
   backendComplete: boolean
   active: boolean
   unitsPerSecond?: number
+  // Bump to jump the reveal to `baselineRevealed` chars (e.g. an expansion seeds
+  // the buffer with an already-read prefix that should appear instantly).
+  revealEpoch?: number
+  baselineRevealed?: number
 }
 
 /**
@@ -22,6 +26,8 @@ export function useGatedReveal({
   backendComplete,
   active,
   unitsPerSecond = DEFAULT_REVEAL_UNITS_PER_SECOND,
+  revealEpoch = 0,
+  baselineRevealed = 0,
 }: UseGatedRevealOptions) {
   const [revealedChars, setRevealedChars] = useState(0)
   const bufferRef = useRef(buffer)
@@ -29,9 +35,15 @@ export function useGatedReveal({
   const speedRef = useRef(unitsPerSecond)
   speedRef.current = unitsPerSecond
 
-  // Restart the reveal whenever a new generation begins (buffer resets/shrinks).
+  // An expansion bumps the epoch: treat the seeded prefix as already revealed so
+  // only the new continuation paces in. Otherwise restart the reveal whenever a
+  // new generation begins (buffer resets/shrinks).
   const previousBufferRef = useRef(buffer)
-  if (!buffer.startsWith(previousBufferRef.current)) {
+  const previousEpochRef = useRef(revealEpoch)
+  if (revealEpoch !== previousEpochRef.current) {
+    previousEpochRef.current = revealEpoch
+    setRevealedChars(baselineRevealed)
+  } else if (!buffer.startsWith(previousBufferRef.current)) {
     setRevealedChars(0)
   }
   previousBufferRef.current = buffer

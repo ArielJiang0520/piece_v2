@@ -37,6 +37,12 @@ function buildSystemPrompt(worldBody: string): string {
   return sections.join('\n\n')
 }
 
+const EXPANSION_INSTRUCTION = [
+  'Continue the story directly from where the text above leaves off. Do NOT repeat or rewrite any of the text already written.',
+  'Take the most recent moment — the final paragraph above — and expand it: slow down the pacing and elaborate that same event with much richer sensory, physical, dialogue detail before the story moves on.',
+  'Pick up seamlessly from the last sentence so the new text reads as a natural continuation. Match the existing language, voice, tense, and tone exactly.',
+].join('\n')
+
 async function readOpenRouterError(response: Response): Promise<string> {
   const fallback = `OpenRouter ${response.status} ${response.statusText}`
   const rawBody = await response.text().catch(() => '')
@@ -62,10 +68,12 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
   const systemPrompt = buildSystemPrompt(world.body)
 
-  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, generationId } = await c.req.json()
+  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, generationId, mode, priorText } = await c.req.json()
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
+  const expandPriorText = mode === 'expand' && typeof priorText === 'string' ? priorText.trim() : ''
+  const isExpansion = expandPriorText.length > 0
   const generationToken = typeof generationId === 'string' ? generationId.trim() : ''
   if (!generationToken) return c.json({ error: 'Generation id required' }, 400)
 
@@ -121,10 +129,17 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
           stream: true,
           provider,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: promptText },
-          ],
+          messages: isExpansion
+            ? [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: promptText },
+              { role: 'assistant', content: expandPriorText },
+              { role: 'user', content: EXPANSION_INSTRUCTION },
+            ]
+            : [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: promptText },
+            ],
         }),
       })
 

@@ -22,6 +22,7 @@ interface State {
 
 type Action =
   | { type: 'start' }
+  | { type: 'start-expand'; seed: string }
   | { type: 'phase'; phase: GenerationPhase }
   | { type: 'provider'; name: string }
   | { type: 'chunk'; content: string }
@@ -36,6 +37,9 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'start':
       return { ...state, phase: 'waiting_provider', output: '', error: '', completion: 'none', provider: '' }
+    case 'start-expand':
+      // Seed the buffer with the kept prefix; streamed chunks append below it.
+      return { ...state, phase: 'waiting_provider', output: action.seed, error: '', completion: 'none', provider: '' }
     case 'phase':
       // 'thinking' must not downgrade an already-writing stream
       if (action.phase === 'thinking' && state.phase === 'writing') return state
@@ -77,15 +81,20 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
 
   const streaming = state.phase !== 'idle'
 
-  async function generate(input: GenerateInput) {
-    if (!worldId || streaming) return
+  async function runGeneration(input: GenerateInput, priorText: string) {
+    if (!worldId) return
+    const isExpansion = priorText.length > 0
+    // An expansion replaces whatever is currently streaming, so abort it first.
+    // Each run keys off its own AbortController/generationId, so a replaced run
+    // suppresses its own error/done in catch/finally below.
+    activeRequestControllerRef.current?.abort()
     const generationId = createRandomId()
     const requestController = new AbortController()
     activeGenerationIdRef.current = generationId
     activeRequestControllerRef.current = requestController
     setLastGenerationId(generationId)
     stopRequestedRef.current = false
-    dispatch({ type: 'start' })
+    dispatch(isExpansion ? { type: 'start-expand', seed: priorText } : { type: 'start' })
 
     let streamSettled = false
     let receivedContent = false
@@ -95,7 +104,11 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
         credentials: 'include',
         signal: requestController.signal,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, generationId }),
+        body: JSON.stringify({
+          ...input,
+          generationId,
+          ...(isExpansion ? { mode: 'expand', priorText } : {}),
+        }),
       })
 
       if (!res.ok || !res.body) {
@@ -134,7 +147,8 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
         } catch { }
       }
     } catch (e) {
-      if (!stopRequestedRef.current) {
+      // A run aborted by stop() or by a replacing expansion must stay silent.
+      if (!requestController.signal.aborted && !stopRequestedRef.current) {
         streamSettled = true
         dispatch({ type: 'error', message: e instanceof Error ? e.message : 'Unknown error' })
       }
@@ -152,6 +166,17 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
         }
       }
     }
+  }
+
+  function generate(input: GenerateInput) {
+    if (streaming) return
+    void runGeneration(input, '')
+  }
+
+  function expand(input: GenerateInput & { priorText: string }) {
+    const { priorText, ...rest } = input
+    if (!priorText) return
+    void runGeneration(rest, priorText)
   }
 
   function stop() {
@@ -192,6 +217,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     displayComplete: state.phase === 'idle' && state.completion === 'completed',
     streaming,
     generate,
+    expand,
     stop,
     reset,
   }

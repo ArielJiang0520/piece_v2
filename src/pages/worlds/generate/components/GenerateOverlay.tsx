@@ -11,8 +11,9 @@ import {
   setReadingSpeed,
   useReadingSpeed,
 } from '@/preferences/readingSpeed'
-import OutputPanel from './OutputPanel'
+import GenerateOutput from './GenerateOutput'
 import { useGatedReveal } from '../hooks/useGatedReveal'
+import { buildExpandPrefix } from '../paragraphs'
 
 interface GenerateOverlayProps {
   output: string
@@ -20,14 +21,11 @@ interface GenerateOverlayProps {
   displayComplete: boolean
   provider: string
   error: string
-  pieceMetaLabel: string | null
-  pieceModelLabel: string | null
-  pieceFooterStatsLabel: string | null
-  pieceNumber: number | null
   readingFont: ReadingFont
   readingFontSize: ReadingFontSize
   onSave: (text: string) => void
   onExit: () => void
+  onExpand: (priorText: string) => void
 }
 
 export default function GenerateOverlay({
@@ -36,20 +34,21 @@ export default function GenerateOverlay({
   displayComplete,
   provider,
   error,
-  pieceMetaLabel,
-  pieceModelLabel,
-  pieceFooterStatsLabel,
-  pieceNumber,
   readingFont,
   readingFontSize,
   onSave,
   onExit,
+  onExpand,
 }: GenerateOverlayProps) {
   const t = useUiText()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [paused, setPaused] = useState(false)
   // When the reveal catches up to the end, freeze the text so it stays put.
   const [frozenText, setFrozenText] = useState<string | null>(null)
+  const [selectedParagraphIndex, setSelectedParagraphIndex] = useState<number | null>(null)
+  // Bumped on each expansion so the reveal jumps past the kept prefix instantly.
+  const [revealEpoch, setRevealEpoch] = useState(0)
+  const [baselineRevealed, setBaselineRevealed] = useState(0)
   const readingSpeed = useReadingSpeed()
   const speedOption = READING_SPEED_BY_ID[readingSpeed]
 
@@ -64,6 +63,8 @@ export default function GenerateOverlay({
     backendComplete: displayComplete,
     active: !paused && !error && frozenText === null,
     unitsPerSecond: speedOption.unitsPerSecond,
+    revealEpoch,
+    baselineRevealed,
   })
   const revealedTextRef = useRef('')
   revealedTextRef.current = revealedText
@@ -80,6 +81,22 @@ export default function GenerateOverlay({
   const canPause = !finished && !error
   // Save is allowed once the reader has stopped the flow (paused) or it ended.
   const canSave = (paused || finished) && !error && displayText.length > 0
+  // Paragraphs can be selected (to expand) only while the text is stationary.
+  const canSelect = (paused || finished) && !error && displayText.length > 0
+
+  useEffect(() => {
+    if (!canSelect) setSelectedParagraphIndex(null)
+  }, [canSelect])
+
+  const handleExpand = (paragraphIndex: number) => {
+    const priorText = buildExpandPrefix(displayText, paragraphIndex)
+    setBaselineRevealed(priorText.length)
+    setRevealEpoch(epoch => epoch + 1)
+    setFrozenText(null)
+    setPaused(false)
+    setSelectedParagraphIndex(null)
+    onExpand(priorText)
+  }
 
   // Keep the newest line in view while actively revealing. Stop following once
   // paused (so the reader can scroll back freely) or once finished.
@@ -104,19 +121,27 @@ export default function GenerateOverlay({
             {error}
           </p>
         ) : (
-          <OutputPanel
+          <GenerateOutput
             output={displayText}
             phase={phase}
             streaming={!finished}
-            displayComplete={finished}
             provider={provider}
-            pieceMetaLabel={pieceMetaLabel}
-            pieceModelLabel={pieceModelLabel}
-            pieceFooterStatsLabel={pieceFooterStatsLabel}
-            pieceNumber={pieceNumber}
             readingFont={readingFont}
             readingFontSize={readingFontSize}
-            onScrollToTop={() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+            selectable={canSelect}
+            selectedParagraphIndex={selectedParagraphIndex}
+            onSelectParagraph={setSelectedParagraphIndex}
+            renderParagraphAction={index => (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => handleExpand(index)}
+                  className="inline-flex h-8 items-center justify-center rounded-full bg-rose px-3.5 font-serif-zh text-[13px] italic leading-none text-white transition-opacity active:opacity-80"
+                >
+                  {t.expand}
+                </button>
+              </div>
+            )}
           />
         )}
       </div>
