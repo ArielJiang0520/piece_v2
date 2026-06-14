@@ -27,7 +27,6 @@ interface UseGeneratePieceSessionOptions {
   model: string
   provider: string
   generationId: string | null
-  streaming: boolean
   displayComplete: boolean
   completion: GenerationCompletion
   generationError: string
@@ -48,7 +47,6 @@ export function useGeneratePieceSession({
   model,
   provider,
   generationId,
-  streaming,
   displayComplete,
   completion,
   generationError,
@@ -109,10 +107,11 @@ export function useGeneratePieceSession({
       ? `${displayedOutputCountLabel}已生成`
       : `${displayedOutputCountLabel} generated`
 
-  const canSave = viewingPendingPiece && !streaming && !!output && saveState !== 'saving' && saveState !== 'saved'
-
-  const handleSave = useCallback(async () => {
-    if (!worldId || !canSave) return
+  const handleSave = useCallback(async (bodyOverride?: string) => {
+    // Save exactly the text the reader sees. When they save mid-stream (paused),
+    // the overlay hands us the revealed text; otherwise fall back to the buffer.
+    const body = bodyOverride ?? output
+    if (!worldId || !viewingPendingPiece || !body || saveState === 'saving' || saveState === 'saved') return
     setSaveState('saving')
     try {
       const result = await apiFetch(`/api/worlds/${worldId}/pieces`, {
@@ -121,7 +120,7 @@ export function useGeneratePieceSession({
           prompt,
           promptId: lockedMode && queryPromptId ? Number(queryPromptId) : undefined,
           versionSourcePromptId,
-          body: output,
+          body,
           model,
           provider: provider || undefined,
           generationId,
@@ -137,7 +136,7 @@ export function useGeneratePieceSession({
       setPendingPieceNumber(null)
       queryClient.setQueryData(['piece', result.pieceId], {
         id: result.pieceId,
-        body: output,
+        body,
         model,
         provider: provider || null,
         created_at: Date.now(),
@@ -176,7 +175,8 @@ export function useGeneratePieceSession({
       })
     }
   }, [
-    canSave,
+    viewingPendingPiece,
+    saveState,
     lockedMode,
     generationId,
     model,
@@ -250,10 +250,10 @@ export function useGeneratePieceSession({
     setSelectedPieceId(latestPieceId)
   }, [latestPieceId, lockedMode, selectedPieceId, viewingPendingPiece])
 
-  const commitPendingPiece = useCallback(() => {
-    if (!output || generationError || saveState !== 'idle') return
-    void handleSave()
-  }, [generationError, handleSave, output, saveState])
+  const commitPendingPiece = useCallback((bodyOverride?: string) => {
+    if (generationError || saveState !== 'idle') return
+    void handleSave(bodyOverride)
+  }, [generationError, handleSave, saveState])
 
   const prepareGeneration = useCallback((pendingBasePieceCount: number) => {
     setSelectedPieceId(null)

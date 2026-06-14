@@ -137,7 +137,6 @@ export default function Generate() {
     model,
     provider,
     generationId,
-    streaming,
     displayComplete,
     completion,
     generationError,
@@ -252,10 +251,15 @@ export default function Generate() {
     })
   }
 
-  function handleOverlayExit(committed: boolean) {
+  function handleOverlaySave(text: string) {
     setOverlayOpen(false)
-    if (committed) return
-    // Exited before finishing the reveal: abort the backend stream and discard.
+    // Persist exactly what the reader saw, then abort any still-running stream.
+    commitPendingPiece(text)
+    stop()
+  }
+
+  function handleOverlayExit() {
+    setOverlayOpen(false)
     stop()
     cancelPendingGeneration()
   }
@@ -438,7 +442,7 @@ export default function Generate() {
           pieceNumber={displayedPieceNumber}
           readingFont={readingFont}
           readingFontSize={readingFontSize}
-          onRevealComplete={commitPendingPiece}
+          onSave={handleOverlaySave}
           onExit={handleOverlayExit}
         />
       )}

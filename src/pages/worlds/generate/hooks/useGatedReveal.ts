@@ -1,26 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
 import { sliceByUnits } from '@/utils/textUnits'
 
-// Fixed, intentionally non-user-configurable reveal speed (non-whitespace
-// characters per second) while a finger is held on the screen.
-const REVEAL_UNITS_PER_SECOND = 20
+// Default reveal speed (non-whitespace text units per second).
+const DEFAULT_REVEAL_UNITS_PER_SECOND = 20
 
 interface UseGatedRevealOptions {
   buffer: string
   backendComplete: boolean
   active: boolean
+  unitsPerSecond?: number
 }
 
 /**
- * Walks through `buffer` at a fixed speed, but only while `active` is true
- * (finger down). Releasing freezes the reveal instantly. The reveal is
- * considered complete once the backend has finished and every buffered
- * character has been revealed.
+ * Walks through `buffer` at `unitsPerSecond`, but only while `active` is true.
+ * Pausing freezes the reveal instantly. The reveal is considered complete once
+ * the backend has finished and every buffered character has been revealed.
+ * Speed changes apply live without restarting the reveal.
  */
-export function useGatedReveal({ buffer, backendComplete, active }: UseGatedRevealOptions) {
+export function useGatedReveal({
+  buffer,
+  backendComplete,
+  active,
+  unitsPerSecond = DEFAULT_REVEAL_UNITS_PER_SECOND,
+}: UseGatedRevealOptions) {
   const [revealedChars, setRevealedChars] = useState(0)
   const bufferRef = useRef(buffer)
   bufferRef.current = buffer
+  const speedRef = useRef(unitsPerSecond)
+  speedRef.current = unitsPerSecond
 
   // Restart the reveal whenever a new generation begins (buffer resets/shrinks).
   const previousBufferRef = useRef(buffer)
@@ -39,7 +46,7 @@ export function useGatedReveal({ buffer, backendComplete, active }: UseGatedReve
     function step(now: number) {
       const elapsed = Math.max(0, now - lastTime)
       lastTime = now
-      unitCredit += (REVEAL_UNITS_PER_SECOND * elapsed) / 1000
+      unitCredit += (speedRef.current * elapsed) / 1000
 
       const wholeUnits = Math.floor(unitCredit)
       if (wholeUnits > 0) {
