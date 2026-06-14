@@ -3,7 +3,7 @@ import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import type { GenerationPhase } from '@/hooks/useGeneration'
 import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
-import ProseBody, { proseTextClass, proseTextStyle } from './ProseBody'
+import ProseBody, { proseTextClass, proseTextStyle } from '../../shared/ProseBody'
 import { splitParagraphs } from '../paragraphs'
 
 interface GenerateOutputProps {
@@ -38,10 +38,11 @@ export default function GenerateOutput({
 }: GenerateOutputProps) {
   const paragraphs = useMemo(() => (selectable ? splitParagraphs(output) : []), [output, selectable])
 
-  const wrapperClass = [
-    'relative min-h-[55vh] px-2 pt-2 text-sm transition-[padding-bottom] duration-200 ease-out',
-    streaming ? 'pb-[45vh]' : 'pb-2',
-  ].join(' ')
+  // Keep the trailing room constant whether streaming or finished. While streaming the
+  // view is pinned to scrollHeight, so collapsing this pad when generation stops would
+  // shrink scrollHeight and yank the text down to the bottom edge (an abrupt scroll +
+  // jitter). A steady pad leaves room underneath the last line and never jumps.
+  const wrapperClass = 'relative min-h-[55vh] px-2 pt-2 pb-[45vh] text-sm'
 
   if (phase === 'waiting_provider' && streaming && !output) {
     return (

@@ -1,15 +1,11 @@
 import { formatPieceTitle } from '@/config'
 import { useLanguageId } from '@/preferences/language'
-import type { PieceStripPiece } from '../types'
+import type { PieceStripPiece } from '../../shared/types'
 
 interface PieceStripProps {
   pieces: PieceStripPiece[]
   promptPieceCount: number
   selectedPieceId: number | null
-  pendingPieceNumber: number | null
-  pendingSelected: boolean
-  disabled: boolean
-  onSelectPending: () => void
   onSelectPiece: (pieceId: number) => void
 }
 
@@ -17,15 +13,10 @@ export default function PieceStrip({
   pieces,
   promptPieceCount,
   selectedPieceId,
-  pendingPieceNumber,
-  pendingSelected,
-  disabled,
-  onSelectPending,
   onSelectPiece,
 }: PieceStripProps) {
   const language = useLanguageId()
-  const showPendingPiece = pendingPieceNumber !== null
-  const showOverflowHint = pieces.length + (showPendingPiece ? 1 : 0) > 2
+  const showOverflowHint = pieces.length > 2
 
   return (
     <div className="relative py-3">
@@ -36,24 +27,9 @@ export default function PieceStrip({
         />
       )}
       <div className={`flex gap-2 overflow-x-auto pb-1 ${showOverflowHint ? 'pr-8 sm:pr-0' : ''}`}>
-        {showPendingPiece && (
-          <button
-            type="button"
-            className={pieceButtonClass(pendingSelected)}
-            onClick={onSelectPending}
-            disabled={disabled}
-            aria-pressed={pendingSelected}
-          >
-            <span className={pendingSelected ? 'whitespace-nowrap font-serif-zh text-sm italic text-rose-deep' : 'whitespace-nowrap font-serif-zh text-sm italic text-ink-3'}>
-              {formatPieceTitle(pendingPieceNumber, language)}
-            </span>
-            {pendingSelected && <SelectedHairline />}
-          </button>
-        )}
-
         {pieces.map((piece, index) => {
           const pieceNumber = Math.max(1, promptPieceCount - index)
-          const selected = selectedPieceId === piece.id && !pendingSelected
+          const selected = selectedPieceId === piece.id
 
           return (
             <button
@@ -61,7 +37,6 @@ export default function PieceStrip({
               type="button"
               className={pieceButtonClass(selected)}
               onClick={() => onSelectPiece(piece.id)}
-              disabled={disabled}
               aria-pressed={selected}
             >
               <span className={selected ? 'whitespace-nowrap font-serif-zh text-sm italic text-rose-deep' : 'whitespace-nowrap font-serif-zh text-sm italic text-ink-3'}>

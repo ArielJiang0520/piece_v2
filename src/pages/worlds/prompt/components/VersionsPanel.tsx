@@ -11,7 +11,7 @@ import { useUiText, type UiText } from '@/i18n'
 import { useLanguageId, type LanguageId } from '@/preferences/language'
 import { diffPromptInlineEdits, type PromptEditMark } from '@/utils/promptDiff'
 import { relativeTime } from '@/utils/time'
-import type { ClusterPrompt } from '../types'
+import type { ClusterPrompt } from '../../shared/types'
 
 interface GenerateVersionsPanelProps {
   worldId: string | undefined
@@ -153,7 +153,7 @@ export default function GenerateVersionsPanel({
       }
       if (deletedPromptId && String(deletedPromptId) === currentPromptId) {
         if (result.nextPromptId) {
-          navigate(`/worlds/${worldId}/generate?promptId=${result.nextPromptId}`, { replace: true })
+          navigate(`/worlds/${worldId}/prompt/${result.nextPromptId}`, { replace: true })
           return
         }
         navigate(worldId ? `/worlds/${worldId}` : '/worlds', { replace: true })
@@ -167,7 +167,7 @@ export default function GenerateVersionsPanel({
   function viewPromptVersion(promptId: number, isCurrent: boolean) {
     if (!worldId || isCurrent) return
     onViewPrompt()
-    navigate(`/worlds/${worldId}/generate?promptId=${promptId}`)
+    navigate(`/worlds/${worldId}/prompt/${promptId}`)
   }
 
   function requestDeletePrompt(entry: PromptVersionEntry) {

@@ -314,7 +314,7 @@ export default function WorldPrompts() {
         )}
 
         <Link
-          to={`/worlds/${id}/generate`}
+          to={`/worlds/${id}/prompt/new`}
           className="fixed bottom-[calc(1.75rem+env(safe-area-inset-bottom))] right-5 z-40 inline-flex h-11 w-auto items-center justify-center gap-1.5 rounded-full bg-rose pl-2 pr-4 font-serif-zh text-[14px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 sm:right-7"
           aria-label={t.newEntity(entityLabel('prompt', { capitalize: true }, language))}
         >
@@ -351,8 +351,8 @@ export default function WorldPrompts() {
                     <Link
                       to={
                         group.latest_prompt_id
-                          ? `/worlds/${id}/generate?promptId=${group.latest_prompt_id}`
-                          : `/worlds/${id}/generate`
+                          ? `/worlds/${id}/prompt/${group.latest_prompt_id}`
+                          : `/worlds/${id}/prompt/new`
                       }
                       state={{ fromWorldList: true }}
                       onClick={event => saveClusterReturnState(group.id, event)}

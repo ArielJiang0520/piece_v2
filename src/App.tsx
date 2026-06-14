@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from './auth'
 import TopNav from './components/TopNav'
 import TopNavProvider from './components/TopNavProvider'
@@ -9,37 +9,59 @@ import WorldList from './pages/worlds/list/WorldList'
 import WorldPrompts from './pages/worlds/prompts/WorldPrompts'
 import WorldAbout from './pages/worlds/about/WorldAbout'
 import WorldEditor from './pages/worlds/editor/WorldEditor'
-import Generate from './pages/worlds/generate/Generate'
+import PromptPage from './pages/worlds/prompt/PromptPage'
+import GenerateScreen from './pages/worlds/generate/GenerateScreen'
 import AdminDashboard from './pages/admin/AdminDashboard'
 
-function ProtectedLayout({ children }: { children: React.ReactNode }) {
+function RootLayout() {
+  return (
+    <ToastProvider>
+      <TopNavProvider>
+        <RouteScrollManager />
+        <Outlet />
+      </TopNavProvider>
+    </ToastProvider>
+  )
+}
+
+function ProtectedLayout() {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
   return (
     <>
       <TopNav />
-      {children}
+      <Outlet />
     </>
   )
 }
 
+// Data router (createBrowserRouter) so the reading view can use useBlocker to guard
+// against losing unsaved work on a browser back/swipe.
+const router = createBrowserRouter([
+  {
+    element: <RootLayout />,
+    children: [
+      { path: '/login', element: <Login /> },
+      {
+        element: <ProtectedLayout />,
+        children: [
+          { path: '/', element: <Navigate to="/worlds" replace /> },
+          { path: '/worlds', element: <WorldList /> },
+          { path: '/worlds/new', element: <WorldEditor /> },
+          { path: '/worlds/:id', element: <WorldPrompts /> },
+          { path: '/worlds/:id/about', element: <WorldAbout /> },
+          { path: '/worlds/:id/edit', element: <WorldEditor /> },
+          { path: '/worlds/:id/prompt/new', element: <PromptPage /> },
+          { path: '/worlds/:id/prompt/new/generate', element: <GenerateScreen /> },
+          { path: '/worlds/:id/prompt/:promptId', element: <PromptPage /> },
+          { path: '/worlds/:id/prompt/:promptId/generate', element: <GenerateScreen /> },
+          { path: '/admin', element: <AdminDashboard /> },
+        ],
+      },
+    ],
+  },
+])
+
 export default function App() {
-  return (
-    <ToastProvider>
-      <TopNavProvider>
-        <RouteScrollManager />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<Navigate to="/worlds" replace />} />
-          <Route path="/worlds" element={<ProtectedLayout><WorldList /></ProtectedLayout>} />
-          <Route path="/worlds/new" element={<ProtectedLayout><WorldEditor /></ProtectedLayout>} />
-          <Route path="/worlds/:id" element={<ProtectedLayout><WorldPrompts /></ProtectedLayout>} />
-          <Route path="/worlds/:id/about" element={<ProtectedLayout><WorldAbout /></ProtectedLayout>} />
-          <Route path="/worlds/:id/edit" element={<ProtectedLayout><WorldEditor /></ProtectedLayout>} />
-          <Route path="/worlds/:id/generate" element={<ProtectedLayout><Generate /></ProtectedLayout>} />
-          <Route path="/admin" element={<ProtectedLayout><AdminDashboard /></ProtectedLayout>} />
-        </Routes>
-      </TopNavProvider>
-    </ToastProvider>
-  )
+  return <RouterProvider router={router} />
 }

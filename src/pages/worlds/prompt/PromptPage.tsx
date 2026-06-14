@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, Copy } from 'lucide-react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useGeneration } from '@/hooks/useGeneration'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel } from '@/config'
 import { useUiText } from '@/i18n'
@@ -12,90 +11,39 @@ import { useReadingFontSize } from '@/preferences/readingFontSize'
 import PromptCard from './components/PromptCard'
 import PieceStrip from './components/PieceStrip'
 import PieceView from './components/PieceView'
-import GenerateOverlay from './components/GenerateOverlay'
 import GenerateControls from './components/GenerateControls'
 import GenerateVersionsPanel from './components/VersionsPanel'
-// import ReadingSettingsButton from './components/ReadingSettingsButton'
 import { useGenerateData } from './hooks/useGenerateData'
-import { useGeneratePieceSession } from './hooks/useGeneratePieceSession'
-import type { ClusterPrompt } from './types'
-
-const GENERATION_TEMPERATURE = 1
-const USE_THINKING = false
+import { useSavedPiece } from './hooks/useSavedPiece'
+import { parseVersionDraft, type ClusterPrompt } from '../shared/types'
 
 const headerTextActionClass =
   'inline-flex h-8 shrink-0 items-center justify-center px-1 font-serif-zh text-[14px] italic leading-none text-ink-3 underline decoration-ink-4/50 underline-offset-4 transition-colors duration-200 hover:text-ink hover:decoration-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-4/30 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:pointer-events-none disabled:opacity-50'
 
-// const navReadingButtonClass =
-//   'grid h-9 w-9 place-items-center rounded-full border border-transparent text-ink-3 transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30'
-
 type GenerateTab = 'prompt' | 'versions'
 
-interface VersionDraftState {
-  promptText: string
-  sourcePromptId: number
-  sourceClusterId: number
-  versionNumber: number
-}
-
-function parseVersionDraft(value: unknown): VersionDraftState | null {
-  if (!value || typeof value !== 'object') return null
-  const parsed = value as Partial<VersionDraftState>
-  if (
-    typeof parsed.promptText !== 'string' ||
-    typeof parsed.sourcePromptId !== 'number' ||
-    typeof parsed.sourceClusterId !== 'number' ||
-    typeof parsed.versionNumber !== 'number'
-  ) {
-    return null
-  }
-
-  return {
-    promptText: parsed.promptText,
-    sourcePromptId: parsed.sourcePromptId,
-    sourceClusterId: parsed.sourceClusterId,
-    versionNumber: parsed.versionNumber,
-  }
-}
-
-export default function Generate() {
+// The static prompt page: shows a prompt (or a new/version draft), its saved pieces, and
+// the controls to start generating. Generating or resuming navigates to the separate
+// generate screen — this page never streams or holds unsaved output.
+export default function PromptPage() {
   const language = useLanguageId()
   const t = useUiText()
-  const { id } = useParams<{ id: string }>()
+  const { id, promptId } = useParams<{ id: string; promptId?: string }>()
   const location = useLocation()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const queryPromptId = searchParams.get('promptId')
-  const lockedMode = !!queryPromptId
+  const lockedMode = !!promptId
   const routeState = location.state as { draftPrompt?: unknown; versionDraft?: unknown } | null
   const versionDraft = parseVersionDraft(routeState?.versionDraft)
   const draftPrompt = versionDraft?.promptText ?? (typeof routeState?.draftPrompt === 'string' ? routeState.draftPrompt : '')
-  const versionSourcePromptId = !lockedMode ? versionDraft?.sourcePromptId ?? null : null
   const versionSourceClusterId = !lockedMode ? versionDraft?.sourceClusterId ?? null : null
   const [activeTab, setActiveTab] = useState<GenerateTab>('prompt')
   const [showVersionDiff, setShowVersionDiff] = useState(false)
   const [prompt, setPrompt] = useState(draftPrompt)
-  const [overlayOpen, setOverlayOpen] = useState(false)
   const normalizedPrompt = prompt.trim()
   const readingFont = useReadingFont()
   const readingFontSize = useReadingFontSize()
   const model = useGenerationModel()
   const backHref = id ? `/worlds/${id}` : '/worlds'
-
-  const {
-    phase,
-    output,
-    error: generationError,
-    completion,
-    provider,
-    generationId,
-    displayComplete,
-    streaming,
-    generate,
-    expand,
-    stop,
-    reset,
-  } = useGeneration({ worldId: id })
 
   const {
     activePrompt,
@@ -107,44 +55,29 @@ export default function Generate() {
     promptDetailsError,
   } = useGenerateData({
     worldId: id,
-    queryPromptId,
+    queryPromptId: promptId ?? null,
     lockedMode,
     versionSourceClusterId,
   })
 
+  const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
+
   const {
-    saveState,
     selectedPieceId,
     selectPiece,
-    selectPendingPiece,
-    viewingPendingPiece,
-    viewingSavedPiece,
-    pendingPieceNumber,
-    displayedOutput,
-    outputDisplayComplete,
-    displayedPieceMetaLabel,
-    displayedPieceModelLabel,
-    displayedPieceFooterStatsLabel,
-    prepareGeneration,
-    cancelPendingGeneration,
-    commitPendingPiece,
-  } = useGeneratePieceSession({
-    worldId: id,
-    queryPromptId,
+    body,
+    complete,
+    pieceNumber,
+    metaLabel,
+    modelLabel,
+    footerStatsLabel,
+  } = useSavedPiece({
     lockedMode,
-    prompt,
-    normalizedPrompt,
-    output,
-    model,
-    provider,
-    generationId,
-    displayComplete,
-    completion,
-    generationError,
-    versionSourcePromptId,
+    resetKey: promptId ?? 'new',
     promptPieces,
-    resetGeneration: reset,
+    activePromptPieceCount,
   })
+
   const nextVersionNumber = clusterPrompts.length + 1
   const activeVersionIndex = activePrompt
     ? clusterPrompts.findIndex(p => p.id === activePrompt.id)
@@ -153,17 +86,8 @@ export default function Generate() {
   const hasMultipleVersions = clusterPrompts.length > 1
   const visibleActiveTab: GenerateTab = hasMultipleVersions ? activeTab : 'prompt'
   const showGenerateTabs = !lockedMode || activeClusterId != null
-  const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
-  const selectedPieceIndex = selectedPieceId === null
-    ? -1
-    : promptPieces.findIndex(piece => piece.id === selectedPieceId)
-  const displayedPieceNumber = viewingPendingPiece
-    ? pendingPieceNumber
-    : selectedPieceIndex >= 0
-      ? Math.max(1, activePromptPieceCount - selectedPieceIndex)
-      : null
-  const needsFirstTakeScrollRoom = lockedMode && activePromptPieceCount === 0 && pendingPieceNumber === null
-  const showPieceStrip = lockedMode && (activePromptPieceCount > 0 || pendingPieceNumber !== null)
+  const needsFirstTakeScrollRoom = lockedMode && activePromptPieceCount === 0
+  const showPieceStrip = lockedMode && activePromptPieceCount > 0
   const showHeaderRow = (lockedMode && !!activePrompt) || (!lockedMode && !!versionDraft)
   const headerLabel = lockedMode
     ? hasMultipleVersions && activeVersionNumber != null ? t.versionOf(activeVersionNumber, clusterPrompts.length) : ''
@@ -206,80 +130,42 @@ export default function Generate() {
       </nav>
     )
   }, [clusterPrompts.length, hasMultipleVersions, language, showGenerateTabs, showPromptTab, t, visibleActiveTab])
-  // const readingSettingsAction = useMemo(() => (
-  //   <ReadingSettingsButton
-  //     className={navReadingButtonClass}
-  //     readingFont={readingFont}
-  //     onReadingFontChange={setReadingFont}
-  //     readingFontSize={readingFontSize}
-  //     onReadingFontSizeChange={setReadingFontSize}
-  //   />
-  // ), [readingFont, readingFontSize])
 
   useTopNavConfig({ backHref, bottomSlot: generateTabs })
 
   useEffect(() => {
-    if (queryPromptId) return
+    if (promptId) return
     setPrompt(draftPrompt)
-  }, [draftPrompt, queryPromptId, setPrompt])
+  }, [draftPrompt, promptId])
 
   useEffect(() => {
-    if (!queryPromptId) return
+    if (!promptId) return
     if (activePrompt) setPrompt(activePrompt.text)
-  }, [activePrompt, queryPromptId])
+  }, [activePrompt, promptId])
 
   useEffect(() => {
     if (!showGenerateTabs || !hasMultipleVersions) setActiveTab('prompt')
   }, [hasMultipleVersions, showGenerateTabs])
 
   const promptError = promptDetailsError ? t.couldNotLoad(entityLabel('prompt', {}, language)) : ''
-  const error = generationError || promptError
-  const generateDisabled =
-    streaming ||
-    saveState === 'saving' ||
-    promptDetailsLoading ||
-    !normalizedPrompt
+  const generateDisabled = promptDetailsLoading || !normalizedPrompt
+
+  const genBase = promptId ? `/worlds/${id}/prompt/${promptId}/generate` : `/worlds/${id}/prompt/new/generate`
 
   function handleGenerate() {
     if (generateDisabled) return
-    setOverlayOpen(true)
-    prepareGeneration(activePromptPieceCount)
-    generate({
-      prompt,
-      model,
-      temperature: GENERATION_TEMPERATURE,
-      useThinking: USE_THINKING,
-    })
+    navigate(genBase, { state: { prompt, versionDraft: routeState?.versionDraft } })
   }
 
-  function handleOverlaySave(text: string) {
-    setOverlayOpen(false)
-    // Persist exactly what the reader saw, then abort any still-running stream.
-    commitPendingPiece(text)
-    stop()
-  }
-
-  function handleOverlayExit() {
-    setOverlayOpen(false)
-    stop()
-    cancelPendingGeneration()
-  }
-
-  function handleOverlayExpand(priorText: string) {
-    // Replaces the in-flight stream with one anchored on the selected paragraph.
-    expand({
-      prompt,
-      model,
-      temperature: GENERATION_TEMPERATURE,
-      useThinking: USE_THINKING,
-      priorText,
-    })
+  function handleResume() {
+    if (selectedPieceId === null) return
+    navigate(`${genBase}?resume=${selectedPieceId}`)
   }
 
   function handleEditFromPrompt(sourcePrompt: ClusterPrompt) {
-    if (!id || activeClusterId == null || streaming) return
+    if (!id || activeClusterId == null) return
     showPromptTab()
-    navigate(`/worlds/${id}/generate`, {
+    navigate(`/worlds/${id}/prompt/new`, {
       state: {
         versionDraft: {
           promptText: sourcePrompt.text,
@@ -298,7 +184,7 @@ export default function Generate() {
 
   function handleCancelVersionDraft() {
     if (!id || !versionDraft) return
-    navigate(`/worlds/${id}/generate?promptId=${versionDraft.sourcePromptId}`, { replace: true })
+    navigate(`/worlds/${id}/prompt/${versionDraft.sourcePromptId}`, { replace: true })
   }
 
   const [promptCopied, setPromptCopied] = useState(false)
@@ -331,7 +217,7 @@ export default function Generate() {
     <div className={`page-fade-in min-h-screen page-width px-4 ${visibleActiveTab === 'versions' ? 'pt-0' : 'pt-6'} ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}`}>
       {visibleActiveTab === 'prompt' ? (
         <>
-          <div className={`${viewingSavedPiece && !streaming ? 'mb-1' : ''} bg-paper/95 pb-1`}>
+          <div className={`${complete ? 'mb-1' : ''} bg-paper/95 pb-1`}>
             {showHeaderRow && (
               <div className="flex items-center justify-between gap-3 px-2 pt-4">
                 {headerLabel && (
@@ -359,7 +245,7 @@ export default function Generate() {
                       type="button"
                       className={headerTextActionClass}
                       onClick={handleEditActivePrompt}
-                      disabled={streaming || activeClusterId == null}
+                      disabled={activeClusterId == null}
                     >
                       {t.edit}
                     </button>
@@ -368,7 +254,6 @@ export default function Generate() {
                       type="button"
                       className={headerTextActionClass}
                       onClick={handleCancelVersionDraft}
-                      disabled={streaming}
                     >
                       {t.cancel}
                     </button>
@@ -381,15 +266,15 @@ export default function Generate() {
               prompt={prompt}
               onPromptChange={setPrompt}
               loading={promptDetailsLoading}
-              streaming={streaming}
-              error={error}
+              streaming={false}
+              error={promptError}
               locked={lockedMode}
             />
           </div>
 
           <GenerateControls
-            phase={phase}
-            streaming={streaming}
+            phase="idle"
+            streaming={false}
             disabled={generateDisabled}
             hasExistingPieces={activePromptPieceCount > 0}
             model={model}
@@ -404,21 +289,29 @@ export default function Generate() {
                 pieces={promptPieces}
                 promptPieceCount={activePromptPieceCount}
                 selectedPieceId={selectedPieceId}
-                pendingPieceNumber={pendingPieceNumber}
-                pendingSelected={viewingPendingPiece}
-                disabled={streaming}
-                onSelectPending={selectPendingPiece}
                 onSelectPiece={selectPiece}
               />
             )}
 
+            {complete && body && (
+              <div className="flex px-2 pt-2">
+                <button
+                  type="button"
+                  className="inline-flex h-10 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white transition-opacity active:opacity-80"
+                  onClick={handleResume}
+                >
+                  {t.resume}
+                </button>
+              </div>
+            )}
+
             <PieceView
-              body={displayedOutput}
-              complete={outputDisplayComplete}
-              pieceMetaLabel={displayedPieceMetaLabel}
-              pieceModelLabel={displayedPieceModelLabel}
-              pieceFooterStatsLabel={displayedPieceFooterStatsLabel}
-              pieceNumber={displayedPieceNumber}
+              body={body}
+              complete={complete}
+              pieceMetaLabel={metaLabel}
+              pieceModelLabel={modelLabel}
+              pieceFooterStatsLabel={footerStatsLabel}
+              pieceNumber={pieceNumber}
               readingFont={readingFont}
               readingFontSize={readingFontSize}
             />
@@ -428,7 +321,7 @@ export default function Generate() {
         <section className="bg-paper/95 pb-6">
           <GenerateVersionsPanel
             worldId={id}
-            currentPromptId={queryPromptId}
+            currentPromptId={promptId ?? null}
             prompts={clusterPrompts}
             loading={clusterLoading || promptDetailsLoading}
             showDiff={showVersionDiff}
@@ -436,21 +329,6 @@ export default function Generate() {
             onViewPrompt={showPromptTab}
           />
         </section>
-      )}
-
-      {overlayOpen && (
-        <GenerateOverlay
-          output={output}
-          phase={phase}
-          displayComplete={displayComplete}
-          provider={provider}
-          error={generationError}
-          readingFont={readingFont}
-          readingFontSize={readingFontSize}
-          onSave={handleOverlaySave}
-          onExit={handleOverlayExit}
-          onExpand={handleOverlayExpand}
-        />
       )}
     </div>
   )

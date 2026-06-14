@@ -38,9 +38,22 @@ function buildSystemPrompt(worldBody: string): string {
 }
 
 const EXPANSION_INSTRUCTION = [
-  'Continue the story directly from where the text above leaves off. Do NOT repeat or rewrite any of the text already written.',
-  'Take the most recent moment — the final paragraph above — and expand it: slow down the pacing and elaborate that same event with much richer sensory, physical, dialogue detail before the story moves on.',
-  'Pick up seamlessly from the last sentence so the new text reads as a natural continuation. Match the existing language, voice, tense, and tone exactly.',
+  'Focus ONLY on the final paragraph above. Your sole task is to dwell on that single moment, even writing the same actions repeatedly is fine.',
+  'Do NOT advance the story, introduce new events, or continue toward any earlier goal or prompt — stay on this same moment and keep writing about it:enrich it with more dirty descriptions and more dirty talk dialogues. Let users enjoy it.',
+  'Do NOT repeat or rewrite any text already written. Pick up seamlessly from the last sentence so the new prose reads as a natural continuation. Match the existing language, voice, tense, and tone exactly.',
+].join('\n')
+
+const CONTINUATION_INSTRUCTION = [
+  'Continue the story from exactly where the text above leaves off, advancing it naturally toward the original prompt.',
+  'Do NOT repeat, summarize, or rewrite any text already written. Pick up seamlessly from the last sentence, beginning a new paragraph, so the new prose reads as a natural continuation.',
+  'Match the existing language, voice, tense, and tone exactly.',
+].join('\n')
+
+const FAST_FORWARD_INSTRUCTION = [
+  'The user finds the pace too slow. If the final paragraph above is unfinished, bring it to a close in a sentence or two.',
+  'Then move the story forward to the immediately next natural action or beat that the original prompt calls for. Move on to the next scene.',
+  'Pick up seamlessly from the last sentence, beginning a new paragraph.',
+  'Match the existing language, voice, tense, and tone exactly.',
 ].join('\n')
 
 async function readOpenRouterError(response: Response): Promise<string> {
@@ -60,6 +73,45 @@ async function readOpenRouterError(response: Response): Promise<string> {
   }
 }
 
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+
+function buildMessages(args: {
+  systemPrompt: string
+  promptText: string
+  priorTextValue: string
+  isExpansion: boolean
+  isContinuation: boolean
+  isFastForward: boolean
+}): ChatMessage[] {
+  const { systemPrompt, promptText, priorTextValue, isExpansion, isContinuation, isFastForward } = args
+  const system: ChatMessage = { role: 'system', content: systemPrompt }
+
+  // Expansion intentionally omits the original user prompt: the model should loop
+  // on and elaborate the last highlighted paragraph only, not continue the story
+  // toward whatever the prompt originally asked.
+  if (isExpansion) {
+    return [
+      system,
+      { role: 'assistant', content: priorTextValue },
+      { role: 'user', content: EXPANSION_INSTRUCTION },
+    ]
+  }
+
+  // Continuation and fast-forward both keep the original prompt + the full existing
+  // text so the model resumes the same story; they differ only in the final
+  // instruction (push forward vs. close out the beat and skip ahead).
+  if (isContinuation || isFastForward) {
+    return [
+      system,
+      { role: 'user', content: promptText },
+      { role: 'assistant', content: priorTextValue },
+      { role: 'user', content: isFastForward ? FAST_FORWARD_INSTRUCTION : CONTINUATION_INSTRUCTION },
+    ]
+  }
+
+  return [system, { role: 'user', content: promptText }]
+}
+
 generateRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
@@ -72,8 +124,10 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
-  const expandPriorText = mode === 'expand' && typeof priorText === 'string' ? priorText.trim() : ''
-  const isExpansion = expandPriorText.length > 0
+  const priorTextValue = (mode === 'expand' || mode === 'continue' || mode === 'fast-forward') && typeof priorText === 'string' ? priorText.trim() : ''
+  const isExpansion = mode === 'expand' && priorTextValue.length > 0
+  const isContinuation = mode === 'continue' && priorTextValue.length > 0
+  const isFastForward = mode === 'fast-forward' && priorTextValue.length > 0
   const generationToken = typeof generationId === 'string' ? generationId.trim() : ''
   if (!generationToken) return c.json({ error: 'Generation id required' }, 400)
 
@@ -87,6 +141,15 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const temperature = Number.isFinite(parsedTemperature)
     ? Math.min(2, Math.max(0, parsedTemperature))
     : 1
+
+  const messages = buildMessages({
+    systemPrompt,
+    promptText,
+    priorTextValue,
+    isExpansion,
+    isContinuation,
+    isFastForward,
+  })
 
   return streamSSE(c, async (stream) => {
     const controller = new AbortController()
@@ -129,17 +192,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
           stream: true,
           provider,
-          messages: isExpansion
-            ? [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: promptText },
-              { role: 'assistant', content: expandPriorText },
-              { role: 'user', content: EXPANSION_INSTRUCTION },
-            ]
-            : [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: promptText },
-            ],
+          messages,
         }),
       })
 

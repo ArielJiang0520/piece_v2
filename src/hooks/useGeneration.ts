@@ -81,20 +81,34 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
 
   const streaming = state.phase !== 'idle'
 
-  async function runGeneration(input: GenerateInput, priorText: string) {
+  // 'expand' dwells on the last paragraph; 'continue' resumes the story from the
+  // full existing text. Both seed the buffer with priorText and stream below it.
+  async function runGeneration(input: GenerateInput, priorText: string, mode: 'fresh' | 'expand' | 'continue' | 'fast-forward') {
     if (!worldId) return
-    const isExpansion = priorText.length > 0
-    // An expansion replaces whatever is currently streaming, so abort it first.
+    const isContinuation = priorText.length > 0
+    // A continuation replaces whatever is currently streaming, so abort it first.
     // Each run keys off its own AbortController/generationId, so a replaced run
-    // suppresses its own error/done in catch/finally below.
+    // suppresses its own error/done in catch/finally below. Aborting the fetch
+    // closes the connection (which the server treats as cancellation), and we also
+    // post /stop so OpenRouter's still-running fast generation is torn down even if
+    // the in-flight run hadn't finished buffering yet.
+    const replacedGenerationId = activeGenerationIdRef.current
     activeRequestControllerRef.current?.abort()
+    if (replacedGenerationId) {
+      void fetch(`/api/worlds/${worldId}/generate/stop`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generationId: replacedGenerationId }),
+      }).catch(() => { })
+    }
     const generationId = createRandomId()
     const requestController = new AbortController()
     activeGenerationIdRef.current = generationId
     activeRequestControllerRef.current = requestController
     setLastGenerationId(generationId)
     stopRequestedRef.current = false
-    dispatch(isExpansion ? { type: 'start-expand', seed: priorText } : { type: 'start' })
+    dispatch(isContinuation ? { type: 'start-expand', seed: priorText } : { type: 'start' })
 
     let streamSettled = false
     let receivedContent = false
@@ -107,7 +121,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
         body: JSON.stringify({
           ...input,
           generationId,
-          ...(isExpansion ? { mode: 'expand', priorText } : {}),
+          ...(mode !== 'fresh' ? { mode, priorText } : {}),
         }),
       })
 
@@ -170,13 +184,27 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
 
   function generate(input: GenerateInput) {
     if (streaming) return
-    void runGeneration(input, '')
+    void runGeneration(input, '', 'fresh')
   }
 
   function expand(input: GenerateInput & { priorText: string }) {
     const { priorText, ...rest } = input
     if (!priorText) return
-    void runGeneration(rest, priorText)
+    void runGeneration(rest, priorText, 'expand')
+  }
+
+  function continueStory(input: GenerateInput & { priorText: string }) {
+    const { priorText, ...rest } = input
+    if (!priorText) return
+    void runGeneration(rest, priorText, 'continue')
+  }
+
+  // Skip ahead: keep the current paragraph, abort the rest of the buffered run, and
+  // ask the model to wrap up the current beat and move on to the next natural action.
+  function fastForward(input: GenerateInput & { priorText: string }) {
+    const { priorText, ...rest } = input
+    if (!priorText) return
+    void runGeneration(rest, priorText, 'fast-forward')
   }
 
   function stop() {
@@ -218,6 +246,8 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     streaming,
     generate,
     expand,
+    continueStory,
+    fastForward,
     stop,
     reset,
   }

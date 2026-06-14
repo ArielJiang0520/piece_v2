@@ -5,7 +5,7 @@ import { useUiText } from '@/i18n'
 import { useLanguageId } from '@/preferences/language'
 import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
-import ProseBody, { proseTextClass, proseTextStyle } from './ProseBody'
+import ProseBody, { proseTextClass, proseTextStyle } from '../../shared/ProseBody'
 
 const END_REVEAL_DELAY_MS = 900
 
@@ -94,7 +94,7 @@ export default function PieceView({
                 )}
               </span>
             </div>
-            <div className="mt-8 flex justify-center">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
                 className="inline-flex h-10 items-center gap-2 rounded-full border border-rose-line bg-paper px-4 font-serif-zh text-[15px] italic text-rose-deep transition-colors hover:border-rose/40 hover:bg-rose-pale focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30"

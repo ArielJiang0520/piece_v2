@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   pendingLabel?: string
   isPending?: boolean
   error?: string
+  // Override the stacking layer when the dialog must sit above another fixed overlay.
+  zClass?: string
   onConfirm: () => void
   onClose: () => void
 }
@@ -23,6 +25,7 @@ export default function ConfirmDialog({
   pendingLabel,
   isPending = false,
   error,
+  zClass = 'z-50',
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
@@ -44,7 +47,7 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/35 px-4 py-8"
+      className={`fixed inset-0 ${zClass} flex items-center justify-center bg-ink/35 px-4 py-8`}
       role="presentation"
       onClick={() => {
         if (!isPending) onClose()
