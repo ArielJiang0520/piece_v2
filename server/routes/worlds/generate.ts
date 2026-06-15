@@ -82,9 +82,20 @@ function buildMessages(args: {
   isExpansion: boolean
   isContinuation: boolean
   isFastForward: boolean
+  isRewind: boolean
 }): ChatMessage[] {
-  const { systemPrompt, promptText, priorTextValue, isExpansion, isContinuation, isFastForward } = args
+  const { systemPrompt, promptText, priorTextValue, isExpansion, isContinuation, isFastForward, isRewind } = args
   const system: ChatMessage = { role: 'system', content: systemPrompt }
+
+  // Rewind dropped the last paragraph; hand the kept text back as an assistant prefill
+  // and let the model continue normally — no instruction, just system + prompt + story.
+  if (isRewind) {
+    return [
+      system,
+      { role: 'user', content: promptText },
+      { role: 'assistant', content: priorTextValue },
+    ]
+  }
 
   // Expansion intentionally omits the original user prompt: the model should loop
   // on and elaborate the last highlighted paragraph only, not continue the story
@@ -124,10 +135,16 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
-  const priorTextValue = (mode === 'expand' || mode === 'continue' || mode === 'fast-forward') && typeof priorText === 'string' ? priorText.trim() : ''
+  const rawPrior = typeof priorText === 'string' ? priorText : ''
+  // Instruction-driven modes trim the kept text; rewind feeds it back as an assistant
+  // prefill, so it keeps the trailing blank line so the model continues a fresh paragraph.
+  const priorTextValue = mode === 'rewind'
+    ? rawPrior.replace(/^\s+/, '')
+    : (mode === 'expand' || mode === 'continue' || mode === 'fast-forward') ? rawPrior.trim() : ''
   const isExpansion = mode === 'expand' && priorTextValue.length > 0
   const isContinuation = mode === 'continue' && priorTextValue.length > 0
   const isFastForward = mode === 'fast-forward' && priorTextValue.length > 0
+  const isRewind = mode === 'rewind' && priorTextValue.length > 0
   const generationToken = typeof generationId === 'string' ? generationId.trim() : ''
   if (!generationToken) return c.json({ error: 'Generation id required' }, 400)
 
@@ -149,6 +166,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     isExpansion,
     isContinuation,
     isFastForward,
+    isRewind,
   })
 
   return streamSSE(c, async (stream) => {

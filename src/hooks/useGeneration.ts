@@ -83,7 +83,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
 
   // 'expand' dwells on the last paragraph; 'continue' resumes the story from the
   // full existing text. Both seed the buffer with priorText and stream below it.
-  async function runGeneration(input: GenerateInput, priorText: string, mode: 'fresh' | 'expand' | 'continue' | 'fast-forward') {
+  async function runGeneration(input: GenerateInput, priorText: string, mode: 'fresh' | 'expand' | 'continue' | 'fast-forward' | 'rewind') {
     if (!worldId) return
     const isContinuation = priorText.length > 0
     // A continuation replaces whatever is currently streaming, so abort it first.
@@ -207,6 +207,15 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     void runGeneration(rest, priorText, 'fast-forward')
   }
 
+  // Step back: drop the last paragraph and regenerate from the kept text. The kept text
+  // is fed straight back as an assistant prefill the model simply continues — no special
+  // instruction, so it writes the next paragraph fresh.
+  function rewind(input: GenerateInput & { priorText: string }) {
+    const { priorText, ...rest } = input
+    if (!priorText) return
+    void runGeneration(rest, priorText, 'rewind')
+  }
+
   function stop() {
     const generationId = activeGenerationIdRef.current
 
@@ -248,6 +257,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     expand,
     continueStory,
     fastForward,
+    rewind,
     stop,
     reset,
   }

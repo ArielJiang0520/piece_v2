@@ -266,15 +266,12 @@ export default function PromptPage() {
               prompt={prompt}
               onPromptChange={setPrompt}
               loading={promptDetailsLoading}
-              streaming={false}
               error={promptError}
               locked={lockedMode}
             />
           </div>
 
           <GenerateControls
-            phase="idle"
-            streaming={false}
             disabled={generateDisabled}
             hasExistingPieces={activePromptPieceCount > 0}
             model={model}

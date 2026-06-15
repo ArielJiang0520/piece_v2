@@ -7,7 +7,6 @@ interface PromptCardProps {
   prompt: string
   onPromptChange: (value: string) => void
   loading: boolean
-  streaming: boolean
   error: string
   locked?: boolean
 }
@@ -16,7 +15,6 @@ export default function PromptCard({
   prompt,
   onPromptChange,
   loading,
-  streaming,
   error,
   locked = false,
 }: PromptCardProps) {
@@ -49,12 +47,11 @@ export default function PromptCard({
               <textarea
                 id="prompt-input"
                 aria-label={promptLabel}
-                className={`${editorTextClass} h-44 w-full resize-y bg-transparent placeholder:text-ink-4 focus:outline-none focus:ring-0 disabled:opacity-50 [scrollbar-color:var(--color-rose)_transparent] [scrollbar-width:thin]`}
+                className={`${editorTextClass} h-44 w-full resize-y bg-transparent placeholder:text-ink-4 focus:outline-none focus:ring-0 [scrollbar-color:var(--color-rose)_transparent] [scrollbar-width:thin]`}
                 rows={6}
                 placeholder={t.promptPlaceholder}
                 value={prompt}
                 onChange={e => onPromptChange(e.target.value)}
-                disabled={streaming}
               />
             </div>
           )}

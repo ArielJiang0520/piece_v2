@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { GenerationPhase } from '@/hooks/useGeneration'
 import { useUiText, type UiText } from '@/i18n'
 import { useLanguageId, type LanguageId } from '@/preferences/language'
 import ModelSelector from './ModelSelector'
 import { entityLabel } from '@/config'
 
 interface GenerateControlsProps {
-  phase: GenerationPhase
-  streaming: boolean
   disabled: boolean
   hasExistingPieces: boolean
   model: string
@@ -19,8 +16,6 @@ interface GenerateControlsProps {
 const CTA_DOCK_HYSTERESIS_PX = 32
 
 export default function GenerateControls({
-  phase,
-  streaming,
   disabled,
   hasExistingPieces,
   model,
@@ -88,7 +83,7 @@ export default function GenerateControls({
               onClick={onGenerate}
               disabled={disabled}
             >
-              <span className="min-w-0 truncate">{generateButtonLabel(phase, hasExistingPieces, t, language)}</span>
+              <span className="min-w-0 truncate">{generateButtonLabel(hasExistingPieces, t, language)}</span>
             </button>
           </div>
         </div>
@@ -99,8 +94,6 @@ export default function GenerateControls({
           <ModelSelector
             model={model}
             onModelChange={onModelChange}
-            disabled={streaming}
-            closeMenu={false}
             onMenuOpenChange={handleModelMenuOpenChange}
           />
         </div>
@@ -110,14 +103,10 @@ export default function GenerateControls({
 }
 
 function generateButtonLabel(
-  phase: GenerationPhase,
   hasExistingPieces: boolean,
   t: UiText,
   language: LanguageId,
 ) {
-  if (phase === 'waiting_provider') return t.waiting
-  if (phase === 'thinking') return t.thinking
-  if (phase === 'writing') return t.writing
   const piece = entityLabel('piece', {}, language)
   if (!hasExistingPieces) return t.firstPiece(piece)
   return t.anotherPiece(piece)

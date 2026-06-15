@@ -8,10 +8,10 @@ export function containsChineseText(text: string) {
 
 // Streaming reveal speed (non-whitespace text units per second).
 export const READING_SPEED_OPTIONS = [
-  { id: 'slow', label: '0.5×', unitsPerSecond: 10 },
-  { id: 'normal', label: '1×', unitsPerSecond: 20 },
-  { id: 'fast', label: '1.5×', unitsPerSecond: 30 },
-  { id: 'faster', label: '2×', unitsPerSecond: 40 },
+  { id: 'slow', label: '0.5×', unitsPerSecond: 7 },
+  { id: 'normal', label: '1×', unitsPerSecond: 15 },
+  { id: 'fast', label: '1.5×', unitsPerSecond: 20 },
+  { id: 'faster', label: '2×', unitsPerSecond: 30 },
 ] as const
 
 export type ReadingSpeed = (typeof READING_SPEED_OPTIONS)[number]['id']
