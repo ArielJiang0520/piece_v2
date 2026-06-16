@@ -10,7 +10,6 @@ interface GenerateOutputProps {
   output: string
   phase: GenerationPhase
   streaming: boolean
-  provider: string
   readingFont: ReadingFont
   readingFontSize: ReadingFontSize
   // When selectable, the body renders as individually tappable paragraph blocks
@@ -21,14 +20,13 @@ interface GenerateOutputProps {
   renderParagraphAction: (index: number) => ReactNode
 }
 
-// The live generation surface inside the overlay: a provider line and the streaming
-// body (token-fade, or selectable paragraphs while paused/finished). It ends
-// silently — no meta header, stats, footer, or back-to-top.
+// The live generation surface inside the overlay: the streaming body (token-fade, or
+// selectable paragraphs while paused/finished). Provider/model meta lives in the pinned
+// top bar. It ends silently — no meta header, stats, footer, or back-to-top.
 export default function GenerateOutput({
   output,
   phase,
   streaming,
-  provider,
   readingFont,
   readingFontSize,
   selectable,
@@ -59,11 +57,6 @@ export default function GenerateOutput({
   return (
     <div className={wrapperClass}>
       <div>
-        {provider && (
-          <div className="fade-in-up t-meta mb-4 flex items-center gap-3">
-            Provider: {provider}
-          </div>
-        )}
         {selectable ? (
           <div>
             {paragraphs.map(paragraph => {

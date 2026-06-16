@@ -5,19 +5,13 @@ import { findUserWorld, findUserWorldId, getModelById, getUserId, paramInt } fro
 import { normalizePromptInput } from '../../prompt-text'
 import { BLACKLISTED_PROVIDERS } from '../../../src/preferences/generationModel'
 import { readServerSentEvents } from '../../../src/utils/sse'
-import {
-  buildModelUsageFromGenerationMetadata,
-  buildModelUsageFromOpenRouterResponse,
-  fetchOpenRouterGenerationMetadata,
-  type ModelUsageStatus,
-  writeModelUsage,
-} from '../../model-usage'
+import { abortGeneration, clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
-const activeGenerations = new Map<string, AbortController>()
 
-function generationKey(userId: number, worldId: number, generationId: string) {
-  return `${userId}:${worldId}:${generationId}`
+// One OpenRouter session at a time is enforced per owner: a user's worlds-scoped run.
+function ownerKey(userId: number, worldId: number) {
+  return `${userId}:${worldId}`
 }
 
 function buildSystemPrompt(worldBody: string): string {
@@ -131,7 +125,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 
   const systemPrompt = buildSystemPrompt(world.body)
 
-  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, generationId, mode, priorText } = await c.req.json()
+  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, mode, priorText } = await c.req.json()
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
@@ -145,8 +139,6 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const isContinuation = mode === 'continue' && priorTextValue.length > 0
   const isFastForward = mode === 'fast-forward' && priorTextValue.length > 0
   const isRewind = mode === 'rewind' && priorTextValue.length > 0
-  const generationToken = typeof generationId === 'string' ? generationId.trim() : ''
-  if (!generationToken) return c.json({ error: 'Generation id required' }, 400)
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
@@ -170,158 +162,117 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   })
 
   return streamSSE(c, async (stream) => {
+    const key = ownerKey(userId, worldId)
     const controller = new AbortController()
-    const key = generationKey(userId, worldId, generationToken)
-    const requestStartedAt = Date.now()
-    let openrouterGenerationId: string | null = null
-    let usagePersisted = false
-    let finalStatus: ModelUsageStatus = 'error'
-    activeGenerations.get(key)?.abort()
-    activeGenerations.set(key, controller)
-
-    const abortOpenRouter = () => controller.abort()
-    c.req.raw.signal.addEventListener('abort', abortOpenRouter, { once: true })
+    // Registering aborts this owner's prior run immediately so the slot queue drains;
+    // the client disconnecting (or hitting /stop) aborts this run the same way.
+    registerGeneration(key, controller)
+    const abort = () => controller.abort()
+    c.req.raw.signal.addEventListener('abort', abort, { once: true })
 
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
-      const provider: Record<string, unknown> = {
-        sort: 'latency',
-        require_parameters: true,
-        preferred_min_throughput: 30
-      }
-      if (modelOption.preferredProviders.length > 0) {
-        provider.only = modelOption.preferredProviders
-      }
-      if (BLACKLISTED_PROVIDERS.length > 0) {
-        provider.ignore = BLACKLISTED_PROVIDERS
-      }
+      // The OpenRouter call only opens inside the slot — never more than one at a time,
+      // process-wide. While queued the client keeps showing the waiting state.
+      await withGenerationSlot(async () => {
+        if (controller.signal.aborted) return
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: modelOption.id,
-          temperature,
-          reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
-          stream: true,
-          provider,
-          messages,
-        }),
-      })
+        const provider: Record<string, unknown> = {
+          sort: 'latency',
+          require_parameters: true,
+          preferred_min_throughput: 30,
+        }
+        if (modelOption.preferredProviders.length > 0) {
+          provider.only = modelOption.preferredProviders
+        }
+        if (BLACKLISTED_PROVIDERS.length > 0) {
+          provider.ignore = BLACKLISTED_PROVIDERS
+        }
 
-      if (!response.ok || !response.body) {
-        const message = await readOpenRouterError(response)
-        finalStatus = 'error'
-        console.error('[OpenRouter generate error]', {
-          status: response.status,
-          statusText: response.statusText,
-          model: modelOption.id,
-          provider,
-          message,
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: modelOption.id,
+            temperature,
+            reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
+            stream: true,
+            provider,
+            messages,
+          }),
         })
-        await stream.writeSSE({ data: JSON.stringify({ type: 'error', message }) })
-        return
-      }
 
-      let providerEmitted = false
-      for await (const data of readServerSentEvents(response.body)) {
-        if (data === '[DONE]') {
-          finalStatus = 'completed'
-          await stream.writeSSE({ data: JSON.stringify({ type: 'done' }) })
+        if (!response.ok || !response.body) {
+          const message = await readOpenRouterError(response)
+          console.error('[OpenRouter generate error]', {
+            status: response.status,
+            statusText: response.statusText,
+            model: modelOption.id,
+            provider,
+            message,
+          })
+          await stream.writeSSE({ data: JSON.stringify({ type: 'error', message }) })
           return
         }
-        try {
-          const parsed = JSON.parse(data)
-          if (typeof parsed?.id === 'string') {
-            openrouterGenerationId = parsed.id
-          }
 
-          if (!providerEmitted && typeof parsed?.provider === 'string' && parsed.provider) {
-            providerEmitted = true
-            await stream.writeSSE({ data: JSON.stringify({ type: 'provider', name: parsed.provider }) })
-          }
-
-          if (parsed?.usage) {
-            const usageEvent = buildModelUsageFromOpenRouterResponse({
-              userId,
-              worldId,
-              localGenerationId: generationToken,
-              requestedModel: modelOption.id,
-              status: 'completed',
-              response: parsed,
-              createdAt: requestStartedAt,
-            })
-            if (usageEvent) {
-              writeModelUsage(usageEvent)
-              usagePersisted = true
-            }
-          }
-
-          if (parsed?.error) {
-            const message = typeof parsed.error?.message === 'string'
-              ? parsed.error.message
-              : JSON.stringify(parsed.error)
-            finalStatus = 'error'
-            console.error('[OpenRouter generate stream error]', {
-              model: modelOption.id,
-              provider,
-              error: parsed.error,
-            })
-            await stream.writeSSE({ data: JSON.stringify({ type: 'error', message }) })
+        let providerEmitted = false
+        for await (const data of readServerSentEvents(response.body)) {
+          if (data === '[DONE]') {
+            await stream.writeSSE({ data: JSON.stringify({ type: 'done' }) })
             return
           }
+          try {
+            const parsed = JSON.parse(data)
 
-          const delta = parsed?.choices?.[0]?.delta
-          const reasoning = delta?.reasoning
-            ?? delta?.reasoning_content
-            ?? delta?.reasoning_details?.map((detail: any) => detail?.text ?? detail?.summary ?? '').join('')
-          if (reasoning) {
-            await stream.writeSSE({ data: JSON.stringify({ type: 'thinking', content: String(reasoning) }) })
-          }
+            if (!providerEmitted && typeof parsed?.provider === 'string' && parsed.provider) {
+              providerEmitted = true
+              await stream.writeSSE({ data: JSON.stringify({ type: 'provider', name: parsed.provider }) })
+            }
 
-          const content = delta?.content
-          if (content) {
-            await stream.writeSSE({ data: JSON.stringify({ type: 'chunk', content }) })
+            if (parsed?.error) {
+              const message = typeof parsed.error?.message === 'string'
+                ? parsed.error.message
+                : JSON.stringify(parsed.error)
+              console.error('[OpenRouter generate stream error]', {
+                model: modelOption.id,
+                provider,
+                error: parsed.error,
+              })
+              await stream.writeSSE({ data: JSON.stringify({ type: 'error', message }) })
+              return
+            }
+
+            const delta = parsed?.choices?.[0]?.delta
+            const reasoning = delta?.reasoning
+              ?? delta?.reasoning_content
+              ?? delta?.reasoning_details?.map((detail: any) => detail?.text ?? detail?.summary ?? '').join('')
+            if (reasoning) {
+              await stream.writeSSE({ data: JSON.stringify({ type: 'thinking', content: String(reasoning) }) })
+            }
+
+            const content = delta?.content
+            if (content) {
+              await stream.writeSSE({ data: JSON.stringify({ type: 'chunk', content }) })
+            }
+          } catch {
+            // ignore malformed chunks
           }
-        } catch {
-          // ignore malformed chunks
         }
-      }
+      })
     } catch (err) {
-      if (controller.signal.aborted) {
-        finalStatus = 'cancelled'
-        return
+      // A run aborted by replacement, /stop, or client disconnect stays silent.
+      if (!controller.signal.aborted) {
+        const msg = err instanceof Error ? err.message : 'Unknown error'
+        await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: msg }) })
       }
-
-      finalStatus = 'error'
-      const msg = err instanceof Error ? err.message : 'Unknown error'
-      await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: msg }) })
     } finally {
-      if (!usagePersisted && openrouterGenerationId) {
-        const metadata = await fetchOpenRouterGenerationMetadata(apiKey, openrouterGenerationId)
-        const usageEvent = buildModelUsageFromGenerationMetadata({
-          userId,
-          worldId,
-          localGenerationId: generationToken,
-          requestedModel: modelOption.id,
-          status: finalStatus,
-          metadata,
-          createdAt: requestStartedAt,
-        })
-        if (usageEvent) {
-          writeModelUsage(usageEvent)
-        }
-      }
-
-      c.req.raw.signal.removeEventListener('abort', abortOpenRouter)
-      if (activeGenerations.get(key) === controller) {
-        activeGenerations.delete(key)
-      }
+      c.req.raw.signal.removeEventListener('abort', abort)
+      clearGeneration(key, controller)
     }
   })
 })
@@ -331,18 +282,8 @@ generateRoutes.post('/stop', authMiddleware, async (c: any) => {
   const worldId = paramInt(c, 'id')
   if (!findUserWorldId(userId, worldId)) return c.json({ error: 'Not found' }, 404)
 
-  let body: any = {}
-  try {
-    body = await c.req.json()
-  } catch { }
-
-  const generationToken = typeof body.generationId === 'string' ? body.generationId.trim() : ''
-  if (!generationToken) return c.json({ error: 'Generation id required' }, 400)
-
-  const controller = activeGenerations.get(generationKey(userId, worldId, generationToken))
-  controller?.abort()
-
-  return c.json({ stopped: Boolean(controller) })
+  const stopped = abortGeneration(ownerKey(userId, worldId))
+  return c.json({ stopped })
 })
 
 export default generateRoutes

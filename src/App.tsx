@@ -11,7 +11,6 @@ import WorldAbout from './pages/worlds/about/WorldAbout'
 import WorldEditor from './pages/worlds/editor/WorldEditor'
 import PromptPage from './pages/worlds/prompt/PromptPage'
 import GenerateScreen from './pages/worlds/generate/GenerateScreen'
-import AdminDashboard from './pages/admin/AdminDashboard'
 
 function RootLayout() {
   return (
@@ -55,7 +54,6 @@ const router = createBrowserRouter([
           { path: '/worlds/:id/prompt/new/generate', element: <GenerateScreen /> },
           { path: '/worlds/:id/prompt/:promptId', element: <PromptPage /> },
           { path: '/worlds/:id/prompt/:promptId/generate', element: <GenerateScreen /> },
-          { path: '/admin', element: <AdminDashboard /> },
         ],
       },
     ],

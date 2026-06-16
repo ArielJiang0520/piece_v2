@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
-import { db, modelUsage, prompts, pieces } from '../../db'
+import { db, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorldId, getUserId, isValidModelId, paramInt } from '../../route-helpers'
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
@@ -24,7 +24,6 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   const model = body.model
   const providerRaw = typeof body.provider === 'string' ? body.provider.trim() : ''
   const provider = providerRaw ? providerRaw : null
-  const generationToken = typeof body.generationId === 'string' ? body.generationId.trim() : ''
 
   let existingPromptId: number | undefined
   let existingPromptClusterId: number | null = null
@@ -109,21 +108,6 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     provider,
     created_at: now,
   }).returning({ id: pieces.id }).get()
-
-  if (generationToken) {
-    db.update(modelUsage)
-      .set({
-        prompt_id: promptRow.id,
-        piece_id: piece.id,
-        updated_at: now,
-      })
-      .where(and(
-        eq(modelUsage.user_id, userId),
-        eq(modelUsage.world_id, worldId),
-        eq(modelUsage.local_generation_id, generationToken),
-      ))
-      .run()
-  }
 
   let clusterId = existingPromptClusterId
 

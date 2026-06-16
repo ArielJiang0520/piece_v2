@@ -22,7 +22,7 @@ export const MODELS: ModelOption[] = [
     recommended: true,
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
-    preferredProviders: [],
+    preferredProviders: ['parasail/fp8', 'baidu/fp8'],
   },
   {
     id: 'deepseek/deepseek-v4-flash',
@@ -30,23 +30,23 @@ export const MODELS: ModelOption[] = [
     recommended: false,
     attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
-    preferredProviders: [],
-  },
-  {
-    id: 'z-ai/glm-5',
-    label: 'GLM 5',
-    recommended: false,
-    attributes: { speed: 3, quality: 2, cost: 2 },
-    reasoning: { effort: 'none' },
-    preferredProviders: ['friendli'],
+    preferredProviders: ['parasail/fp8', 'baidu/fp8'],
   },
   {
     id: 'z-ai/glm-5.1',
     label: 'GLM 5.1',
-    recommended: true,
-    attributes: { speed: 1, quality: 3, cost: 3 },
+    recommended: false,
+    attributes: { speed: 1, quality: 2, cost: 3 },
     reasoning: { effort: 'none' },
     preferredProviders: ['friendli'],
+  },
+  {
+    id: 'minimax/minimax-m3',
+    label: 'Minimax M3',
+    recommended: false,
+    attributes: { speed: 1, quality: 3, cost: 3 },
+    reasoning: { effort: 'none' },
+    preferredProviders: [],
   }
 ]
 

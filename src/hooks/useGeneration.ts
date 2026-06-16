@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { useEffect, useReducer, useRef } from 'react'
 import { createRandomId } from '@/utils/id'
 import { readServerSentEvents } from '@/utils/sse'
 
@@ -66,7 +66,6 @@ interface UseGenerationOptions {
 
 export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
   const [state, dispatch] = useReducer(reducer, initialState)
-  const [lastGenerationId, setLastGenerationId] = useState<string | null>(null)
   const activeGenerationIdRef = useRef<string | null>(null)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
   const stopRequestedRef = useRef(false)
@@ -86,27 +85,17 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
   async function runGeneration(input: GenerateInput, priorText: string, mode: 'fresh' | 'expand' | 'continue' | 'fast-forward' | 'rewind') {
     if (!worldId) return
     const isContinuation = priorText.length > 0
-    // A continuation replaces whatever is currently streaming, so abort it first.
-    // Each run keys off its own AbortController/generationId, so a replaced run
-    // suppresses its own error/done in catch/finally below. Aborting the fetch
-    // closes the connection (which the server treats as cancellation), and we also
-    // post /stop so OpenRouter's still-running fast generation is torn down even if
-    // the in-flight run hadn't finished buffering yet.
-    const replacedGenerationId = activeGenerationIdRef.current
+    // A continuation replaces whatever is currently streaming. Abort the prior client
+    // fetch so we stop reading its stream, then just fire the new request: the server
+    // enforces a single OpenRouter session and fully drains the replaced run before it
+    // opens this one, so there is never more than one provider session at a time. Each
+    // run keys off its own AbortController/generationId, so a replaced run stays silent
+    // in the catch/finally below.
     activeRequestControllerRef.current?.abort()
-    if (replacedGenerationId) {
-      void fetch(`/api/worlds/${worldId}/generate/stop`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ generationId: replacedGenerationId }),
-      }).catch(() => { })
-    }
     const generationId = createRandomId()
     const requestController = new AbortController()
     activeGenerationIdRef.current = generationId
     activeRequestControllerRef.current = requestController
-    setLastGenerationId(generationId)
     stopRequestedRef.current = false
     dispatch(isContinuation ? { type: 'start-expand', seed: priorText } : { type: 'start' })
 
@@ -120,7 +109,6 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...input,
-          generationId,
           ...(mode !== 'fresh' ? { mode, priorText } : {}),
         }),
       })
@@ -217,17 +205,15 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
   }
 
   function stop() {
-    const generationId = activeGenerationIdRef.current
+    const hadActive = activeGenerationIdRef.current !== null
 
     stopRequestedRef.current = true
     dispatch({ type: 'stop' })
-    setLastGenerationId(null)
-    if (generationId && worldId) {
+    if (hadActive && worldId) {
+      // Abort this owner's active OpenRouter session server-side; the body is unused.
       void fetch(`/api/worlds/${worldId}/generate/stop`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ generationId }),
       }).catch(() => { })
     }
 
@@ -240,7 +226,6 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     activeRequestControllerRef.current?.abort()
     activeGenerationIdRef.current = null
     activeRequestControllerRef.current = null
-    setLastGenerationId(null)
     dispatch({ type: 'reset' })
   }
 
@@ -250,7 +235,6 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     error: state.error,
     completion: state.completion,
     provider: state.provider,
-    generationId: lastGenerationId,
     displayComplete: state.phase === 'idle' && state.completion === 'completed',
     streaming,
     generate,

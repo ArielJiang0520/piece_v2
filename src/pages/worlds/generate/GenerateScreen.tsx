@@ -8,7 +8,7 @@ import ConfirmDialog from '@/components/ConfirmDialog'
 import { useToast } from '@/components/Toast'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useUiText } from '@/i18n'
-import { useGenerationModel } from '@/preferences/generationModel'
+import { MODELS, useGenerationModel } from '@/preferences/generationModel'
 import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
 import {
@@ -73,7 +73,6 @@ export default function GenerateScreen() {
     output,
     error: generationError,
     provider,
-    generationId,
     displayComplete,
     generate,
     expand,
@@ -139,7 +138,6 @@ export default function GenerateScreen() {
           body: text,
           model,
           provider: provider || undefined,
-          generationId,
         }),
       }) as SaveResponse
       stop()
@@ -209,6 +207,11 @@ export default function GenerateScreen() {
         phase={phase}
         displayComplete={displayComplete}
         provider={provider}
+        modelLabel={MODELS.find(m => m.id === model)?.label ?? model}
+        seedProvider={resumePiece?.provider ?? ''}
+        seedModelLabel={
+          resumePiece?.model ? MODELS.find(m => m.id === resumePiece.model)?.label ?? resumePiece.model : ''
+        }
         error={generationError}
         readingFont={readingFont}
         readingFontSize={readingFontSize}
@@ -246,6 +249,10 @@ interface GenerateReaderProps {
   phase: ReturnType<typeof useGeneration>['phase']
   displayComplete: boolean
   provider: string
+  modelLabel: string
+  // Saved provider/model of a resumed piece, shown until a fresh generation takes over.
+  seedProvider: string
+  seedModelLabel: string
   error: string
   readingFont: ReturnType<typeof useReadingFont>
   readingFontSize: ReturnType<typeof useReadingFontSize>
@@ -267,6 +274,9 @@ function GenerateReader({
   phase,
   displayComplete,
   provider,
+  modelLabel,
+  seedProvider,
+  seedModelLabel,
   error,
   readingFont,
   readingFontSize,
@@ -473,6 +483,19 @@ function GenerateReader({
         </button>
       </div>
 
+      {/* Thin pinned meta bar: the model in play, and the resolved provider once it
+          arrives. While a resumed piece's seed is on screen it shows that piece's saved
+          model/provider; a fresh generation then takes over. */}
+      <div className="flex shrink-0 items-center justify-center gap-2 border-b border-rose-line/70 bg-paper px-4 py-1.5 t-meta">
+        <span className="text-ink-2">{showingSeed ? seedModelLabel || modelLabel : modelLabel}</span>
+        {(showingSeed ? seedProvider : provider) && (
+          <>
+            <span aria-hidden="true" className="text-ink-4">·</span>
+            <span>{showingSeed ? seedProvider : provider}</span>
+          </>
+        )}
+      </div>
+
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4"
@@ -486,7 +509,6 @@ function GenerateReader({
             output={displayText}
             phase={phase}
             streaming={!finished}
-            provider={provider}
             readingFont={readingFont}
             readingFontSize={readingFontSize}
             selectable={canSelect}
