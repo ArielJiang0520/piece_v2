@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowRight, ArrowUp } from 'lucide-react'
 import { entityLabel, formatEndOfPiece } from '@/config'
 import { useUiText } from '@/i18n'
 import { useLanguageId } from '@/preferences/language'
@@ -18,6 +18,7 @@ interface PieceViewProps {
   pieceNumber: number | null
   readingFont: ReadingFont
   readingFontSize: ReadingFontSize
+  onResume?: () => void
 }
 
 // The static reader for a saved (or empty) piece: meta header, prose body, and the
@@ -31,6 +32,7 @@ export default function PieceView({
   pieceNumber,
   readingFont,
   readingFontSize,
+  onResume,
 }: PieceViewProps) {
   const language = useLanguageId()
   const t = useUiText()
@@ -69,15 +71,29 @@ export default function PieceView({
   return (
     <div className={wrapperClass}>
       <div>
-        {complete && pieceMetaLabel && (
-          <div className="fade-in-up mb-4">
-            <div className="t-meta flex items-center gap-3">
-              {pieceMetaLabel}
+        {complete && (pieceMetaLabel || onResume) && (
+          <div className="fade-in-up mb-4 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              {pieceMetaLabel && (
+                <div className="t-meta flex items-center gap-3">
+                  {pieceMetaLabel}
+                </div>
+              )}
+              {pieceModelLabel && (
+                <div className="t-meta mt-0.5 text-ink-4">
+                  {pieceModelLabel}
+                </div>
+              )}
             </div>
-            {pieceModelLabel && (
-              <div className="t-meta mt-0.5 text-ink-4">
-                {pieceModelLabel}
-              </div>
+            {onResume && (
+              <button
+                type="button"
+                className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-rose-line/80 bg-paper/80 px-3 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-opacity active:opacity-70"
+                onClick={onResume}
+              >
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+                {t.resume}
+              </button>
             )}
           </div>
         )}

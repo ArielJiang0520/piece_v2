@@ -5,6 +5,15 @@ import { readServerSentEvents } from '@/utils/sse'
 export type GenerationPhase = 'idle' | 'waiting_provider' | 'thinking' | 'writing'
 export type GenerationCompletion = 'none' | 'completed' | 'cancelled' | 'error'
 
+// Mirrors the server's OpenRouterErrorInfo so the UI can show a real debug message.
+export interface GenerationErrorDetail {
+  status?: number
+  providerName?: string
+  errorType?: string
+  retryAfterSeconds?: number
+  raw?: string
+}
+
 export interface GenerateInput {
   prompt: string
   model: string
@@ -16,8 +25,11 @@ interface State {
   phase: GenerationPhase
   output: string
   error: string
+  errorDetail: GenerationErrorDetail | null
   completion: GenerationCompletion
   provider: string
+  // Transient status shown while a retryable failure (e.g. 429) is being backed off.
+  notice: string
 }
 
 type Action =
@@ -26,20 +38,53 @@ type Action =
   | { type: 'phase'; phase: GenerationPhase }
   | { type: 'provider'; name: string }
   | { type: 'chunk'; content: string }
-  | { type: 'error'; message: string }
+  | { type: 'notice'; message: string }
+  | { type: 'error'; message: string; detail?: GenerationErrorDetail }
   | { type: 'done' }
   | { type: 'stop' }
   | { type: 'reset' }
 
-const initialState: State = { phase: 'idle', output: '', error: '', completion: 'none', provider: '' }
+const initialState: State = { phase: 'idle', output: '', error: '', errorDetail: null, completion: 'none', provider: '', notice: '' }
+
+function extractErrorDetail(msg: any): GenerationErrorDetail | undefined {
+  const detail: GenerationErrorDetail = {}
+  if (typeof msg.status === 'number') detail.status = msg.status
+  if (typeof msg.providerName === 'string') detail.providerName = msg.providerName
+  if (typeof msg.errorType === 'string') detail.errorType = msg.errorType
+  if (typeof msg.retryAfterSeconds === 'number') detail.retryAfterSeconds = msg.retryAfterSeconds
+  if (typeof msg.raw === 'string') detail.raw = msg.raw
+  return Object.keys(detail).length > 0 ? detail : undefined
+}
+
+// A human-readable headline for the error banner. The structured detail is shown beneath
+// it; this turns the most common case (429) into something actionable.
+function formatErrorMessage(msg: any): string {
+  const base = typeof msg.message === 'string' && msg.message ? msg.message : 'Generation failed'
+  if (msg.status === 429) {
+    const provider = typeof msg.providerName === 'string' && msg.providerName ? ` from ${msg.providerName}` : ''
+    const wait = typeof msg.retryAfterSeconds === 'number' && msg.retryAfterSeconds > 0
+      ? ` Try again in about ${msg.retryAfterSeconds}s.`
+      : ' Wait a moment and try again.'
+    return `Rate limited (429)${provider} after automatic retries.${wait}`
+  }
+  return base
+}
+
+function formatRetryNotice(msg: any): string {
+  const status = typeof msg.status === 'number' ? msg.status : null
+  const label = status === 429 ? 'Rate limited' : status ? `Provider error (${status})` : 'Provider error'
+  const provider = typeof msg.providerName === 'string' && msg.providerName ? ` from ${msg.providerName}` : ''
+  const wait = typeof msg.waitSeconds === 'number' && msg.waitSeconds > 0 ? ` in ${msg.waitSeconds}s` : ''
+  return `${label}${provider} — retrying${wait}…`
+}
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'start':
-      return { ...state, phase: 'waiting_provider', output: '', error: '', completion: 'none', provider: '' }
+      return { ...state, phase: 'waiting_provider', output: '', error: '', errorDetail: null, completion: 'none', provider: '', notice: '' }
     case 'start-expand':
       // Seed the buffer with the kept prefix; streamed chunks append below it.
-      return { ...state, phase: 'waiting_provider', output: action.seed, error: '', completion: 'none', provider: '' }
+      return { ...state, phase: 'waiting_provider', output: action.seed, error: '', errorDetail: null, completion: 'none', provider: '', notice: '' }
     case 'phase':
       // 'thinking' must not downgrade an already-writing stream
       if (action.phase === 'thinking' && state.phase === 'writing') return state
@@ -47,13 +92,16 @@ function reducer(state: State, action: Action): State {
     case 'provider':
       return { ...state, provider: action.name }
     case 'chunk':
-      return { ...state, phase: 'writing', output: state.output + action.content }
+      // First real token clears any lingering retry notice.
+      return { ...state, phase: 'writing', output: state.output + action.content, notice: '' }
+    case 'notice':
+      return { ...state, notice: action.message }
     case 'error':
-      return { ...state, phase: 'idle', error: action.message, completion: 'error' }
+      return { ...state, phase: 'idle', error: action.message, errorDetail: action.detail ?? null, completion: 'error', notice: '' }
     case 'done':
-      return { ...state, phase: 'idle', completion: 'completed' }
+      return { ...state, phase: 'idle', completion: 'completed', notice: '' }
     case 'stop':
-      return { ...state, phase: 'idle', output: '', error: '', completion: 'cancelled', provider: '' }
+      return { ...state, phase: 'idle', output: '', error: '', errorDetail: null, completion: 'cancelled', provider: '', notice: '' }
     case 'reset':
       return initialState
   }
@@ -82,7 +130,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
 
   // 'expand' dwells on the last paragraph; 'continue' resumes the story from the
   // full existing text. Both seed the buffer with priorText and stream below it.
-  async function runGeneration(input: GenerateInput, priorText: string, mode: 'fresh' | 'expand' | 'continue' | 'fast-forward' | 'rewind') {
+  async function runGeneration(input: GenerateInput, priorText: string, mode: 'fresh' | 'expand' | 'continue' | 'regenerate') {
     if (!worldId) return
     const isContinuation = priorText.length > 0
     // A continuation replaces whatever is currently streaming. Abort the prior client
@@ -136,6 +184,8 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
               receivedContent = true
               dispatch({ type: 'chunk', content: msg.content })
             }
+          } else if (msg.type === 'retry') {
+            dispatch({ type: 'notice', message: formatRetryNotice(msg) })
           } else if (msg.type === 'done') {
             streamSettled = true
             dispatch({ type: 'done' })
@@ -143,7 +193,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
             return
           } else if (msg.type === 'error') {
             streamSettled = true
-            dispatch({ type: 'error', message: msg.message })
+            dispatch({ type: 'error', message: formatErrorMessage(msg), detail: extractErrorDetail(msg) })
             return
           }
         } catch { }
@@ -187,21 +237,13 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     void runGeneration(rest, priorText, 'continue')
   }
 
-  // Skip ahead: keep the current paragraph, abort the rest of the buffered run, and
-  // ask the model to wrap up the current beat and move on to the next natural action.
-  function fastForward(input: GenerateInput & { priorText: string }) {
+  // Regenerate from a cut point: the kept text is fed straight back as an assistant
+  // prefill the model simply continues — no special instruction, so it writes the next
+  // paragraph fresh.
+  function regenerate(input: GenerateInput & { priorText: string }) {
     const { priorText, ...rest } = input
     if (!priorText) return
-    void runGeneration(rest, priorText, 'fast-forward')
-  }
-
-  // Step back: drop the last paragraph and regenerate from the kept text. The kept text
-  // is fed straight back as an assistant prefill the model simply continues — no special
-  // instruction, so it writes the next paragraph fresh.
-  function rewind(input: GenerateInput & { priorText: string }) {
-    const { priorText, ...rest } = input
-    if (!priorText) return
-    void runGeneration(rest, priorText, 'rewind')
+    void runGeneration(rest, priorText, 'regenerate')
   }
 
   function stop() {
@@ -233,6 +275,8 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     phase: state.phase,
     output: state.output,
     error: state.error,
+    errorDetail: state.errorDetail,
+    notice: state.notice,
     completion: state.completion,
     provider: state.provider,
     displayComplete: state.phase === 'idle' && state.completion === 'completed',
@@ -240,8 +284,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     generate,
     expand,
     continueStory,
-    fastForward,
-    rewind,
+    regenerate,
     stop,
     reset,
   }

@@ -22,7 +22,7 @@ export const MODELS: ModelOption[] = [
     recommended: true,
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['parasail/fp8', 'baidu/fp8'],
+    preferredProviders: [],
   },
   {
     id: 'deepseek/deepseek-v4-flash',
@@ -30,15 +30,15 @@ export const MODELS: ModelOption[] = [
     recommended: false,
     attributes: { speed: 3, quality: 1, cost: 1 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['parasail/fp8', 'baidu/fp8'],
+    preferredProviders: [],
   },
   {
-    id: 'z-ai/glm-5.1',
-    label: 'GLM 5.1',
+    id: 'z-ai/glm-5.2',
+    label: 'GLM 5.2',
     recommended: false,
-    attributes: { speed: 1, quality: 2, cost: 3 },
+    attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
-    preferredProviders: ['friendli'],
+    preferredProviders: [],
   },
   {
     id: 'minimax/minimax-m3',
@@ -47,10 +47,14 @@ export const MODELS: ModelOption[] = [
     attributes: { speed: 1, quality: 3, cost: 3 },
     reasoning: { effort: 'none' },
     preferredProviders: [],
-  }
+  },
 ]
 
 export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
+
+// Fixed model for the Mix Prompts muse (one-shot candidate generation), independent of the
+// user's story-generation model choice. Change it here.
+export const MIX_MODEL_ID = 'z-ai/glm-5.2'
 
 export const BLACKLISTED_PROVIDERS: string[] = ['alibaba', 'together']
 

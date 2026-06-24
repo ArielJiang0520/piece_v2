@@ -18,9 +18,21 @@ export function createPreference<T>(config: PreferenceConfig<T>): Preference<T> 
   const { key, defaultValue, parse, serialize = String, onChange } = config
   const listeners = new Set<() => void>()
 
+  // Cache the parsed value keyed by the raw string so `read` returns a STABLE reference
+  // while storage is unchanged. useSyncExternalStore loops forever if getSnapshot hands
+  // back a fresh object every render, which object-valued preferences otherwise would.
+  let cachedRaw: string | null = null
+  let cachedValue: T = defaultValue
+  let hasCache = false
+
   function read(): T {
     if (typeof window === 'undefined') return defaultValue
-    return parse(window.localStorage.getItem(key))
+    const raw = window.localStorage.getItem(key)
+    if (hasCache && raw === cachedRaw) return cachedValue
+    cachedRaw = raw
+    cachedValue = parse(raw)
+    hasCache = true
+    return cachedValue
   }
 
   function notify() {

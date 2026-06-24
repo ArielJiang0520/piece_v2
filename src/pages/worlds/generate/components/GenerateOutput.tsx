@@ -39,8 +39,10 @@ export default function GenerateOutput({
   // Keep the trailing room constant whether streaming or finished. While streaming the
   // view is pinned to scrollHeight, so collapsing this pad when generation stops would
   // shrink scrollHeight and yank the text down to the bottom edge (an abrupt scroll +
-  // jitter). A steady pad leaves room underneath the last line and never jumps.
-  const wrapperClass = 'relative min-h-[55vh] px-2 pt-2 pb-[45vh] text-sm'
+  // jitter). A steady pad leaves room underneath the last line and never jumps. The pad
+  // also sets where the live line sits: since the content bottom (pad included) is pinned
+  // to the viewport bottom, a smaller pad lets the newest line ride lower on screen.
+  const wrapperClass = 'relative min-h-[55vh] px-2 pt-2 pb-[25vh] text-sm'
 
   if (phase === 'waiting_provider' && streaming && !output) {
     return (
@@ -64,7 +66,7 @@ export default function GenerateOutput({
               return (
                 <div key={paragraph.index} className="mb-4 last:mb-0">
                   <p
-                    className={`${proseTextClass(readingFont)} -mx-2 cursor-pointer rounded-md px-2 py-1 transition-colors ${selected ? 'bg-rose-pale' : 'active:bg-paper-2'}`}
+                    className={`${proseTextClass(readingFont)} -mx-2 cursor-pointer rounded-md px-2 py-1 transition-colors ${selected ? 'bg-paper-2' : 'active:bg-paper-2'}`}
                     style={proseTextStyle(readingFontSize)}
                     onClick={() => onSelectParagraph(selected ? null : paragraph.index)}
                   >

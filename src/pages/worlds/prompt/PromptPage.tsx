@@ -290,18 +290,6 @@ export default function PromptPage() {
               />
             )}
 
-            {complete && body && (
-              <div className="flex px-2 pt-2">
-                <button
-                  type="button"
-                  className="inline-flex h-10 items-center justify-center rounded-full bg-rose px-5 font-serif-zh text-[15px] italic leading-none text-white transition-opacity active:opacity-80"
-                  onClick={handleResume}
-                >
-                  {t.resume}
-                </button>
-              </div>
-            )}
-
             <PieceView
               body={body}
               complete={complete}
@@ -311,6 +299,7 @@ export default function PromptPage() {
               pieceNumber={pieceNumber}
               readingFont={readingFont}
               readingFontSize={readingFontSize}
+              onResume={complete && body ? handleResume : undefined}
             />
           </section>
         </>

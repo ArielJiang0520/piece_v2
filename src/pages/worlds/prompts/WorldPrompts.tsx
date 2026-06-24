@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, GitBranch, Search, Plus, X } from 'lucide-react'
+import { ArrowUp, GitBranch, Search, Plus, Sparkles, X } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -296,6 +296,15 @@ export default function WorldPrompts() {
             </div>
             <WorldSortMenu options={sortOptions} value={sort} onChange={handleSortChange} />
           </div>
+          {totalClusters > 0 && (
+            <Link
+              to={`/worlds/${id}/prompt/mix`}
+              className="-mx-6 flex items-center justify-center gap-1.5 border-t border-rose-line/70 px-6 py-2.5 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-colors duration-200 active:bg-rose-line/15 active:text-ink"
+            >
+              <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
+              <span>{t.mixEntities(entityLabel('prompt', { capitalize: true, plural: true }, language))}</span>
+            </Link>
+          )}
         </div>
 
         {(loadingSearch || isSearching) && (

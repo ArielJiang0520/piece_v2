@@ -7,30 +7,24 @@ export function containsChineseText(text: string) {
 }
 
 // Streaming reveal speed (non-whitespace text units per second).
-export const READING_SPEED_OPTIONS = [
-  { id: 'slow', label: '0.5×', unitsPerSecond: 7 },
-  { id: 'normal', label: '1×', unitsPerSecond: 15 },
-  { id: 'fast', label: '1.5×', unitsPerSecond: 20 },
-  { id: 'faster', label: '2×', unitsPerSecond: 30 },
-] as const
+// The slider is driven entirely by these three knobs — tune the feel here.
+export const READING_SPEED_MIN = 5
+export const READING_SPEED_MAX = 40
+export const READING_SPEED_STEP = 1
 
-export type ReadingSpeed = (typeof READING_SPEED_OPTIONS)[number]['id']
-export type ReadingSpeedOption = (typeof READING_SPEED_OPTIONS)[number]
+const DEFAULT_READING_SPEED = 15
 
-export const READING_SPEED_BY_ID = Object.fromEntries(
-  READING_SPEED_OPTIONS.map(option => [option.id, option]),
-) as Record<ReadingSpeed, ReadingSpeedOption>
-
-const DEFAULT_READING_SPEED: ReadingSpeed = 'normal'
-
-function isReadingSpeed(value: unknown): value is ReadingSpeed {
-  return READING_SPEED_OPTIONS.some(option => option.id === value)
+function snapReadingSpeed(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_READING_SPEED
+  const clamped = Math.min(READING_SPEED_MAX, Math.max(READING_SPEED_MIN, value))
+  const steps = Math.round((clamped - READING_SPEED_MIN) / READING_SPEED_STEP)
+  return READING_SPEED_MIN + steps * READING_SPEED_STEP
 }
 
-const readingSpeedPreference = createPreference<ReadingSpeed>({
+const readingSpeedPreference = createPreference<number>({
   key: 'piece:reading-speed',
   defaultValue: DEFAULT_READING_SPEED,
-  parse: raw => (isReadingSpeed(raw) ? raw : DEFAULT_READING_SPEED),
+  parse: raw => (raw === null ? DEFAULT_READING_SPEED : snapReadingSpeed(Number(raw))),
 })
 
 export const setReadingSpeed = readingSpeedPreference.set

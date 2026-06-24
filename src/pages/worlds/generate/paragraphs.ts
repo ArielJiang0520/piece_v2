@@ -30,37 +30,3 @@ export function buildExpandPrefix(text: string, paragraphIndex: number): string 
   const through = parts.slice(0, paragraphIndex + 1).join('')
   return `${through.replace(/\s+$/, '')}\n\n`
 }
-
-// Rewind drops the last paragraph currently on screen (complete or mid-sentence) and
-// keeps everything before it, capped with one blank line so the regenerated beat streams
-// in as a fresh paragraph. Returns '' when there's no earlier paragraph to fall back to.
-export function buildRewindPrefix(text: string): string {
-  const paragraphs = splitParagraphs(text)
-  if (paragraphs.length < 2) return ''
-  const keepThrough = paragraphs[paragraphs.length - 2]
-  return buildExpandPrefix(text, keepThrough.index)
-}
-
-// Index of the end of the paragraph that contains `anchor` — i.e. the position of the
-// next blank-line separator at/after `anchor` in `buffer`. Returns null when that
-// paragraph hasn't been closed yet (the model is still writing it), which is how a
-// deferred fast-forward knows to keep waiting before it cuts.
-export function paragraphEnd(buffer: string, anchor: number): number | null {
-  const rest = buffer.slice(anchor)
-  const match = rest.match(PARAGRAPH_SPLIT_RE)
-  if (!match || match.index === undefined) return null
-  return anchor + match.index
-}
-
-// Fast-forward keeps the paragraph the reveal is currently sitting in, then cuts the
-// rest of the (already-buffered, unrevealed) text. `revealedLength` is the reveal
-// cursor into `buffer`: we extend to the end of the current paragraph (the next blank
-// line at/after the cursor), or keep the whole buffer if that paragraph hasn't closed
-// yet. Trailing whitespace is capped with one blank line so the next beat streams in
-// as a fresh paragraph below.
-export function buildFastForwardPrefix(buffer: string, revealedLength: number): string {
-  const rest = buffer.slice(revealedLength)
-  const match = rest.match(PARAGRAPH_SPLIT_RE)
-  const cut = match && match.index !== undefined ? revealedLength + match.index : buffer.length
-  return `${buffer.slice(0, cut).replace(/\s+$/, '')}\n\n`
-}

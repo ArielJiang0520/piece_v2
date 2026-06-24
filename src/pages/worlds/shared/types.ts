@@ -58,6 +58,7 @@ export interface PromptPiecesResponse {
 
 export interface PieceDetail {
   id: number
+  prompt: string
   body: string
   model: string | null
   provider: string | null

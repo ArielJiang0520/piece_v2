@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, FastForward, Minus, Pause, Play, Plus, Rewind } from 'lucide-react'
+import { ArrowRight, FastForward, Pause, Play, Rewind } from 'lucide-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import Skeleton from '@/components/Skeleton'
 import { useToast } from '@/components/Toast'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useUiText } from '@/i18n'
@@ -12,15 +13,15 @@ import { MODELS, useGenerationModel } from '@/preferences/generationModel'
 import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
 import {
-  READING_SPEED_BY_ID,
-  READING_SPEED_OPTIONS,
+  READING_SPEED_MAX,
+  READING_SPEED_MIN,
   setReadingSpeed,
   useReadingSpeed,
 } from '@/preferences/readingSpeed'
 import GenerateOutput from './components/GenerateOutput'
 import { useGatedReveal } from './hooks/useGatedReveal'
 import { useUnsavedExitGuard } from './hooks/useUnsavedExitGuard'
-import { buildExpandPrefix, buildFastForwardPrefix, buildRewindPrefix, paragraphEnd, splitParagraphs } from './paragraphs'
+import { buildExpandPrefix } from './paragraphs'
 import {
   PIECE_STRIP_LIMIT,
   parseVersionDraft,
@@ -72,13 +73,14 @@ export default function GenerateScreen() {
     phase,
     output,
     error: generationError,
+    errorDetail: generationErrorDetail,
+    notice: generationNotice,
     provider,
     displayComplete,
     generate,
     expand,
     continueStory,
-    fastForward,
-    rewind,
+    regenerate,
     stop,
   } = useGeneration({ worldId: id })
 
@@ -99,7 +101,9 @@ export default function GenerateScreen() {
       apiFetch(`/api/worlds/${id}/prompts/${encodeURIComponent(promptId!)}?limit=${PIECE_STRIP_LIMIT}`) as Promise<PromptPiecesResponse>,
     enabled: needPromptFetch,
   })
-  const promptText = statePrompt || promptDetailQuery.data?.prompt.text || ''
+  // Resume carries no router state, so the prompt comes off the resumed piece itself —
+  // without it, every continuation in resume mode would POST an empty prompt and 400.
+  const promptText = statePrompt || resumePiece?.prompt || promptDetailQuery.data?.prompt.text || ''
 
   const startedRef = useRef(false)
   useEffect(() => {
@@ -213,6 +217,8 @@ export default function GenerateScreen() {
           resumePiece?.model ? MODELS.find(m => m.id === resumePiece.model)?.label ?? resumePiece.model : ''
         }
         error={generationError}
+        errorDetail={generationErrorDetail}
+        notice={generationNotice}
         readingFont={readingFont}
         readingFontSize={readingFontSize}
         mode={resumeMode ? 'resume' : 'generate'}
@@ -222,8 +228,7 @@ export default function GenerateScreen() {
         onExit={handleExit}
         onExpand={priorText => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText })}
         onContinue={priorText => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText })}
-        onFastForward={priorText => fastForward({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText })}
-        onRewind={priorText => rewind({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText })}
+        onRegenerate={priorText => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText })}
       />
       <ConfirmDialog
         open={confirmOpen}
@@ -254,6 +259,8 @@ interface GenerateReaderProps {
   seedProvider: string
   seedModelLabel: string
   error: string
+  errorDetail: ReturnType<typeof useGeneration>['errorDetail']
+  notice: string
   readingFont: ReturnType<typeof useReadingFont>
   readingFontSize: ReturnType<typeof useReadingFontSize>
   mode: 'generate' | 'resume'
@@ -263,8 +270,7 @@ interface GenerateReaderProps {
   onExit: () => void
   onExpand: (priorText: string) => void
   onContinue: (priorText: string) => void
-  onFastForward: (priorText: string) => void
-  onRewind: (priorText: string) => void
+  onRegenerate: (priorText: string) => void
 }
 
 // The reading surface itself: paced reveal, pause/speed, paragraph-expand, save/exit.
@@ -278,6 +284,8 @@ function GenerateReader({
   seedProvider,
   seedModelLabel,
   error,
+  errorDetail,
+  notice,
   readingFont,
   readingFontSize,
   mode,
@@ -287,41 +295,34 @@ function GenerateReader({
   onExit,
   onExpand,
   onContinue,
-  onFastForward,
-  onRewind,
+  onRegenerate,
 }: GenerateReaderProps) {
   const t = useUiText()
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Auto-follow the stream only while the reader is sitting near the bottom. Scrolling up
+  // to re-read an earlier paragraph flips this off so the reveal stops yanking them down;
+  // scrolling back to the bottom re-arms it.
+  const stickToBottomRef = useRef(true)
   const [paused, setPaused] = useState(false)
   const [frozenText, setFrozenText] = useState<string | null>(null)
   const [selectedParagraphIndex, setSelectedParagraphIndex] = useState<number | null>(null)
-  // A fast-forward tapped mid-stream is queued here until the paragraph the reader is on
-  // finishes revealing; `ffAnchorRef` pins where the reader was when they asked.
-  const [pendingFastForward, setPendingFastForward] = useState(false)
-  const ffAnchorRef = useRef(0)
   const [revealEpoch, setRevealEpoch] = useState(0)
   const [baselineRevealed, setBaselineRevealed] = useState(0)
   const [expanded, setExpanded] = useState(false)
   const showingSeed = mode === 'resume' && !expanded
   const readingSpeed = useReadingSpeed()
-  const speedOption = READING_SPEED_BY_ID[readingSpeed]
-
-  const speedIndex = READING_SPEED_OPTIONS.findIndex(o => o.id === readingSpeed)
-  const atSlowest = speedIndex <= 0
-  const atFastest = speedIndex >= READING_SPEED_OPTIONS.length - 1
-  const decreaseSpeed = () => {
-    if (!atSlowest) setReadingSpeed(READING_SPEED_OPTIONS[speedIndex - 1].id)
-  }
-  const increaseSpeed = () => {
-    if (!atFastest) setReadingSpeed(READING_SPEED_OPTIONS[speedIndex + 1].id)
-  }
-  const resetSpeed = () => setReadingSpeed('normal')
+  const speedRatio = (readingSpeed - READING_SPEED_MIN) / (READING_SPEED_MAX - READING_SPEED_MIN)
+  // The slower/faster buttons step in coarser jumps than the underlying snap step so the
+  // full range is a few comfortable taps, not dozens.
+  const SPEED_BUTTON_STEP = 5
+  const slower = () => setReadingSpeed(Math.max(READING_SPEED_MIN, readingSpeed - SPEED_BUTTON_STEP))
+  const faster = () => setReadingSpeed(Math.min(READING_SPEED_MAX, readingSpeed + SPEED_BUTTON_STEP))
 
   const { revealedText, revealComplete } = useGatedReveal({
     buffer: output,
     backendComplete: displayComplete,
     active: !showingSeed && !paused && !error && frozenText === null,
-    unitsPerSecond: speedOption.unitsPerSecond,
+    unitsPerSecond: readingSpeed,
     revealEpoch,
     baselineRevealed,
   })
@@ -357,7 +358,7 @@ function GenerateReader({
   }
 
   // Per-paragraph continue: keep everything through the tapped paragraph, drop all the
-  // text below it, and regenerate from there. Uses the rewind path (system + prompt +
+  // text below it, and regenerate from there. Uses the regenerate path (system + prompt +
   // kept text as an assistant prefill, no special instruction) so the model just picks
   // up the story from that cut point.
   const handleContinueFrom = (paragraphIndex: number) => {
@@ -368,7 +369,7 @@ function GenerateReader({
     setPaused(false)
     setSelectedParagraphIndex(null)
     setExpanded(true)
-    onRewind(priorText)
+    onRegenerate(priorText)
   }
 
   // Continue picks up from the full existing text (not a single paragraph) and resumes
@@ -384,80 +385,21 @@ function GenerateReader({
     onContinue(priorText)
   }
 
-  // Fast-forward is available whenever something is streaming (initial run, expansion,
-  // or continuation): keep the current paragraph, drop the rest of the buffered text,
-  // and have the model skip to the next beat.
-  const canFastForward = !finished && !error && displayText.length > 0
-
-  const runFastForward = (priorText: string) => {
-    if (!priorText.trim()) return
-    setBaselineRevealed(priorText.length)
-    setRevealEpoch(epoch => epoch + 1)
-    setFrozenText(null)
-    setPaused(false)
-    setSelectedParagraphIndex(null)
-    setExpanded(true)
-    onFastForward(priorText)
-  }
-
-  // Rewind steps back: drop the last paragraph on screen (partial or whole) and
-  // regenerate from there. Available while streaming or paused, as long as there's an
-  // earlier paragraph to fall back to.
-  const canRewind = canPause && splitParagraphs(displayText).length >= 2
-
-  const handleRewind = () => {
-    const priorText = buildRewindPrefix(displayText)
-    if (!priorText) return
-    setBaselineRevealed(priorText.length)
-    setRevealEpoch(epoch => epoch + 1)
-    setFrozenText(null)
-    setPaused(false)
-    setSelectedParagraphIndex(null)
-    setPendingFastForward(false)
-    setExpanded(true)
-    onRewind(priorText)
-  }
-
-  const handleFastForward = () => {
-    // Paused: skip immediately from where the reader is sitting.
-    if (paused) {
-      setPendingFastForward(false)
-      runFastForward(buildFastForwardPrefix(output, displayText.length))
-      return
-    }
-    // Streaming: queue the skip (or cancel one already queued). It fires once the
-    // paragraph the reader is currently on finishes revealing.
-    if (pendingFastForward) {
-      setPendingFastForward(false)
-      return
-    }
-    ffAnchorRef.current = revealedTextRef.current.length
-    setPendingFastForward(true)
-  }
-
   const togglePause = () => {
     setPaused(p => !p)
-    setPendingFastForward(false)
   }
-
-  // A queued mid-stream fast-forward waits until the reader's paragraph is fully written
-  // (a separator appears after the anchor, or the stream ends) and fully revealed, then
-  // cuts there and asks the model to move on.
-  useEffect(() => {
-    if (!pendingFastForward) return
-    const cut = paragraphEnd(output, ffAnchorRef.current) ?? (displayComplete ? output.length : null)
-    if (cut === null) return // current paragraph still being written
-    if (revealedText.length < cut) return // reader hasn't finished revealing it yet
-    setPendingFastForward(false)
-    runFastForward(buildFastForwardPrefix(output, cut))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingFastForward, output, revealedText, displayComplete])
 
   useEffect(() => {
     if (paused || finished) return
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight
   }, [displayText, paused, finished])
+
+  // A new run (expand/continue/regenerate, or the initial generation) re-arms auto-follow
+  // so the fresh stream tracks again even if the reader had scrolled up.
+  useEffect(() => {
+    stickToBottomRef.current = true
+  }, [revealEpoch])
 
   return createPortal(
     <div
@@ -487,23 +429,70 @@ function GenerateReader({
           arrives. While a resumed piece's seed is on screen it shows that piece's saved
           model/provider; a fresh generation then takes over. */}
       <div className="flex shrink-0 items-center justify-center gap-2 border-b border-rose-line/70 bg-paper px-4 py-1.5 t-meta">
-        <span className="text-ink-2">{showingSeed ? seedModelLabel || modelLabel : modelLabel}</span>
-        {(showingSeed ? seedProvider : provider) && (
+        {notice && !error ? (
+          <span className="text-rose-deep">{notice}</span>
+        ) : (
           <>
-            <span aria-hidden="true" className="text-ink-4">·</span>
-            <span>{showingSeed ? seedProvider : provider}</span>
+            <span className="text-ink-2">{showingSeed ? seedModelLabel || modelLabel : modelLabel}</span>
+            {(showingSeed ? seedProvider : provider) ? (
+              <>
+                <span aria-hidden="true" className="text-ink-4">·</span>
+                <span>{showingSeed ? seedProvider : provider}</span>
+              </>
+            ) : phase !== 'idle' ? (
+              // Provider isn't resolved until the stream opens (notably after an
+              // expand/continue, which restarts the OpenRouter session). Hold its slot
+              // with a pulsing placeholder so the wait is visible.
+              <>
+                <span aria-hidden="true" className="text-ink-4">·</span>
+                <Skeleton className="h-3 w-16" />
+              </>
+            ) : null}
           </>
         )}
       </div>
 
       <div
         ref={scrollRef}
+        onScroll={() => {
+          const el = scrollRef.current
+          if (!el) return
+          stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+        }}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4"
       >
         {error ? (
-          <p className="mx-auto mt-[30vh] max-w-md rounded-md border border-rose/40 bg-rose-pale px-3 py-2 text-center text-sm text-rose-deep">
-            {error}
-          </p>
+          <div className="mx-auto mt-[30vh] max-w-md rounded-md border border-rose/40 bg-rose-pale px-3 py-2 text-center text-sm text-rose-deep">
+            <p>{error}</p>
+            {errorDetail && (
+              <dl className="mt-2 space-y-0.5 text-left text-xs text-rose-deep/80">
+                {errorDetail.status != null && (
+                  <div className="flex gap-1.5">
+                    <dt className="shrink-0 font-medium">Status</dt>
+                    <dd className="break-words">{errorDetail.status}{errorDetail.errorType ? ` · ${errorDetail.errorType}` : ''}</dd>
+                  </div>
+                )}
+                {errorDetail.providerName && (
+                  <div className="flex gap-1.5">
+                    <dt className="shrink-0 font-medium">Provider</dt>
+                    <dd className="break-words">{errorDetail.providerName}</dd>
+                  </div>
+                )}
+                {errorDetail.retryAfterSeconds != null && (
+                  <div className="flex gap-1.5">
+                    <dt className="shrink-0 font-medium">Retry after</dt>
+                    <dd>{errorDetail.retryAfterSeconds}s</dd>
+                  </div>
+                )}
+                {errorDetail.raw && (
+                  <div className="flex gap-1.5">
+                    <dt className="shrink-0 font-medium">Upstream</dt>
+                    <dd className="break-words font-mono">{errorDetail.raw}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
+          </div>
         ) : (
           <GenerateOutput
             output={displayText}
@@ -519,14 +508,14 @@ function GenerateReader({
                 <button
                   type="button"
                   onClick={() => handleExpand(index)}
-                  className="inline-flex h-8 items-center justify-center rounded-full bg-rose px-3.5 font-serif-zh text-[13px] italic leading-none text-white transition-opacity active:opacity-80"
+                  className="inline-flex h-8 items-center justify-center rounded-full bg-paper-2 px-3.5 font-serif-zh text-[13px] italic leading-none text-rose-deep transition-colors active:bg-paper-3"
                 >
                   {t.expand}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleContinueFrom(index)}
-                  className="inline-flex h-8 items-center justify-center rounded-full bg-rose px-3.5 font-serif-zh text-[13px] italic leading-none text-white transition-opacity active:opacity-80"
+                  className="inline-flex h-8 items-center justify-center rounded-full bg-paper-2 px-3.5 font-serif-zh text-[13px] italic leading-none text-rose-deep transition-colors active:bg-paper-3"
                 >
                   {t.continueWriting}
                 </button>
@@ -555,54 +544,35 @@ function GenerateReader({
             </div>
           ) : (
             <>
-              {/* Thin speed row: wide minus/plus flanking a narrow center label, each fully tappable, split by lines. */}
-              <div className="grid grid-cols-[2fr_1fr_2fr] items-stretch divide-x divide-rose-line/50 border-b border-rose-line/50">
+              {/* Current reading speed as a thin fill bar sitting on top of the transport. */}
+              <div
+                role="slider"
+                aria-label={t.speed}
+                aria-valuemin={READING_SPEED_MIN}
+                aria-valuemax={READING_SPEED_MAX}
+                aria-valuenow={readingSpeed}
+                className="h-0.5 w-full bg-rose-line"
+              >
+                <div className="h-full bg-rose transition-[width]" style={{ width: `${speedRatio * 100}%` }} />
+              </div>
+
+              {/* Transport row: pause/resume dead-center for the left thumb, with the
+                  slower/faster speed steppers flanking it. */}
+              <div className="flex items-center justify-center gap-6 px-4 py-3">
                 <button
                   type="button"
                   aria-label={t.slower}
-                  disabled={atSlowest}
-                  onClick={decreaseSpeed}
-                  className="flex h-11 w-full items-center justify-center text-ink-3 transition-opacity active:text-ink active:opacity-70 disabled:opacity-30 disabled:active:text-ink-3 disabled:active:opacity-30"
+                  disabled={readingSpeed <= READING_SPEED_MIN}
+                  onClick={slower}
+                  className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity disabled:opacity-30 active:text-ink active:opacity-70"
                 >
-                  <Minus aria-hidden="true" className="h-5 w-5" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={t.speed}
-                  onClick={resetSpeed}
-                  className="flex h-11 w-full items-center justify-center font-serif-zh text-[15px] italic leading-none text-ink-3 transition-opacity active:text-ink active:opacity-70"
-                >
-                  {speedOption.label}
-                </button>
-                <button
-                  type="button"
-                  aria-label={t.faster}
-                  disabled={atFastest}
-                  onClick={increaseSpeed}
-                  className="flex h-11 w-full items-center justify-center text-ink-3 transition-opacity active:text-ink active:opacity-70 disabled:opacity-30 disabled:active:text-ink-3 disabled:active:opacity-30"
-                >
-                  <Plus aria-hidden="true" className="h-5 w-5" />
-                </button>
-              </div>
-
-              {/* Transport row: pause/resume dead-center for the left thumb, rewind and
-                  fast-forward flanking it symmetrically. Rewind drops the last paragraph
-                  and regenerates from there. */}
-              <div className="grid grid-cols-3 items-center px-4 py-3">
-                <button
-                  type="button"
-                  aria-label={t.rewind}
-                  disabled={!canRewind}
-                  onClick={handleRewind}
-                  className="inline-flex h-11 w-11 items-center justify-center justify-self-end text-ink-3 transition-opacity active:text-ink active:opacity-70 disabled:opacity-30 disabled:active:text-ink-3 disabled:active:opacity-30"
-                >
-                  <Rewind aria-hidden="true" className="h-6 w-6 fill-current" />
+                  <Rewind aria-hidden="true" className="h-5 w-5 fill-current" />
                 </button>
                 <button
                   type="button"
                   aria-label={paused ? t.resume : t.pause}
                   onClick={togglePause}
-                  className="inline-flex h-11 w-11 items-center justify-center justify-self-center text-ink-3 transition-opacity active:text-ink active:opacity-70"
+                  className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity active:text-ink active:opacity-70"
                 >
                   {paused
                     ? <Play aria-hidden="true" className="h-6 w-6 fill-current" />
@@ -610,15 +580,12 @@ function GenerateReader({
                 </button>
                 <button
                   type="button"
-                  aria-label={t.fastForward}
-                  aria-pressed={pendingFastForward}
-                  disabled={!canFastForward}
-                  onClick={handleFastForward}
-                  className={`inline-flex h-11 w-11 items-center justify-center justify-self-start transition-opacity active:opacity-70 disabled:opacity-30 disabled:active:opacity-30 ${
-                    pendingFastForward ? 'text-rose' : 'text-ink-3 active:text-ink disabled:active:text-ink-3'
-                  }`}
+                  aria-label={t.faster}
+                  disabled={readingSpeed >= READING_SPEED_MAX}
+                  onClick={faster}
+                  className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity disabled:opacity-30 active:text-ink active:opacity-70"
                 >
-                  <FastForward aria-hidden="true" className="h-6 w-6 fill-current" />
+                  <FastForward aria-hidden="true" className="h-5 w-5 fill-current" />
                 </button>
               </div>
             </>

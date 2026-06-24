@@ -10,6 +10,7 @@ import WorldPrompts from './pages/worlds/prompts/WorldPrompts'
 import WorldAbout from './pages/worlds/about/WorldAbout'
 import WorldEditor from './pages/worlds/editor/WorldEditor'
 import PromptPage from './pages/worlds/prompt/PromptPage'
+import MixPromptsScreen from './pages/worlds/mix/MixPromptsScreen'
 import GenerateScreen from './pages/worlds/generate/GenerateScreen'
 
 function RootLayout() {
@@ -48,6 +49,7 @@ const router = createBrowserRouter([
           { path: '/worlds', element: <WorldList /> },
           { path: '/worlds/new', element: <WorldEditor /> },
           { path: '/worlds/:id', element: <WorldPrompts /> },
+          { path: '/worlds/:id/prompt/mix', element: <MixPromptsScreen /> },
           { path: '/worlds/:id/about', element: <WorldAbout /> },
           { path: '/worlds/:id/edit', element: <WorldEditor /> },
           { path: '/worlds/:id/prompt/new', element: <PromptPage /> },

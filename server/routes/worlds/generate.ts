@@ -14,7 +14,7 @@ function ownerKey(userId: number, worldId: number) {
   return `${userId}:${worldId}`
 }
 
-function buildSystemPrompt(worldBody: string): string {
+function buildSystemPrompt(worldBody: string, continuing: boolean): string {
   const sections: string[] = []
   if (worldBody.trim()) {
     sections.push(`# World setting\n${worldBody.trim()}`)
@@ -23,6 +23,14 @@ function buildSystemPrompt(worldBody: string): string {
   sections.push(
     `# Task\nThe user will give you a prompt. Using the world setting above, write a story that responds to the user's prompt while staying faithful to the world.`,
   )
+
+  // When continuing, the assistant message holds the story so far and the user turn asks
+  // to extend it. Spell that out so the model never re-reads it as a brief to restart.
+  if (continuing) {
+    sections.push(
+      `# Continuation\nThe assistant message already contains the story so far. Your job is to continue it from its final sentence as the same narrator, in the same scene, language, voice, and tense. Do NOT start over, recap, summarize, or repeat any wording that already appears — write only what happens next.`,
+    )
+  }
 
   sections.push(
     `# Language\nRegardless of the language of these instructions, always reply in the same language as the user's prompt.`,
@@ -38,34 +46,96 @@ const EXPANSION_INSTRUCTION = [
 ].join('\n')
 
 const CONTINUATION_INSTRUCTION = [
-  'Continue the story from exactly where the text above leaves off, advancing it naturally toward the original prompt.',
-  'Do NOT repeat, summarize, or rewrite any text already written. Pick up seamlessly from the last sentence, beginning a new paragraph, so the new prose reads as a natural continuation.',
-  'Match the existing language, voice, tense, and tone exactly.',
+  'Continue the story above from exactly where it stops — pick up at the very next beat.',
+  'Do NOT restart, retell, summarize, or repeat any text already written above.',
+  'Write only what happens next, matching the existing scene, language, voice, tense, and tone.',
 ].join('\n')
 
-const FAST_FORWARD_INSTRUCTION = [
-  'The user finds the pace too slow. If the final paragraph above is unfinished, bring it to a close in a sentence or two.',
-  'Then move the story forward to the immediately next natural action or beat that the original prompt calls for. Move on to the next scene.',
-  'Pick up seamlessly from the last sentence, beginning a new paragraph.',
-  'Match the existing language, voice, tense, and tone exactly.',
-].join('\n')
+// Structured shape mirrored to the client so the UI can show a real debug message
+// (HTTP status, which upstream provider failed, retry timing) instead of a bare string.
+// See https://openrouter.ai/docs/api/reference/errors-and-debugging
+interface OpenRouterErrorInfo {
+  status: number
+  message: string
+  providerName?: string
+  errorType?: string
+  retryAfterSeconds?: number
+  raw?: string
+}
 
-async function readOpenRouterError(response: Response): Promise<string> {
-  const fallback = `OpenRouter ${response.status} ${response.statusText}`
+function stringifyRaw(raw: unknown): string | undefined {
+  if (raw == null) return undefined
+  return typeof raw === 'string' ? raw : JSON.stringify(raw)
+}
+
+// OpenRouter returns Retry-After on 429s; honor it before retrying. Supports both the
+// delta-seconds and HTTP-date forms.
+function readRetryAfter(response: Response): number | undefined {
+  const header = response.headers.get('retry-after')
+  if (!header) return undefined
+  const seconds = Number(header)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds)
+  const when = Date.parse(header)
+  if (!Number.isNaN(when)) return Math.max(0, Math.ceil((when - Date.now()) / 1000))
+  return undefined
+}
+
+async function parseOpenRouterError(response: Response): Promise<OpenRouterErrorInfo> {
+  const info: OpenRouterErrorInfo = {
+    status: response.status,
+    message: `OpenRouter ${response.status} ${response.statusText}`.trim(),
+    retryAfterSeconds: readRetryAfter(response),
+  }
   const rawBody = await response.text().catch(() => '')
-  if (!rawBody) return fallback
+  if (!rawBody) return info
 
   try {
     const parsed = JSON.parse(rawBody) as any
-    const message = parsed?.error?.message
-      ?? parsed?.error?.metadata?.raw
-      ?? parsed?.error
-      ?? parsed?.message
-    return typeof message === 'string' ? message : rawBody
+    const err = parsed?.error
+    const metadata = err?.metadata
+    const message = err?.message ?? metadata?.raw ?? parsed?.message
+    if (typeof message === 'string' && message) info.message = message
+    if (typeof metadata?.provider_name === 'string') info.providerName = metadata.provider_name
+    if (typeof metadata?.error_type === 'string') info.errorType = metadata.error_type
+    info.raw = stringifyRaw(metadata?.raw)
   } catch {
-    return rawBody
+    info.raw = rawBody
+  }
+  return info
+}
+
+// Mid-stream errors arrive as an SSE payload with the same error/metadata shape.
+function describeStreamError(error: any, fallbackStatus: number): OpenRouterErrorInfo {
+  const metadata = error?.metadata
+  return {
+    status: typeof error?.code === 'number' ? error.code : fallbackStatus,
+    message: typeof error?.message === 'string' ? error.message : JSON.stringify(error),
+    providerName: typeof metadata?.provider_name === 'string' ? metadata.provider_name : undefined,
+    errorType: typeof metadata?.error_type === 'string' ? metadata.error_type : undefined,
+    raw: stringifyRaw(metadata?.raw),
   }
 }
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal.aborted) return resolve()
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+// 429 (and transient 502/503) are worth retrying inside the slot — we keep holding the
+// single OpenRouter session so nothing else opens a competing socket while we back off.
+const RETRYABLE_STATUSES = new Set([429, 502, 503])
+const MAX_GENERATION_ATTEMPTS = 3
+const MAX_RETRY_WAIT_MS = 20_000
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
@@ -75,21 +145,9 @@ function buildMessages(args: {
   priorTextValue: string
   isExpansion: boolean
   isContinuation: boolean
-  isFastForward: boolean
-  isRewind: boolean
 }): ChatMessage[] {
-  const { systemPrompt, promptText, priorTextValue, isExpansion, isContinuation, isFastForward, isRewind } = args
+  const { systemPrompt, promptText, priorTextValue, isExpansion, isContinuation } = args
   const system: ChatMessage = { role: 'system', content: systemPrompt }
-
-  // Rewind dropped the last paragraph; hand the kept text back as an assistant prefill
-  // and let the model continue normally — no instruction, just system + prompt + story.
-  if (isRewind) {
-    return [
-      system,
-      { role: 'user', content: promptText },
-      { role: 'assistant', content: priorTextValue },
-    ]
-  }
 
   // Expansion intentionally omits the original user prompt: the model should loop
   // on and elaborate the last highlighted paragraph only, not continue the story
@@ -102,15 +160,17 @@ function buildMessages(args: {
     ]
   }
 
-  // Continuation and fast-forward both keep the original prompt + the full existing
-  // text so the model resumes the same story; they differ only in the final
-  // instruction (push forward vs. close out the beat and skip ahead).
-  if (isContinuation || isFastForward) {
+  // Continuation — both the whole-story "Continue" and the per-paragraph cut. Mirrors the
+  // (working) expansion shape: story so far as an assistant message, then a user turn that
+  // asks to extend it. We deliberately drop the original prompt turn — on these models a
+  // standalone "write a story about X" user message is what made the model restart from
+  // scratch, and ending the request on an assistant message (prefill) restarts too. The
+  // story itself carries all the context the continuation needs.
+  if (isContinuation) {
     return [
       system,
-      { role: 'user', content: promptText },
       { role: 'assistant', content: priorTextValue },
-      { role: 'user', content: isFastForward ? FAST_FORWARD_INSTRUCTION : CONTINUATION_INSTRUCTION },
+      { role: 'user', content: CONTINUATION_INSTRUCTION },
     ]
   }
 
@@ -123,22 +183,21 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const systemPrompt = buildSystemPrompt(world.body)
-
   const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, mode, priorText } = await c.req.json()
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
   const rawPrior = typeof priorText === 'string' ? priorText : ''
-  // Instruction-driven modes trim the kept text; rewind feeds it back as an assistant
-  // prefill, so it keeps the trailing blank line so the model continues a fresh paragraph.
-  const priorTextValue = mode === 'rewind'
+  // Continuation (whole-story "continue" and per-paragraph "regenerate") feeds the kept
+  // text back as an assistant prefill, so it keeps the trailing blank line and the model
+  // extends from there; expansion trims and re-instructs against the last paragraph.
+  const priorTextValue = (mode === 'continue' || mode === 'regenerate')
     ? rawPrior.replace(/^\s+/, '')
-    : (mode === 'expand' || mode === 'continue' || mode === 'fast-forward') ? rawPrior.trim() : ''
+    : mode === 'expand' ? rawPrior.trim() : ''
   const isExpansion = mode === 'expand' && priorTextValue.length > 0
-  const isContinuation = mode === 'continue' && priorTextValue.length > 0
-  const isFastForward = mode === 'fast-forward' && priorTextValue.length > 0
-  const isRewind = mode === 'rewind' && priorTextValue.length > 0
+  const isContinuation = (mode === 'continue' || mode === 'regenerate') && priorTextValue.length > 0
+
+  const systemPrompt = buildSystemPrompt(world.body, isContinuation)
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
@@ -157,8 +216,6 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     priorTextValue,
     isExpansion,
     isContinuation,
-    isFastForward,
-    isRewind,
   })
 
   return streamSSE(c, async (stream) => {
@@ -190,35 +247,80 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
           provider.ignore = BLACKLISTED_PROVIDERS
         }
 
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: modelOption.id,
-            temperature,
-            reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
-            stream: true,
-            provider,
-            messages,
-          }),
-        })
+        let response: Response | null = null
+        for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+          if (controller.signal.aborted) return
 
-        if (!response.ok || !response.body) {
-          const message = await readOpenRouterError(response)
+          // One log line per actual OpenRouter request, so a burst of requests (rapid
+          // taps, StrictMode double-fire, retries) is visible in the server console as
+          // a cluster of timestamps for the same owner.
+          console.log('[OpenRouter request]', new Date().toISOString(), {
+            owner: key,
+            mode: mode ?? 'fresh',
+            attempt,
+            model: modelOption.id,
+          })
+
+          response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: modelOption.id,
+              temperature,
+              reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
+              stream: true,
+              provider,
+              messages,
+            }),
+          })
+
+          if (response.ok && response.body) break
+
+          const info = await parseOpenRouterError(response)
+          // Don't let retries amplify a *frequency* limit: a 429 is retried only when the
+          // provider handed us a Retry-After to honor (so we wait, not hammer); transient
+          // 5xx get a short backoff. A 429 with no Retry-After surfaces immediately.
+          const retrySignalled = info.status === 429
+            ? info.retryAfterSeconds != null
+            : RETRYABLE_STATUSES.has(info.status)
+          const canRetry = retrySignalled
+            && attempt < MAX_GENERATION_ATTEMPTS
+            && !controller.signal.aborted
           console.error('[OpenRouter generate error]', {
-            status: response.status,
-            statusText: response.statusText,
+            attempt,
+            willRetry: canRetry,
             model: modelOption.id,
             provider,
-            message,
+            ...info,
           })
-          await stream.writeSSE({ data: JSON.stringify({ type: 'error', message }) })
-          return
+
+          if (!canRetry) {
+            await stream.writeSSE({ data: JSON.stringify({ type: 'error', ...info }) })
+            return
+          }
+
+          // Honor Retry-After when present, otherwise a gentle exponential backoff.
+          const waitMs = Math.min(
+            info.retryAfterSeconds != null ? info.retryAfterSeconds * 1000 : attempt * 2000,
+            MAX_RETRY_WAIT_MS,
+          )
+          await stream.writeSSE({
+            data: JSON.stringify({
+              type: 'retry',
+              attempt,
+              status: info.status,
+              providerName: info.providerName,
+              waitSeconds: Math.ceil(waitMs / 1000),
+            }),
+          })
+          await sleep(waitMs, controller.signal)
         }
+
+        if (!response || !response.ok || !response.body) return
 
         let providerEmitted = false
         for await (const data of readServerSentEvents(response.body)) {
@@ -235,15 +337,13 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
             }
 
             if (parsed?.error) {
-              const message = typeof parsed.error?.message === 'string'
-                ? parsed.error.message
-                : JSON.stringify(parsed.error)
+              const info = describeStreamError(parsed.error, 502)
               console.error('[OpenRouter generate stream error]', {
                 model: modelOption.id,
                 provider,
                 error: parsed.error,
               })
-              await stream.writeSSE({ data: JSON.stringify({ type: 'error', message }) })
+              await stream.writeSSE({ data: JSON.stringify({ type: 'error', ...info }) })
               return
             }
 
