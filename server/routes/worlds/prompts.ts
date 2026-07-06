@@ -17,6 +17,7 @@ promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
     .select({
       id: prompts.id,
       cluster_id: prompts.cluster_id,
+      similar_to_prompt_id: prompts.similar_to_prompt_id,
       text: prompts.text,
       piece_count: prompts.piece_count,
       created_at: prompts.created_at,

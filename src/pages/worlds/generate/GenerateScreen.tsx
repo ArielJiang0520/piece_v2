@@ -50,10 +50,16 @@ export default function GenerateScreen() {
   const readingFontSize = useReadingFontSize()
 
   const lockedMode = !!promptId
-  const routeState = location.state as { prompt?: unknown; versionDraft?: unknown } | null
+  const routeState = location.state as { prompt?: unknown; versionDraft?: unknown; similarToPromptId?: unknown; generated?: unknown } | null
   const versionDraft = parseVersionDraft(routeState?.versionDraft)
   const statePrompt = typeof routeState?.prompt === 'string' ? routeState.prompt : ''
   const versionSourcePromptId = !lockedMode ? versionDraft?.sourcePromptId ?? null : null
+  // Ancestry seed from the "Similar prompts" page — only meaningful for a fresh prompt.
+  const similarToPromptId = !lockedMode && typeof routeState?.similarToPromptId === 'number'
+    ? routeState.similarToPromptId
+    : null
+  // A fresh prompt picked from AI ideas ("Spark ideas") — earns the "Generated" tag on save.
+  const generated = !lockedMode && routeState?.generated === true
 
   const resumeParam = searchParams.get('resume')
   const resumePieceId = resumeParam ? Number(resumeParam) : null
@@ -67,6 +73,8 @@ export default function GenerateScreen() {
     : {
         draftPrompt: statePrompt,
         versionDraft: versionDraft ? { ...versionDraft, promptText: statePrompt } : undefined,
+        similarToPromptId,
+        generated,
       }
 
   const {
@@ -139,6 +147,8 @@ export default function GenerateScreen() {
           prompt: promptText,
           promptId: lockedMode && promptId ? Number(promptId) : undefined,
           versionSourcePromptId,
+          similarToPromptId: similarToPromptId ?? undefined,
+          generated: generated || undefined,
           body: text,
           model,
           provider: provider || undefined,
@@ -152,6 +162,19 @@ export default function GenerateScreen() {
         provider: provider || null,
         created_at: Date.now(),
       })
+      // Prepend the new piece to the cached list so the prompt page (which remounts on
+      // the stale-while-revalidate cache) already shows it as the latest and selects it
+      // by default, instead of sticking on the previously-latest piece until refetch.
+      queryClient.setQueryData<PromptPiecesResponse>(
+        ['prompt', id, String(result.promptId), 'generate', PIECE_STRIP_LIMIT],
+        prev =>
+          !prev || prev.pieces.some(p => p.id === result.pieceId)
+            ? prev
+            : {
+                prompt: { ...prev.prompt, piece_count: result.pieceCount },
+                pieces: [{ id: result.pieceId }, ...prev.pieces].slice(0, PIECE_STRIP_LIMIT),
+              },
+      )
       queryClient.invalidateQueries({ queryKey: ['prompt', id, String(result.promptId)] })
       queryClient.invalidateQueries({ queryKey: ['world', id] })
       queryClient.invalidateQueries({ queryKey: ['world-clusters', id] })
@@ -407,28 +430,10 @@ function GenerateReader({
       role="dialog"
       aria-modal="true"
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-rose-line/70 bg-paper px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
-        <button
-          type="button"
-          onClick={onExit}
-          className="font-serif-zh text-[13px] italic leading-none text-ink-3 underline decoration-ink-4/50 underline-offset-4 transition-colors active:text-ink active:opacity-70"
-        >
-          {t.exitWithoutSaving}
-        </button>
-        <button
-          type="button"
-          disabled={!canSave}
-          onClick={() => (mode === 'resume' ? onSaveOverwrite(displayText) : onSave(displayText))}
-          className="inline-flex h-9 items-center justify-center rounded-full bg-rose px-4 font-serif-zh text-[14px] italic leading-none text-white transition-opacity disabled:opacity-30 active:opacity-80"
-        >
-          {t.saveAndExit}
-        </button>
-      </div>
-
       {/* Thin pinned meta bar: the model in play, and the resolved provider once it
           arrives. While a resumed piece's seed is on screen it shows that piece's saved
           model/provider; a fresh generation then takes over. */}
-      <div className="flex shrink-0 items-center justify-center gap-2 border-b border-rose-line/70 bg-paper px-4 py-1.5 t-meta">
+      <div className="flex shrink-0 items-center justify-center gap-2 border-b border-rose-line/70 bg-paper px-4 py-1.5 pt-[calc(0.375rem+env(safe-area-inset-top))] t-meta">
         {notice && !error ? (
           <span className="text-rose-deep">{notice}</span>
         ) : (
@@ -525,13 +530,29 @@ function GenerateReader({
         )}
       </div>
 
-      {!error && (canContinue || canPause) && (
-        <div className="shrink-0 border-t border-rose-line/70 bg-paper pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-          {canContinue ? (
-            // A finished read swaps the transport for Continue, which feeds the existing
-            // text + prompt back for more story. Speed/transport are gone once nothing
-            // is revealing, so this is the whole bar.
-            <div className="flex items-center px-4 py-4">
+      {/* One control bar for everything: transport (or Continue) sits on the left for the
+          thumb; the exit actions stay anchored on the right. */}
+      <div className="shrink-0 border-t border-rose-line/70 bg-paper pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+        {/* Current reading speed as a thin fill bar, only while text is still revealing. */}
+        {!error && canPause && (
+          <div
+            role="slider"
+            aria-label={t.speed}
+            aria-valuemin={READING_SPEED_MIN}
+            aria-valuemax={READING_SPEED_MAX}
+            aria-valuenow={readingSpeed}
+            className="h-0.5 w-full bg-rose-line"
+          >
+            <div className="h-full bg-rose transition-[width]" style={{ width: `${speedRatio * 100}%` }} />
+          </div>
+        )}
+
+        <div className="flex items-center justify-between px-4 py-3">
+          {/* Left: speed steppers + pause while revealing, or Continue once finished. */}
+          <div className="flex items-center gap-2">
+            {!error && canContinue ? (
+              // A finished read swaps the transport for Continue, which feeds the existing
+              // text + prompt back for more story.
               <button
                 type="button"
                 aria-label={t.continueWriting}
@@ -541,24 +562,8 @@ function GenerateReader({
                 <ArrowRight aria-hidden="true" className="h-5 w-5" />
                 {t.continueWriting}
               </button>
-            </div>
-          ) : (
-            <>
-              {/* Current reading speed as a thin fill bar sitting on top of the transport. */}
-              <div
-                role="slider"
-                aria-label={t.speed}
-                aria-valuemin={READING_SPEED_MIN}
-                aria-valuemax={READING_SPEED_MAX}
-                aria-valuenow={readingSpeed}
-                className="h-0.5 w-full bg-rose-line"
-              >
-                <div className="h-full bg-rose transition-[width]" style={{ width: `${speedRatio * 100}%` }} />
-              </div>
-
-              {/* Transport row: pause/resume dead-center for the left thumb, with the
-                  slower/faster speed steppers flanking it. */}
-              <div className="flex items-center justify-center gap-6 px-4 py-3">
+            ) : !error && canPause ? (
+              <>
                 <button
                   type="button"
                   aria-label={t.slower}
@@ -587,11 +592,30 @@ function GenerateReader({
                 >
                   <FastForward aria-hidden="true" className="h-5 w-5 fill-current" />
                 </button>
-              </div>
-            </>
-          )}
+              </>
+            ) : null}
+          </div>
+
+          {/* Right: discard and save & exit, always reachable. */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onExit}
+              className="font-serif-zh text-[13px] italic leading-none text-ink-3 underline decoration-ink-4/50 underline-offset-4 transition-colors active:text-ink active:opacity-70"
+            >
+              {t.exitWithoutSaving}
+            </button>
+            <button
+              type="button"
+              disabled={!canSave}
+              onClick={() => (mode === 'resume' ? onSaveOverwrite(displayText) : onSave(displayText))}
+              className="inline-flex h-9 items-center justify-center rounded-full bg-rose px-4 font-serif-zh text-[14px] italic leading-none text-white transition-opacity disabled:opacity-30 active:opacity-80"
+            >
+              {t.saveAndExit}
+            </button>
+          </div>
         </div>
-      )}
+      </div>
     </div>,
     document.body,
   )

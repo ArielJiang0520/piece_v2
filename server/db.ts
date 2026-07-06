@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { integer, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 const dbPath = process.env.DB_PATH || process.env.DEV_DB_PATH || './piece.db';
 const sqlite = new Database(dbPath);
@@ -55,10 +55,12 @@ sqlite.run(`
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
     cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE SET NULL,
+    similar_to_prompt_id INTEGER REFERENCES prompts(id) ON DELETE SET NULL,
     text TEXT NOT NULL,
     embedding TEXT,
     piece_count INTEGER NOT NULL DEFAULT 0,
     is_favorite INTEGER NOT NULL DEFAULT 0,
+    is_generated INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -146,17 +148,19 @@ function rebuildPromptsTable() {
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
         cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE SET NULL,
+        similar_to_prompt_id INTEGER REFERENCES prompts(id) ON DELETE SET NULL,
         text TEXT NOT NULL,
         embedding TEXT,
         piece_count INTEGER NOT NULL DEFAULT 0,
         is_favorite INTEGER NOT NULL DEFAULT 0,
+        is_generated INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
     `)
     sqlite.run(`
-      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, text, embedding, piece_count, is_favorite, created_at, updated_at)
-      SELECT id, user_id, world_id, cluster_id, text, embedding, piece_count, is_favorite, created_at, updated_at FROM prompts;
+      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, created_at, updated_at)
+      SELECT id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, created_at, updated_at FROM prompts;
     `)
     sqlite.run('DROP TABLE prompts;')
     sqlite.run('ALTER TABLE prompts_new RENAME TO prompts;')
@@ -222,6 +226,8 @@ function dropColumnIfPresent(table: string, column: string) {
 addColumnIfMissing('worlds', 'is_example', 'is_example INTEGER NOT NULL DEFAULT 0')
 addColumnIfMissing('world_versions', 'restored_from_version_id', 'restored_from_version_id INTEGER')
 addColumnIfMissing('pieces', 'provider', 'provider TEXT')
+addColumnIfMissing('prompts', 'similar_to_prompt_id', 'similar_to_prompt_id INTEGER REFERENCES prompts(id)')
+addColumnIfMissing('prompts', 'is_generated', 'is_generated INTEGER NOT NULL DEFAULT 0')
 sqlite.run('DROP INDEX IF EXISTS idx_pieces_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_prompts_world_version;')
 dropColumnIfPresent('prompts', 'world_version_id')
@@ -244,6 +250,7 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_prompts_world_updated ON prompts(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster ON prompts(cluster_id);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster_created ON prompts(cluster_id, created_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_prompts_similar_to ON prompts(similar_to_prompt_id);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_updated ON prompt_clusters(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_pieces ON prompt_clusters(user_id, world_id, piece_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_variations ON prompt_clusters(user_id, world_id, prompt_count DESC, updated_at DESC);
@@ -330,10 +337,12 @@ export const prompts = sqliteTable('prompts', {
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
   cluster_id: integer('cluster_id').references(() => promptClusters.id),
+  similar_to_prompt_id: integer('similar_to_prompt_id').references((): AnySQLiteColumn => prompts.id),
   text: text('text').notNull(),
   embedding: text('embedding'),
   piece_count: integer('piece_count').notNull().default(0),
   is_favorite: integer('is_favorite').notNull().default(0),
+  is_generated: integer('is_generated').notNull().default(0),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })

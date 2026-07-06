@@ -210,7 +210,7 @@ export default function GenerateVersionsPanel({
 
   return (
     <div className="relative">
-      <div className="sticky top-23 z-20 -mx-4 mb-3 flex h-8 items-center justify-end border-b border-rose-line/70 bg-paper/95 px-6 backdrop-blur">
+      <div className="sticky top-0 z-20 -mx-4 mb-3 flex h-9 items-center justify-end border-b border-rose-line/70 bg-paper/95 px-6 backdrop-blur">
         <label className="t-meta inline-flex cursor-pointer items-center gap-2 text-ink-3 transition-colors hover:text-ink">
           <input
             type="checkbox"

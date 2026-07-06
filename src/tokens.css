@@ -236,11 +236,32 @@ body {
   animation: listItemReveal 480ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.sheet-slide-up {
+  animation: sheetSlideUp 380ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform;
+}
+
+@keyframes sheetBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sheet-backdrop-in {
+  animation: sheetBackdropIn 380ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .streamed-word-fade,
   .fade-in-up,
   .page-fade-in,
-  .list-item-reveal {
+  .list-item-reveal,
+  .sheet-slide-up,
+  .sheet-backdrop-in {
     animation: none;
     will-change: auto;
   }

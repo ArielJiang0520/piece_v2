@@ -137,6 +137,35 @@ const RETRYABLE_STATUSES = new Set([429, 502, 503])
 const MAX_GENERATION_ATTEMPTS = 3
 const MAX_RETRY_WAIT_MS = 20_000
 
+// A "continue"/"expand" turn re-sends the entire story so far as the assistant message. Real
+// pieces stay well under MAX_PRIOR_CONTEXT_CHARS and pass through unchanged. Only runaway
+// auto-continued chains (which grow to 100k+ tokens and re-bill the whole transcript on every
+// tap, since each request's input = prior input + prior output) get windowed: we keep the
+// opening (premise/characters) and the recent tail (what the model actually continues from)
+// and drop the middle it no longer reliably attends to at that length.
+const MAX_PRIOR_CONTEXT_CHARS = 28_000
+const PRIOR_CONTEXT_HEAD_CHARS = 4_000
+const PRIOR_CONTEXT_TAIL_CHARS = 22_000
+const PRIOR_CONTEXT_OMISSION = '\n\n[…]\n\n'
+
+function clampPriorContext(text: string): string {
+  if (text.length <= MAX_PRIOR_CONTEXT_CHARS) return text
+
+  // Head: cut back to the last paragraph/sentence boundary so it doesn't end mid-word.
+  let head = text.slice(0, PRIOR_CONTEXT_HEAD_CHARS)
+  const headBreak = Math.max(head.lastIndexOf('\n'), head.lastIndexOf('。'), head.lastIndexOf('. '))
+  if (headBreak > PRIOR_CONTEXT_HEAD_CHARS / 2) head = text.slice(0, headBreak + 1).trimEnd()
+
+  // Tail: keep the exact ending intact — continuation extends from the final sentence and
+  // relies on the trailing blank line — and only nudge the start forward to a clean line
+  // break so the windowed context doesn't begin mid-word.
+  let tail = text.slice(text.length - PRIOR_CONTEXT_TAIL_CHARS)
+  const firstBreak = tail.indexOf('\n')
+  if (firstBreak !== -1 && firstBreak < PRIOR_CONTEXT_TAIL_CHARS / 5) tail = tail.slice(firstBreak + 1)
+
+  return head + PRIOR_CONTEXT_OMISSION + tail
+}
+
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
 function buildMessages(args: {
@@ -191,9 +220,20 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   // Continuation (whole-story "continue" and per-paragraph "regenerate") feeds the kept
   // text back as an assistant prefill, so it keeps the trailing blank line and the model
   // extends from there; expansion trims and re-instructs against the last paragraph.
-  const priorTextValue = (mode === 'continue' || mode === 'regenerate')
+  const fullPriorValue = (mode === 'continue' || mode === 'regenerate')
     ? rawPrior.replace(/^\s+/, '')
     : mode === 'expand' ? rawPrior.trim() : ''
+  // Window only when an auto-continued chain has ballooned past the ceiling; normal pieces
+  // are unchanged. Log when it bites so the cost-saving is visible in the server console.
+  const priorTextValue = clampPriorContext(fullPriorValue)
+  if (priorTextValue.length < fullPriorValue.length) {
+    console.log('[prior context clamped]', new Date().toISOString(), {
+      owner: `${userId}:${worldId}`,
+      mode: mode ?? 'fresh',
+      fromChars: fullPriorValue.length,
+      toChars: priorTextValue.length,
+    })
+  }
   const isExpansion = mode === 'expand' && priorTextValue.length > 0
   const isContinuation = (mode === 'continue' || mode === 'regenerate') && priorTextValue.length > 0
 
