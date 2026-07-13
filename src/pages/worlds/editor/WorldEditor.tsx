@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Ellipsis, Lightbulb, Trash2 } from 'lucide-react'
+import { Ellipsis, Lightbulb, Plus, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -10,6 +10,7 @@ import Skeleton from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { useLanguageId } from '@/preferences/language'
 import CreateWorldTipsDialog from './CreateWorldTipsDialog'
+import NameVersionDialog from './NameVersionDialog'
 
 interface World {
   id: number
@@ -43,6 +44,8 @@ export default function WorldEditor() {
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [newVersionOpen, setNewVersionOpen] = useState(false)
+  const [newVersionError, setNewVersionError] = useState('')
   const [tipsOpen, setTipsOpen] = useState(false)
   const actionsMenuRef = useRef<HTMLDivElement | null>(null)
   const worldsQuery = useQuery({
@@ -150,6 +153,25 @@ export default function WorldEditor() {
     },
   })
 
+  const newVersionMutation = useMutation({
+    mutationFn: (versionName: string) =>
+      apiFetch(`/api/worlds/${id}/versions`, {
+        method: 'POST',
+        body: JSON.stringify({ name, body, version_name: versionName }),
+      }),
+    onSuccess: () => {
+      setNewVersionOpen(false)
+      setNewVersionError('')
+      queryClient.invalidateQueries({ queryKey: ['worlds'] })
+      queryClient.invalidateQueries({ queryKey: ['world', id] })
+      queryClient.invalidateQueries({ queryKey: ['world-versions', id] })
+      navigate(`/worlds/${id}/about`)
+    },
+    onError: error => {
+      setNewVersionError(error instanceof Error ? error.message : t.couldNotCreateVersion)
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: () => apiFetch(`/api/worlds/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -198,12 +220,25 @@ export default function WorldEditor() {
                 {actionsOpen && (
                   <div
                     role="menu"
-                    className="absolute left-0 top-full z-30 mt-2 w-44 overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
+                    className="absolute left-0 top-full z-30 mt-2 w-52 overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
                   >
                     <button
                       type="button"
                       role="menuitem"
-                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-signal-red transition-colors hover:bg-paper-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-ink transition-colors hover:bg-paper-2 focus:outline-none focus:ring-2 focus:ring-rose/30 disabled:pointer-events-none disabled:opacity-50"
+                      disabled={!canSave || saveMutation.isPending || newVersionMutation.isPending}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        openNewVersion()
+                      }}
+                    >
+                      <Plus aria-hidden="true" className="h-4 w-4" />
+                      {t.newVersion}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="flex w-full items-center gap-2 border-t border-rose-line/60 px-3 py-2.5 text-left text-sm text-signal-red transition-colors hover:bg-paper-2 focus:outline-none focus:ring-2 focus:ring-rose/30"
                       onClick={() => {
                         setActionsOpen(false)
                         setDeleteError('')
@@ -245,7 +280,7 @@ export default function WorldEditor() {
         )}
       </div>
     </div>
-  ), [actionsOpen, body, canSave, dirty, initialized, isNewWorld, language, name, saveMutation.isPending, t])
+  ), [actionsOpen, body, canSave, dirty, initialized, isNewWorld, language, name, newVersionMutation.isPending, saveMutation.isPending, t])
 
   useTopNavConfig({
     mainTitle: isNewWorld ? t.createEntity(entityLabel('world', { capitalize: true }, language)) : undefined,
@@ -270,6 +305,12 @@ export default function WorldEditor() {
   function save() {
     if (!canSave || saveMutation.isPending) return
     saveMutation.mutate()
+  }
+
+  function openNewVersion() {
+    if (!canSave || saveMutation.isPending || newVersionMutation.isPending) return
+    setNewVersionError('')
+    setNewVersionOpen(true)
   }
 
   function deleteWorld() {
@@ -360,6 +401,25 @@ export default function WorldEditor() {
         onClose={() => {
           setConfirmDelete(false)
           setDeleteError('')
+        }}
+      />
+      <NameVersionDialog
+        open={newVersionOpen}
+        title={t.newVersionTitle}
+        description={t.newVersionDescription}
+        placeholder={t.versionNamePlaceholder}
+        confirmLabel={t.createVersion}
+        pendingLabel={t.creatingVersion}
+        isPending={newVersionMutation.isPending}
+        error={newVersionError}
+        onConfirm={versionName => {
+          if (newVersionMutation.isPending) return
+          newVersionMutation.mutate(versionName)
+        }}
+        onClose={() => {
+          if (newVersionMutation.isPending) return
+          setNewVersionOpen(false)
+          setNewVersionError('')
         }}
       />
       <CreateWorldTipsDialog open={tipsOpen} onClose={() => setTipsOpen(false)} />

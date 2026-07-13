@@ -2,6 +2,8 @@ import { formatPieceTitle } from '@/config'
 import { useLanguageId } from '@/preferences/language'
 import type { PieceStripPiece } from '../../shared/types'
 
+const RESUME_DOT_WINDOW_MS = 48 * 60 * 60 * 1000
+
 interface PieceStripProps {
   pieces: PieceStripPiece[]
   promptPieceCount: number
@@ -18,6 +20,23 @@ export default function PieceStrip({
   const language = useLanguageId()
   const showOverflowHint = pieces.length > 2
 
+  // The piece continued most recently (a resume/re-save pushes updated_at past created_at),
+  // marked with a dot so it's findable without reordering the creation-numbered strip. The
+  // dot decays after RESUME_DOT_WINDOW_MS so it flags *recent* activity, not any past resume.
+  const now = Date.now()
+  let recentlyResumedId: number | null = null
+  let latestResumeAt = 0
+  for (const piece of pieces) {
+    if (
+      piece.updated_at > piece.created_at &&
+      now - piece.updated_at < RESUME_DOT_WINDOW_MS &&
+      piece.updated_at > latestResumeAt
+    ) {
+      latestResumeAt = piece.updated_at
+      recentlyResumedId = piece.id
+    }
+  }
+
   return (
     <div className="relative py-3">
       {showOverflowHint && (
@@ -30,6 +49,7 @@ export default function PieceStrip({
         {pieces.map((piece, index) => {
           const pieceNumber = Math.max(1, promptPieceCount - index)
           const selected = selectedPieceId === piece.id
+          const recentlyResumed = recentlyResumedId === piece.id
 
           return (
             <button
@@ -42,6 +62,12 @@ export default function PieceStrip({
               <span className={selected ? 'whitespace-nowrap font-serif-zh text-sm italic text-rose-deep' : 'whitespace-nowrap font-serif-zh text-sm italic text-ink-3'}>
                 {formatPieceTitle(pieceNumber, language)}
               </span>
+              {recentlyResumed && (
+                <span
+                  aria-hidden="true"
+                  className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-rose"
+                />
+              )}
               {selected && <SelectedHairline />}
             </button>
           )

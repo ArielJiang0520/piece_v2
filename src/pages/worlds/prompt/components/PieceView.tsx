@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowRight, ArrowUp } from 'lucide-react'
 import { entityLabel, formatEndOfPiece } from '@/config'
 import { useUiText } from '@/i18n'
@@ -6,11 +7,17 @@ import { useLanguageId } from '@/preferences/language'
 import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
 import ProseBody, { proseTextClass, proseTextStyle } from '../../shared/ProseBody'
+import MarkerRail, { revealMarker, type MarkerTick } from '../../shared/MarkerRail'
+import { annotateParagraphs } from '../../generate/paragraphs'
+import type { PieceAction, PieceStructure } from '../../shared/pieceStructure'
 
 const END_REVEAL_DELAY_MS = 900
 
 interface PieceViewProps {
   body: string
+  // Recorded action history; when present the body renders as annotated paragraph blocks
+  // with a marker at each action's paragraph. Null for legacy plain-text pieces.
+  structure?: PieceStructure | null
   complete: boolean
   pieceMetaLabel: string | null
   pieceModelLabel: string | null
@@ -18,6 +25,9 @@ interface PieceViewProps {
   pieceNumber: number | null
   readingFont: ReadingFont
   readingFontSize: ReadingFontSize
+  // Pixels of sticky chrome (nav + tabs) above the reading area; the marker rail starts
+  // below it so its ticks never sit under the header.
+  railTopOffset: number
   onResume?: () => void
 }
 
@@ -25,6 +35,7 @@ interface PieceViewProps {
 // end-of-piece footer with a back-to-top. No streaming, provider, or selection.
 export default function PieceView({
   body,
+  structure,
   complete,
   pieceMetaLabel,
   pieceModelLabel,
@@ -32,11 +43,90 @@ export default function PieceView({
   pieceNumber,
   readingFont,
   readingFontSize,
+  railTopOffset,
   onResume,
 }: PieceViewProps) {
   const language = useLanguageId()
   const t = useUiText()
   const [endRevealed, setEndRevealed] = useState(false)
+
+  const annotated = useMemo(
+    () => (structure ? annotateParagraphs(body, structure.segments) : []),
+    [structure, body],
+  )
+  const actionLabel = (action: PieceAction): string =>
+    action === 'expand' ? t.markerExpanded
+      : action === 'regenerate' ? t.markerContinuedFrom
+        : t.markerContinued
+
+  // Marker rail: this page scrolls with the window (not an internal container like the
+  // generate overlay), so ticks are measured against the document and the rail is a fixed
+  // overlay that only appears while the piece actually fills the viewport.
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const hasMarkers = !!structure && structure.segments.length > 1
+  const [railVisible, setRailVisible] = useState(false)
+  const [railTicks, setRailTicks] = useState<MarkerTick[]>([])
+  const [railView, setRailView] = useState({ top: 0, height: 1 })
+
+  const measureRail = useCallback(() => {
+    const root = wrapperRef.current
+    if (!root || !structure) return
+    const total = document.documentElement.scrollHeight || 1
+    const els = Array.from(root.querySelectorAll<HTMLElement>('[data-marker-index]'))
+    setRailTicks(
+      els.map(el => {
+        const segmentIndex = Number(el.dataset.markerIndex)
+        const top = el.getBoundingClientRect().top + window.scrollY
+        return {
+          segmentIndex,
+          label: actionLabel(structure.segments[segmentIndex]?.action ?? 'continue'),
+          fraction: Math.min(1, Math.max(0, top / total)),
+        }
+      }),
+    )
+    setRailView({ top: window.scrollY / total, height: Math.min(1, window.innerHeight / total) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structure])
+
+  // Show the rail once the piece has scrolled up into the reading area and hide it again
+  // above/below — so it never floats over the prompt card or the end-of-piece footer. Also
+  // tracks the viewport band as the reader scrolls.
+  useEffect(() => {
+    if (!hasMarkers || !complete) {
+      setRailVisible(false)
+      return
+    }
+    const onScroll = () => {
+      const el = wrapperRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const reading = rect.top < window.innerHeight * 0.4 && rect.bottom > railTopOffset + 60
+      setRailVisible(reading)
+      if (reading) {
+        const total = document.documentElement.scrollHeight || 1
+        setRailView({ top: window.scrollY / total, height: Math.min(1, window.innerHeight / total) })
+      }
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [hasMarkers, complete, railTopOffset])
+
+  // Re-place the ticks against the real laid-out marker positions whenever the rail shows or
+  // the rendered text/size changes.
+  // `endRevealed` grows the document (the footer), which shifts every tick's fraction.
+  useLayoutEffect(() => {
+    if (railVisible) measureRail()
+  }, [railVisible, body, structure, readingFont, readingFontSize, endRevealed, measureRail])
+
+  const jumpToMarker = (segmentIndex: number) => {
+    const el = wrapperRef.current?.querySelector<HTMLElement>(`[data-marker-index="${segmentIndex}"]`)
+    if (el) revealMarker(el)
+  }
 
   useEffect(() => {
     if (!complete) {
@@ -69,7 +159,7 @@ export default function PieceView({
   }
 
   return (
-    <div className={wrapperClass}>
+    <div ref={wrapperRef} className={wrapperClass}>
       <div>
         {complete && (pieceMetaLabel || onResume) && (
           <div className="fade-in-up mb-4 flex items-start justify-between gap-3">
@@ -97,7 +187,30 @@ export default function PieceView({
             )}
           </div>
         )}
-        <ProseBody text={body} readingFont={readingFont} readingFontSize={readingFontSize} />
+        {structure ? (
+          <div>
+            {annotated.map(paragraph => (
+              <div key={paragraph.index} className="mb-4 last:mb-0">
+                {paragraph.action && paragraph.segmentIndex != null && (
+                  <div className="mb-1.5">
+                    <span
+                      data-marker-index={paragraph.segmentIndex}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-paper-2 px-3 py-1 font-serif-zh text-[12px] italic leading-none text-ink-3 transition-[box-shadow]"
+                    >
+                      <span className="shrink-0 text-ink-4">{actionLabel(paragraph.action)}</span>
+                      {paragraph.direction && <span className="truncate">“{paragraph.direction}”</span>}
+                    </span>
+                  </div>
+                )}
+                <p className={proseTextClass(readingFont)} style={proseTextStyle(readingFontSize)}>
+                  {paragraph.text}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <ProseBody text={body} readingFont={readingFont} readingFontSize={readingFontSize} />
+        )}
         {endRevealed && (
           <div className="fade-in-up mt-10">
             <div className="t-meta flex justify-center">
@@ -123,6 +236,18 @@ export default function PieceView({
           </div>
         )}
       </div>
+      {railVisible && railTicks.length > 0 && createPortal(
+        <MarkerRail
+          ticks={railTicks}
+          view={railView}
+          onJump={jumpToMarker}
+          // Fixed over the page, below the sticky nav/controls (which mask its top) and
+          // starting under the header chrome so ticks never land on the nav.
+          containerClassName="pointer-events-none fixed left-0 bottom-3 z-[5] w-8 pl-[env(safe-area-inset-left)]"
+          containerStyle={{ top: railTopOffset }}
+        />,
+        document.body,
+      )}
     </div>
   )
 }

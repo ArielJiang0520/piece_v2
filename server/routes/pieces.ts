@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm'
 import { db, prompts, pieces } from '../db'
 import { type Variables, authMiddleware } from '../middleware'
 import { getUserId, isValidModelId, paramInt } from '../route-helpers'
+import { parseStructure, serializeStructure } from '../../src/pages/worlds/shared/pieceStructure'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
 
@@ -17,6 +18,7 @@ pieceRoutes.get('/:id', authMiddleware, (c) => {
       prompt_id: pieces.prompt_id,
       prompt: prompts.text,
       body: pieces.body,
+      structure: pieces.structure,
       model: pieces.model,
       provider: pieces.provider,
       created_at: pieces.created_at,
@@ -26,7 +28,7 @@ pieceRoutes.get('/:id', authMiddleware, (c) => {
     .where(and(eq(pieces.id, id), eq(pieces.user_id, userId)))
     .get()
   if (!piece) return c.json({ error: 'Not found' }, 404)
-  return c.json(piece)
+  return c.json({ ...piece, structure: parseStructure(piece.structure, piece.body) })
 })
 
 // Overwrite a piece in place — used when a saved piece is resumed, continued, and
@@ -39,7 +41,15 @@ pieceRoutes.patch('/:id', authMiddleware, async (c) => {
   const pieceBody = typeof body.body === 'string' ? body.body : ''
   if (!pieceBody.trim()) return c.json({ error: 'Piece body required' }, 400)
 
-  const updates: { body: string; model?: string; provider?: string | null } = { body: pieceBody }
+  // Action history is validated against the new body; a mismatch (or absent payload) clears
+  // any prior structure so the stored decomposition never disagrees with the text.
+  const structure = parseStructure(body.structure, pieceBody)
+
+  const updates: { body: string; structure: string | null; updated_at: number; model?: string; provider?: string | null } = {
+    body: pieceBody,
+    structure: structure ? serializeStructure(structure) : null,
+    updated_at: Date.now(),
+  }
   if (body.model !== undefined) {
     if (!isValidModelId(body.model)) return c.json({ error: 'Invalid model' }, 400)
     updates.model = body.model
@@ -65,6 +75,7 @@ pieceRoutes.patch('/:id', authMiddleware, async (c) => {
       prompt_id: pieces.prompt_id,
       prompt: prompts.text,
       body: pieces.body,
+      structure: pieces.structure,
       model: pieces.model,
       provider: pieces.provider,
       created_at: pieces.created_at,
@@ -73,7 +84,8 @@ pieceRoutes.patch('/:id', authMiddleware, async (c) => {
     .innerJoin(prompts, eq(pieces.prompt_id, prompts.id))
     .where(and(eq(pieces.id, id), eq(pieces.user_id, userId)))
     .get()
-  return c.json(piece)
+  if (!piece) return c.json({ error: 'Not found' }, 404)
+  return c.json({ ...piece, structure: parseStructure(piece.structure, piece.body) })
 })
 
 export default pieceRoutes

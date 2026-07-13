@@ -10,6 +10,10 @@ interface GenerateControlsProps {
   model: string
   onModelChange: (model: string) => void
   onGenerate: () => void
+  // When present, the pinned/docked CTA (shown once the button sticks to the top while a
+  // piece is scrolled into view) becomes "Resume" and continues the current piece instead
+  // of starting another. The resting big CTA is unaffected.
+  onResume?: () => void
   stickyTopOffset?: number
 }
 
@@ -21,6 +25,7 @@ export default function GenerateControls({
   model,
   onModelChange,
   onGenerate,
+  onResume,
   stickyTopOffset = 48,
 }: GenerateControlsProps) {
   const language = useLanguageId()
@@ -31,6 +36,11 @@ export default function GenerateControls({
   const handleModelMenuOpenChange = useCallback((open: boolean) => {
     setModelMenuOpen(open)
   }, [])
+
+  // Once docked, offer to continue the piece being read rather than start another.
+  const dockedResume = ctaDocked && !!onResume
+  const ctaAction = dockedResume ? onResume : onGenerate
+  const ctaLabel = dockedResume ? t.resume : generateButtonLabel(hasExistingPieces, t, language)
 
   useEffect(() => {
     let frame = 0
@@ -80,10 +90,10 @@ export default function GenerateControls({
             <button
               type="button"
               className={`inline-flex min-w-0 items-center justify-center font-serif-zh text-[15px] italic leading-none opacity-100 transition-[background-color,border-color,border-radius,box-shadow,color,height,padding,width] duration-200 ease-out focus:outline-none disabled:pointer-events-none disabled:opacity-50 ${ctaDocked ? 'h-12 w-full rounded-none border-b border-rose-line bg-paper px-4 text-rose-deep shadow-none hover:bg-rose-tint' : 'h-10 w-full rounded-full bg-rose px-5 text-white shadow-(--shadow-cta) hover:bg-rose-deep sm:px-6'}`}
-              onClick={onGenerate}
-              disabled={disabled}
+              onClick={ctaAction}
+              disabled={disabled && !dockedResume}
             >
-              <span className="min-w-0 truncate">{generateButtonLabel(hasExistingPieces, t, language)}</span>
+              <span className="min-w-0 truncate">{ctaLabel}</span>
             </button>
           </div>
         </div>

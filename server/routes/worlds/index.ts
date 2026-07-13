@@ -44,7 +44,7 @@ worldRoutes.get('/', authMiddleware, (c) => {
     .select({
       world_id: pieces.world_id,
       piece_count: sql<number>`count(*)`,
-      latest_piece_at: sql<number | null>`max(${pieces.created_at})`,
+      latest_piece_at: sql<number | null>`max(${pieces.updated_at})`,
     })
     .from(pieces)
     .where(and(eq(pieces.user_id, userId), inArray(pieces.world_id, worldIds)))
@@ -98,11 +98,16 @@ worldRoutes.post('/', authMiddleware, async (c) => {
       updated_at: now,
     }).returning().get()
 
-    tx.insert(worldVersions).values({
+    const version = tx.insert(worldVersions).values({
       world_id: world.id,
       body: world.body,
       created_at: now,
-    }).run()
+    }).returning({ id: worldVersions.id }).get()
+
+    tx.update(worlds)
+      .set({ current_version_id: version.id })
+      .where(eq(worlds.id, world.id))
+      .run()
 
     return world
   })
@@ -124,7 +129,7 @@ worldRoutes.get('/:id/versions', authMiddleware, (c) => {
   const rows = db
     .select({
       id: worldVersions.id,
-      restored_from_version_id: worldVersions.restored_from_version_id,
+      name: worldVersions.name,
       created_at: worldVersions.created_at,
     })
     .from(worldVersions)
@@ -135,61 +140,68 @@ worldRoutes.get('/:id/versions', authMiddleware, (c) => {
   return c.json(rows)
 })
 
-worldRoutes.get('/:id/versions/:versionId', authMiddleware, (c) => {
-  const id = paramInt(c, 'id')
-  const world = findUserWorldId(getUserId(c), id)
-  if (!world) return c.json({ error: 'Not found' }, 404)
-
-  const version = db
-    .select({
-      id: worldVersions.id,
-      body: worldVersions.body,
-      restored_from_version_id: worldVersions.restored_from_version_id,
-      created_at: worldVersions.created_at,
-    })
-    .from(worldVersions)
-    .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, paramInt(c, 'versionId'))))
-    .get()
-
-  if (!version) return c.json({ error: 'Not found' }, 404)
-  return c.json(version)
-})
-
-worldRoutes.post('/:id/versions/:versionId/restore', authMiddleware, (c) => {
+// Switch which version is checked out (like `git switch`): move the HEAD pointer and
+// mirror that version's body onto the world. No copy, nothing is lost.
+worldRoutes.post('/:id/versions/:versionId/switch', authMiddleware, (c) => {
   const id = paramInt(c, 'id')
   const world = findUserWorld(getUserId(c), id)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const sourceVersionId = paramInt(c, 'versionId')
-  const sourceVersion = db
+  const targetVersionId = paramInt(c, 'versionId')
+  const targetVersion = db
     .select({
       id: worldVersions.id,
       body: worldVersions.body,
     })
     .from(worldVersions)
-    .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, sourceVersionId)))
+    .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, targetVersionId)))
     .get()
 
-  if (!sourceVersion) return c.json({ error: 'Not found' }, 404)
-  if (sourceVersion.body === world.body) {
+  if (!targetVersion) return c.json({ error: 'Not found' }, 404)
+  if (world.current_version_id === targetVersion.id) {
     return c.json({ ok: true, changed: false })
   }
 
   const now = Date.now()
   db.transaction(tx => {
     tx.update(worlds)
-      .set({ body: sourceVersion.body, updated_at: now })
+      .set({ body: targetVersion.body, current_version_id: targetVersion.id, updated_at: now })
       .where(eq(worlds.id, id))
       .run()
-    tx.insert(worldVersions).values({
-      world_id: id,
-      body: sourceVersion.body,
-      restored_from_version_id: sourceVersion.id,
-      created_at: now,
-    }).run()
   })
 
   return c.json({ ok: true, changed: true })
+})
+
+worldRoutes.post('/:id/versions', authMiddleware, async (c) => {
+  const id = paramInt(c, 'id')
+  const world = findUserWorld(getUserId(c), id)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const payload = await c.req.json()
+  const name = typeof payload.name === 'string' ? payload.name.trim() : world.name
+  if (!name) return c.json({ error: 'Name required' }, 400)
+  const nextBody = typeof payload.body === 'string' ? payload.body : world.body
+  const rawVersionName = typeof payload.version_name === 'string' ? payload.version_name.trim() : ''
+  const versionName = rawVersionName.length > 0 ? rawVersionName : null
+
+  const now = Date.now()
+  const created = db.transaction(tx => {
+    const version = tx.insert(worldVersions).values({
+      world_id: id,
+      body: nextBody,
+      name: versionName,
+      created_at: now,
+    }).returning({ id: worldVersions.id }).get()
+    // The new version becomes the checked-out one; the previous version stays frozen.
+    tx.update(worlds)
+      .set({ name, body: nextBody, current_version_id: version.id, updated_at: now })
+      .where(eq(worlds.id, id))
+      .run()
+    return version
+  })
+
+  return c.json({ ok: true, version_id: created.id })
 })
 
 worldRoutes.get('/:id', authMiddleware, (c) => {
@@ -200,6 +212,7 @@ worldRoutes.get('/:id', authMiddleware, (c) => {
     name: world.name,
     is_example: Boolean(world.is_example),
     body: world.body,
+    current_version_id: world.current_version_id,
     updated_at: world.updated_at,
   })
 })
@@ -234,11 +247,31 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
       .where(eq(worlds.id, id))
       .run()
     if (bodyChanged) {
-      tx.insert(worldVersions).values({
-        world_id: id,
-        body: nextBody,
-        created_at: now,
-      }).run()
+      // Edit the checked-out version in place; new versions come only from
+      // POST /:id/versions, and switching moves worlds.current_version_id.
+      const target = world.current_version_id != null
+        ? tx
+            .select({ id: worldVersions.id })
+            .from(worldVersions)
+            .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, world.current_version_id)))
+            .get()
+        : null
+      if (target) {
+        tx.update(worldVersions)
+          .set({ body: nextBody })
+          .where(eq(worldVersions.id, target.id))
+          .run()
+      } else {
+        const inserted = tx.insert(worldVersions).values({
+          world_id: id,
+          body: nextBody,
+          created_at: now,
+        }).returning({ id: worldVersions.id }).get()
+        tx.update(worlds)
+          .set({ current_version_id: inserted.id })
+          .where(eq(worlds.id, id))
+          .run()
+      }
     }
   })
 

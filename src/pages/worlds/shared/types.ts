@@ -1,3 +1,7 @@
+import type { PieceStructure } from './pieceStructure'
+
+export type { PieceAction, PieceSegment, PieceStructure } from './pieceStructure'
+
 export const PIECE_STRIP_LIMIT = 24
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -33,6 +37,10 @@ export function parseVersionDraft(value: unknown): VersionDraftState | null {
 
 export interface PieceStripPiece {
   id: number
+  created_at: number
+  // Equals created_at until the piece is resumed and re-saved; a later updated_at marks
+  // it as the most-recently-continued piece without disturbing the creation-order numbering.
+  updated_at: number
 }
 
 export interface SaveResponse {
@@ -62,6 +70,9 @@ export interface PieceDetail {
   id: number
   prompt: string
   body: string
+  // Recorded action history. Null for legacy plain-text pieces (never edited since the
+  // structured format was introduced).
+  structure: PieceStructure | null
   model: string | null
   provider: string | null
   created_at: number
@@ -71,6 +82,7 @@ export interface OverwritePieceResponse {
   id: number
   prompt_id: number
   body: string
+  structure: PieceStructure | null
   model: string | null
   provider: string | null
   created_at: number

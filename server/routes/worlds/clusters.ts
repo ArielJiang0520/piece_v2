@@ -7,7 +7,9 @@ import { cosineSimilarity, embedPrompt, parseEmbedding } from '../../prompt-clus
 
 const clusterRoutes = new Hono<{ Variables: Variables }>()
 
-const clusterActivityAt = sql<number>`coalesce(max(${pieces.created_at}), ${promptClusters.updated_at})`
+// Activity = the most recent piece edit (create or resume/re-save), so a resumed piece floats
+// its cluster to the top. Falls back to the cluster's own timestamp when it has no pieces.
+const clusterActivityAt = sql<number>`coalesce(max(${pieces.updated_at}), ${promptClusters.updated_at})`
 
 const SORT_ORDERS = {
   latest: [desc(clusterActivityAt), desc(promptClusters.id)],
@@ -52,7 +54,7 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
   const latestPieceRows = db
     .select({
       cluster_id: prompts.cluster_id,
-      latest_piece_at: sql<number | null>`max(${pieces.created_at})`,
+      latest_piece_at: sql<number | null>`max(${pieces.updated_at})`,
     })
     .from(pieces)
     .innerJoin(prompts, eq(pieces.prompt_id, prompts.id))

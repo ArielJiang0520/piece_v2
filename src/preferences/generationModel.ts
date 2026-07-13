@@ -54,7 +54,7 @@ export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
 // Fixed model for the "Similar prompts" muse (one-shot candidate generation), independent of
 // the user's story-generation model choice. Change it here.
-export const SIMILAR_MODEL_ID = 'z-ai/glm-5.2'
+export const SIMILAR_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
 export const BLACKLISTED_PROVIDERS: string[] = ['alibaba', 'together']
 

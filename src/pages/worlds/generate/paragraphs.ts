@@ -1,3 +1,6 @@
+import type { PieceSegment } from '../shared/pieceStructure'
+import { segmentStartOffsets } from '../shared/pieceStructure'
+
 // Paragraphs are separated by one or more blank lines. We split while keeping the
 // separators (capturing group) so a paragraph's position in the split array is a
 // stable index shared between the renderer (GenerateOutput) and the expansion logic
@@ -29,4 +32,43 @@ export function buildExpandPrefix(text: string, paragraphIndex: number): string 
   const parts = text.split(PARAGRAPH_SPLIT_RE)
   const through = parts.slice(0, paragraphIndex + 1).join('')
   return `${through.replace(/\s+$/, '')}\n\n`
+}
+
+export interface AnnotatedParagraph extends Paragraph {
+  // Set when a recorded action's output begins at this paragraph, so the static reader can
+  // show a marker there. `segmentIndex` keys the re-run; `action`/`direction` describe it.
+  segmentIndex?: number
+  action?: PieceSegment['action']
+  direction?: string
+}
+
+// Map each segment (K>=1) onto the paragraph where its text begins. Every action caps the
+// kept prior text with a blank line, so a segment start always lands on a paragraph
+// boundary; if an offset doesn't match a start exactly, it snaps to the nearest following
+// paragraph. The first segment (the origin) never carries a marker.
+export function annotateParagraphs(text: string, segments: PieceSegment[]): AnnotatedParagraph[] {
+  const paragraphs: AnnotatedParagraph[] = splitParagraphs(text)
+  if (segments.length <= 1) return paragraphs
+
+  // Absolute char start of each raw split part, so paragraph `index` → offset in `text`.
+  const parts = text.split(PARAGRAPH_SPLIT_RE)
+  const partOffsets: number[] = []
+  let acc = 0
+  for (const part of parts) {
+    partOffsets.push(acc)
+    acc += part.length
+  }
+
+  const offsets = segmentStartOffsets(segments)
+  for (let k = 1; k < segments.length; k++) {
+    const target = offsets[k]
+    const chosen =
+      paragraphs.find(p => partOffsets[p.index] >= target) ?? paragraphs[paragraphs.length - 1]
+    if (chosen) {
+      chosen.segmentIndex = k
+      chosen.action = segments[k].action
+      chosen.direction = segments[k].direction
+    }
+  }
+  return paragraphs
 }

@@ -26,6 +26,7 @@ sqlite.run(`
     name TEXT NOT NULL,
     is_example INTEGER NOT NULL DEFAULT 0,
     body TEXT NOT NULL DEFAULT '',
+    current_version_id INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -34,7 +35,7 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
     body TEXT NOT NULL,
-    restored_from_version_id INTEGER,
+    name TEXT,
     created_at INTEGER NOT NULL
   );
 
@@ -71,9 +72,11 @@ sqlite.run(`
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
     prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
     body TEXT NOT NULL,
+    structure TEXT,
     model TEXT,
     provider TEXT,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
   );
 
 `)
@@ -109,30 +112,6 @@ function rebuildWorldsTable() {
     `)
     sqlite.run('DROP TABLE worlds;')
     sqlite.run('ALTER TABLE worlds_new RENAME TO worlds;')
-  } finally {
-    sqlite.run('PRAGMA foreign_keys = ON;')
-  }
-}
-
-function rebuildWorldVersionsTable() {
-  sqlite.run('PRAGMA foreign_keys = OFF;')
-  try {
-    sqlite.run('DROP TABLE IF EXISTS world_versions_new;')
-    sqlite.run(`
-      CREATE TABLE IF NOT EXISTS world_versions_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-        body TEXT NOT NULL,
-        restored_from_version_id INTEGER,
-        created_at INTEGER NOT NULL
-      );
-    `)
-    sqlite.run(`
-      INSERT INTO world_versions_new (id, world_id, body, restored_from_version_id, created_at)
-      SELECT id, world_id, body, restored_from_version_id, created_at FROM world_versions;
-    `)
-    sqlite.run('DROP TABLE world_versions;')
-    sqlite.run('ALTER TABLE world_versions_new RENAME TO world_versions;')
   } finally {
     sqlite.run('PRAGMA foreign_keys = ON;')
   }
@@ -180,14 +159,16 @@ function rebuildPiecesTable() {
         world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
         prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
         body TEXT NOT NULL,
+        structure TEXT,
         model TEXT,
         provider TEXT,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
       );
     `)
     sqlite.run(`
-      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, model, provider, created_at)
-      SELECT id, user_id, world_id, prompt_id, body, model, provider, created_at FROM pieces;
+      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, structure, model, provider, created_at, updated_at)
+      SELECT id, user_id, world_id, prompt_id, body, structure, model, provider, created_at, updated_at FROM pieces;
     `)
     sqlite.run('DROP TABLE pieces;')
     sqlite.run('ALTER TABLE pieces_new RENAME TO pieces;')
@@ -206,10 +187,6 @@ function dropColumnIfPresent(table: string, column: string) {
         rebuildWorldsTable()
         return
       }
-      if (table === 'world_versions' && column === 'name') {
-        rebuildWorldVersionsTable()
-        return
-      }
       if (table === 'prompts' && column === 'world_version_id') {
         rebuildPromptsTable()
         return
@@ -224,15 +201,23 @@ function dropColumnIfPresent(table: string, column: string) {
 }
 
 addColumnIfMissing('worlds', 'is_example', 'is_example INTEGER NOT NULL DEFAULT 0')
-addColumnIfMissing('world_versions', 'restored_from_version_id', 'restored_from_version_id INTEGER')
+addColumnIfMissing('worlds', 'current_version_id', 'current_version_id INTEGER')
+addColumnIfMissing('world_versions', 'name', 'name TEXT')
 addColumnIfMissing('pieces', 'provider', 'provider TEXT')
+addColumnIfMissing('pieces', 'updated_at', 'updated_at INTEGER NOT NULL DEFAULT 0')
+// Sidecar action history (JSON). Added before the world_version_id drop below so the
+// pieces-table rebuild fallback, if it fires, can copy the column.
+addColumnIfMissing('pieces', 'structure', 'structure TEXT')
+// Backfill: existing pieces last "updated" when they were created.
+sqlite.run('UPDATE pieces SET updated_at = created_at WHERE updated_at = 0;')
 addColumnIfMissing('prompts', 'similar_to_prompt_id', 'similar_to_prompt_id INTEGER REFERENCES prompts(id)')
 addColumnIfMissing('prompts', 'is_generated', 'is_generated INTEGER NOT NULL DEFAULT 0')
 sqlite.run('DROP INDEX IF EXISTS idx_pieces_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_prompts_world_version;')
+sqlite.run('DROP INDEX IF EXISTS idx_world_versions_world_restored_from;')
 dropColumnIfPresent('prompts', 'world_version_id')
 dropColumnIfPresent('pieces', 'world_version_id')
-dropColumnIfPresent('world_versions', 'name')
+dropColumnIfPresent('world_versions', 'restored_from_version_id')
 dropColumnIfPresent('worlds', 'language')
 dropColumnIfPresent('worlds', 'summary')
 dropColumnIfPresent('worlds', 'origin')
@@ -242,6 +227,19 @@ sqlite.run(`
   INSERT INTO world_versions (world_id, body, created_at)
   SELECT id, body, updated_at FROM worlds
   WHERE id NOT IN (SELECT world_id FROM world_versions);
+`)
+
+// Point each world's HEAD at its latest version where unset (switching moves this pointer).
+sqlite.run(`
+  UPDATE worlds
+  SET current_version_id = (
+    SELECT world_versions.id FROM world_versions
+    WHERE world_versions.world_id = worlds.id
+    ORDER BY world_versions.created_at DESC, world_versions.id DESC
+    LIMIT 1
+  )
+  WHERE current_version_id IS NULL
+     OR current_version_id NOT IN (SELECT id FROM world_versions WHERE world_id = worlds.id);
 `)
 
 sqlite.run(`
@@ -256,7 +254,6 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_variations ON prompt_clusters(user_id, world_id, prompt_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_worlds_user_updated ON worlds(user_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_world_versions_world_created ON world_versions(world_id, created_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_world_versions_world_restored_from ON world_versions(world_id, restored_from_version_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 `)
 
@@ -308,6 +305,7 @@ export const worlds = sqliteTable('worlds', {
   name: text('name').notNull(),
   is_example: integer('is_example').notNull().default(0),
   body: text('body').notNull().default(''),
+  current_version_id: integer('current_version_id'),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })
@@ -316,7 +314,7 @@ export const worldVersions = sqliteTable('world_versions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   world_id: integer('world_id').notNull().references(() => worlds.id),
   body: text('body').notNull(),
-  restored_from_version_id: integer('restored_from_version_id'),
+  name: text('name'),
   created_at: integer('created_at').notNull(),
 })
 
@@ -353,9 +351,11 @@ export const pieces = sqliteTable('pieces', {
   world_id: integer('world_id').notNull().references(() => worlds.id),
   prompt_id: integer('prompt_id').notNull().references(() => prompts.id),
   body: text('body').notNull(),
+  structure: text('structure'),
   model: text('model'),
   provider: text('provider'),
   created_at: integer('created_at').notNull(),
+  updated_at: integer('updated_at').notNull(),
 })
 
 export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces } })

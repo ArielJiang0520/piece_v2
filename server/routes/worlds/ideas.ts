@@ -39,13 +39,13 @@ function buildIdeasSystemPrompt(worldBody: string): string {
   sections.push(
     [
       '# Task',
-      `Read the world setting below and create ${CANDIDATE_COUNT} NEW story prompts grounded in it — each mining a different character, place, conflict, relationship, or moment from the world.`,
+      `Read the world setting below and create ${CANDIDATE_COUNT} NEW story prompts grounded in it. Each prompt is a premise for a one-shot — something that could happen in this world.`,
       '',
       'Rules:',
-      '- Draw every prompt from the world setting: its people, places, tensions, and tone.',
-      `- Make all ${CANDIDATE_COUNT} prompts clearly distinct from each other — different angles into the world, not variations on one idea.`,
-      '- A prompt is a short premise or instruction for a story (one or two sentences), not the story itself.',
-      '- Do NOT retell or summarize the world; propose something that could happen within it.',
+      '- Stay true to the world setting. Use the world\'s own language/tone. Do not polish language.',
+      '- Remember what the world is meant to write - smutty erotica premises, with kinks.',
+      `- Make the ${CANDIDATE_COUNT} prompts different from each other.`,
+      '- A prompt is a short premise (one or two sentences), not the story itself. No too many details.',
     ].join('\n'),
   )
 

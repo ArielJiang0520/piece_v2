@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowRight, FastForward, Pause, Play, Rewind } from 'lucide-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -19,6 +19,7 @@ import {
   useReadingSpeed,
 } from '@/preferences/readingSpeed'
 import GenerateOutput from './components/GenerateOutput'
+import MarkerRail, { revealMarker } from '../shared/MarkerRail'
 import { useGatedReveal } from './hooks/useGatedReveal'
 import { useUnsavedExitGuard } from './hooks/useUnsavedExitGuard'
 import { buildExpandPrefix } from './paragraphs'
@@ -30,6 +31,12 @@ import {
   type PromptPiecesResponse,
   type SaveResponse,
 } from '../shared/types'
+import {
+  segmentStartOffsets,
+  serializeStructure,
+  type PieceAction,
+  type PieceStructure,
+} from '../shared/pieceStructure'
 
 const GENERATION_TEMPERATURE = 1
 const USE_THINKING = false
@@ -71,11 +78,11 @@ export default function GenerateScreen() {
   const exitState = lockedMode
     ? undefined
     : {
-        draftPrompt: statePrompt,
-        versionDraft: versionDraft ? { ...versionDraft, promptText: statePrompt } : undefined,
-        similarToPromptId,
-        generated,
-      }
+      draftPrompt: statePrompt,
+      versionDraft: versionDraft ? { ...versionDraft, promptText: statePrompt } : undefined,
+      similarToPromptId,
+      generated,
+    }
 
   const {
     phase,
@@ -137,7 +144,7 @@ export default function GenerateScreen() {
   const readerUnsaved = output.length > 0 && !saving
   const { confirmOpen, confirmLeave, confirmStay } = useUnsavedExitGuard(readerUnsaved)
 
-  async function saveNewPiece(text: string) {
+  async function saveNewPiece(text: string, structure: PieceStructure) {
     if (!id || !text || saving) return
     setSaving(true)
     try {
@@ -150,6 +157,7 @@ export default function GenerateScreen() {
           similarToPromptId: similarToPromptId ?? undefined,
           generated: generated || undefined,
           body: text,
+          structure: serializeStructure(structure),
           model,
           provider: provider || undefined,
         }),
@@ -158,6 +166,7 @@ export default function GenerateScreen() {
       queryClient.setQueryData(['piece', result.pieceId], {
         id: result.pieceId,
         body: text,
+        structure,
         model,
         provider: provider || null,
         created_at: Date.now(),
@@ -171,9 +180,9 @@ export default function GenerateScreen() {
           !prev || prev.pieces.some(p => p.id === result.pieceId)
             ? prev
             : {
-                prompt: { ...prev.prompt, piece_count: result.pieceCount },
-                pieces: [{ id: result.pieceId }, ...prev.pieces].slice(0, PIECE_STRIP_LIMIT),
-              },
+              prompt: { ...prev.prompt, piece_count: result.pieceCount },
+              pieces: [{ id: result.pieceId, created_at: Date.now(), updated_at: Date.now() }, ...prev.pieces].slice(0, PIECE_STRIP_LIMIT),
+            },
       )
       queryClient.invalidateQueries({ queryKey: ['prompt', id, String(result.promptId)] })
       queryClient.invalidateQueries({ queryKey: ['world', id] })
@@ -190,18 +199,19 @@ export default function GenerateScreen() {
     }
   }
 
-  async function saveResume(text: string) {
+  async function saveResume(text: string, structure: PieceStructure) {
     if (resumePieceId === null || !id || !text.trim() || saving) return
     setSaving(true)
     stop()
     try {
       const result = await apiFetch(`/api/pieces/${resumePieceId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ body: text, model, provider: provider || undefined }),
+        body: JSON.stringify({ body: text, structure: serializeStructure(structure), model, provider: provider || undefined }),
       }) as OverwritePieceResponse
       queryClient.setQueryData(['piece', resumePieceId], {
         id: resumePieceId,
         body: result.body,
+        structure: result.structure,
         model: result.model,
         provider: result.provider,
         created_at: result.created_at,
@@ -246,12 +256,13 @@ export default function GenerateScreen() {
         readingFontSize={readingFontSize}
         mode={resumeMode ? 'resume' : 'generate'}
         initialText={resumeMode ? resumePiece?.body ?? '' : ''}
+        initialStructure={resumeMode ? resumePiece?.structure ?? null : null}
         onSave={saveNewPiece}
         onSaveOverwrite={saveResume}
         onExit={handleExit}
-        onExpand={priorText => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText })}
-        onContinue={priorText => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText })}
-        onRegenerate={priorText => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText })}
+        onExpand={(priorText, direction) => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText, direction })}
+        onContinue={(priorText, direction) => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText, direction })}
+        onRegenerate={(priorText, direction) => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText, direction })}
       />
       <ConfirmDialog
         open={confirmOpen}
@@ -288,12 +299,14 @@ interface GenerateReaderProps {
   readingFontSize: ReturnType<typeof useReadingFontSize>
   mode: 'generate' | 'resume'
   initialText: string
-  onSave: (text: string) => void
-  onSaveOverwrite: (text: string) => void
+  // Recorded action history of a resumed piece (null for fresh generation or legacy pieces).
+  initialStructure: PieceStructure | null
+  onSave: (text: string, structure: PieceStructure) => void
+  onSaveOverwrite: (text: string, structure: PieceStructure) => void
   onExit: () => void
-  onExpand: (priorText: string) => void
-  onContinue: (priorText: string) => void
-  onRegenerate: (priorText: string) => void
+  onExpand: (priorText: string, direction: string) => void
+  onContinue: (priorText: string, direction: string) => void
+  onRegenerate: (priorText: string, direction: string) => void
 }
 
 // The reading surface itself: paced reveal, pause/speed, paragraph-expand, save/exit.
@@ -313,6 +326,7 @@ function GenerateReader({
   readingFontSize,
   mode,
   initialText,
+  initialStructure,
   onSave,
   onSaveOverwrite,
   onExit,
@@ -329,15 +343,61 @@ function GenerateReader({
   const [paused, setPaused] = useState(false)
   const [frozenText, setFrozenText] = useState<string | null>(null)
   const [selectedParagraphIndex, setSelectedParagraphIndex] = useState<number | null>(null)
+  // The whole-story Continue's optional steer, typed in the field above the bottom bar.
+  const [continueDirection, setContinueDirection] = useState('')
+  const [continueFieldFocused, setContinueFieldFocused] = useState(false)
   const [revealEpoch, setRevealEpoch] = useState(0)
   const [baselineRevealed, setBaselineRevealed] = useState(0)
   const [expanded, setExpanded] = useState(false)
   const showingSeed = mode === 'resume' && !expanded
+  // Marker-rail bookkeeping: one tick per action boundary (measured from the laid-out
+  // marker chips), plus the visible viewport as a fraction of the scroll content so the
+  // reader sees where they are among the branch points.
+  const [railTicks, setRailTicks] = useState<{ segmentIndex: number; label: string; fraction: number }[]>([])
+  const [railView, setRailView] = useState({ top: 0, height: 1 })
+
+  // The action history for the piece being built. Each entry is where one action's output
+  // begins (char offset in the final text) plus what it was. The origin ('fresh') segment
+  // before the first offset is implicit. Seeded from a resumed piece's structure; new
+  // actions append, and acting mid-piece drops the entries below the cut (replace-downstream).
+  const [actionLog, setActionLog] = useState<{ offset: number; action: PieceAction; direction: string }[]>([])
+  useEffect(() => {
+    if (!initialStructure) {
+      setActionLog([])
+      return
+    }
+    const offsets = segmentStartOffsets(initialStructure.segments)
+    setActionLog(
+      initialStructure.segments
+        .slice(1)
+        .map((seg, i) => ({ offset: offsets[i + 1], action: seg.action, direction: seg.direction })),
+    )
+  }, [initialStructure])
+
+  const recordAction = (offset: number, action: PieceAction, direction: string) => {
+    setActionLog(log => [...log.filter(entry => entry.offset < offset), { offset, action, direction }])
+  }
+
+  // Slice the final text at the logged offsets into segments; the first slice is the origin.
+  // `dropEmpty` (save path) discards empty later segments; the live render keeps them so a
+  // just-fired action's marker shows immediately, before its first token streams in.
+  const buildStructure = (finalText: string, dropEmpty = true): PieceStructure => {
+    const boundaries = [0, ...actionLog.map(entry => entry.offset)]
+    const segments = boundaries
+      .map((start, i) => {
+        const end = i + 1 < boundaries.length ? boundaries[i + 1] : finalText.length
+        const meta = i === 0 ? { action: 'fresh' as PieceAction, direction: '' } : actionLog[i - 1]
+        return { action: meta.action, direction: meta.direction, text: finalText.slice(start, end) }
+      })
+      // Empty slices don't affect the concat, so dropping them keeps the invariant intact.
+      .filter((seg, i) => i === 0 || !dropEmpty || seg.text.length > 0)
+    return { v: 1, segments }
+  }
   const readingSpeed = useReadingSpeed()
   const speedRatio = (readingSpeed - READING_SPEED_MIN) / (READING_SPEED_MAX - READING_SPEED_MIN)
   // The slower/faster buttons step in coarser jumps than the underlying snap step so the
   // full range is a few comfortable taps, not dozens.
-  const SPEED_BUTTON_STEP = 5
+  const SPEED_BUTTON_STEP = 2
   const slower = () => setReadingSpeed(Math.max(READING_SPEED_MIN, readingSpeed - SPEED_BUTTON_STEP))
   const faster = () => setReadingSpeed(Math.min(READING_SPEED_MAX, readingSpeed + SPEED_BUTTON_STEP))
 
@@ -360,6 +420,9 @@ function GenerateReader({
 
   const finished = showingSeed || frozenText !== null
   const displayText = showingSeed ? initialText : frozenText ?? revealedText
+  // Live decomposition of what's on screen, so action markers render at each boundary in
+  // real time (empty trailing segment kept so a just-fired action's marker appears at once).
+  const liveSegments = buildStructure(displayText, false).segments
   const canPause = !showingSeed && !finished && !error
   const canContinue = finished && !error && displayText.length > 0
   const canSave = (paused || finished) && !error && displayText.length > 0 && (mode !== 'resume' || expanded)
@@ -369,48 +432,120 @@ function GenerateReader({
     if (!canSelect) setSelectedParagraphIndex(null)
   }, [canSelect])
 
-  const handleExpand = (paragraphIndex: number) => {
-    const priorText = buildExpandPrefix(displayText, paragraphIndex)
+  // The marker rail only appears once the read is paused/finished (so the markers are
+  // rendered as tappable chips) and the piece actually has boundaries to navigate.
+  const railVisible = canSelect && liveSegments.length > 1
+  const markerLabel = (action: PieceAction) =>
+    action === 'expand' ? t.markerExpanded : action === 'regenerate' ? t.markerContinuedFrom : t.markerContinued
+
+  // Measure each marker chip's position within the scroll content into a tick fraction.
+  // Runs synchronously after layout (before paint) whenever the rail is shown or the laid-out
+  // text/size changes, so ticks are placed against the real rendered positions, not char
+  // offsets (which drift from vertical position on uneven paragraphs).
+  useLayoutEffect(() => {
+    const sc = scrollRef.current
+    if (!railVisible || !sc) {
+      setRailTicks([])
+      return
+    }
+    const measure = () => {
+      const total = sc.scrollHeight || 1
+      const scTop = sc.getBoundingClientRect().top
+      const els = Array.from(sc.querySelectorAll<HTMLElement>('[data-marker-index]'))
+      setRailTicks(
+        els.map(el => {
+          const segmentIndex = Number(el.dataset.markerIndex)
+          const top = el.getBoundingClientRect().top - scTop + sc.scrollTop
+          return {
+            segmentIndex,
+            label: markerLabel(liveSegments[segmentIndex]?.action ?? 'continue'),
+            fraction: Math.min(1, Math.max(0, top / total)),
+          }
+        }),
+      )
+      setRailView({ top: sc.scrollTop / total, height: Math.min(1, sc.clientHeight / total) })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [railVisible, displayText, readingFontSize, readingFont])
+
+  // Tapping a tick glides that marker to the middle of the reader and gives it a brief rose
+  // outline — navigation only; the chip keeps its own tap for re-running the action.
+  const jumpToMarker = (segmentIndex: number) => {
+    const sc = scrollRef.current
+    const el = sc?.querySelector<HTMLElement>(`[data-marker-index="${segmentIndex}"]`)
+    if (el) revealMarker(el)
+  }
+
+  // Shared reveal/seed bookkeeping for every story action: reset the paced reveal to treat
+  // `priorText` as already-read, record the action in the history, then fire it.
+  const startAction = (priorText: string, action: PieceAction, direction: string) => {
     setBaselineRevealed(priorText.length)
     setRevealEpoch(epoch => epoch + 1)
     setFrozenText(null)
     setPaused(false)
     setSelectedParagraphIndex(null)
     setExpanded(true)
-    onExpand(priorText)
+    recordAction(priorText.length, action, direction)
+    if (action === 'expand') onExpand(priorText, direction)
+    else if (action === 'regenerate') onRegenerate(priorText, direction)
+    else onContinue(priorText, direction)
+  }
+
+  const handleExpand = (paragraphIndex: number, direction: string) => {
+    startAction(buildExpandPrefix(displayText, paragraphIndex), 'expand', direction)
   }
 
   // Per-paragraph continue: keep everything through the tapped paragraph, drop all the
   // text below it, and regenerate from there. Uses the regenerate path (system + prompt +
   // kept text as an assistant prefill, no special instruction) so the model just picks
   // up the story from that cut point.
-  const handleContinueFrom = (paragraphIndex: number) => {
-    const priorText = buildExpandPrefix(displayText, paragraphIndex)
-    setBaselineRevealed(priorText.length)
-    setRevealEpoch(epoch => epoch + 1)
-    setFrozenText(null)
-    setPaused(false)
-    setSelectedParagraphIndex(null)
-    setExpanded(true)
-    onRegenerate(priorText)
+  const handleContinueFrom = (paragraphIndex: number, direction: string) => {
+    startAction(buildExpandPrefix(displayText, paragraphIndex), 'regenerate', direction)
   }
 
   // Continue picks up from the full existing text (not a single paragraph) and resumes
   // the story toward the original prompt; new prose streams in as a fresh paragraph.
-  const handleContinue = () => {
-    const priorText = `${displayText.replace(/\s+$/, '')}\n\n`
-    setBaselineRevealed(priorText.length)
-    setRevealEpoch(epoch => epoch + 1)
-    setFrozenText(null)
-    setPaused(false)
-    setSelectedParagraphIndex(null)
-    setExpanded(true)
-    onContinue(priorText)
+  const handleContinue = (direction: string) => {
+    setContinueDirection('')
+    startAction(`${displayText.replace(/\s+$/, '')}\n\n`, 'continue', direction)
+  }
+
+  // Tapping a boundary marker re-runs that action: seed from the segments before it and fire
+  // the same action + direction again, replacing everything downstream.
+  const rerunSegment = (segmentIndex: number) => {
+    if (segmentIndex < 1 || segmentIndex >= liveSegments.length) return
+    const priorText = liveSegments.slice(0, segmentIndex).map(seg => seg.text).join('')
+    const seg = liveSegments[segmentIndex]
+    startAction(priorText, seg.action, seg.direction)
   }
 
   const togglePause = () => {
     setPaused(p => !p)
   }
+
+  // The bottom control bar sits at the bottom of a full-screen fixed reader, so the
+  // on-screen keyboard would cover the whole-story direction field. While it's focused,
+  // lift the bar by the keyboard's height (tracked via the VisualViewport API). The
+  // per-paragraph fields live inside the scroll region and don't need this.
+  const [keyboardInset, setKeyboardInset] = useState(0)
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!continueFieldFocused || !vv) {
+      setKeyboardInset(0)
+      return
+    }
+    const update = () => setKeyboardInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+    update()
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [continueFieldFocused])
 
   useEffect(() => {
     if (paused || finished) return
@@ -457,14 +592,19 @@ function GenerateReader({
         )}
       </div>
 
+      <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
         onScroll={() => {
           const el = scrollRef.current
           if (!el) return
           stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+          if (railVisible) {
+            const total = el.scrollHeight || 1
+            setRailView({ top: el.scrollTop / total, height: Math.min(1, el.clientHeight / total) })
+          }
         }}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4"
+        className="h-full overflow-y-auto overscroll-contain px-4 pt-4"
       >
         {error ? (
           <div className="mx-auto mt-[30vh] max-w-md rounded-md border border-rose/40 bg-rose-pale px-3 py-2 text-center text-sm text-rose-deep">
@@ -501,6 +641,8 @@ function GenerateReader({
         ) : (
           <GenerateOutput
             output={displayText}
+            segments={liveSegments}
+            onRerunSegment={rerunSegment}
             phase={phase}
             streaming={!finished}
             readingFont={readingFont}
@@ -509,30 +651,25 @@ function GenerateReader({
             selectedParagraphIndex={selectedParagraphIndex}
             onSelectParagraph={setSelectedParagraphIndex}
             renderParagraphAction={index => (
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleExpand(index)}
-                  className="inline-flex h-8 items-center justify-center rounded-full bg-paper-2 px-3.5 font-serif-zh text-[13px] italic leading-none text-rose-deep transition-colors active:bg-paper-3"
-                >
-                  {t.expand}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleContinueFrom(index)}
-                  className="inline-flex h-8 items-center justify-center rounded-full bg-paper-2 px-3.5 font-serif-zh text-[13px] italic leading-none text-rose-deep transition-colors active:bg-paper-3"
-                >
-                  {t.continueWriting}
-                </button>
-              </div>
+              <ParagraphActions
+                onExpand={direction => handleExpand(index, direction)}
+                onContinue={direction => handleContinueFrom(index, direction)}
+              />
             )}
           />
+        )}
+      </div>
+        {railVisible && railTicks.length > 0 && (
+          <MarkerRail ticks={railTicks} view={railView} onJump={jumpToMarker} />
         )}
       </div>
 
       {/* One control bar for everything: transport (or Continue) sits on the left for the
           thumb; the exit actions stay anchored on the right. */}
-      <div className="shrink-0 border-t border-rose-line/70 bg-paper pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+      <div
+        className="shrink-0 border-t border-rose-line/70 bg-paper pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-transform"
+        style={keyboardInset ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
+      >
         {/* Current reading speed as a thin fill bar, only while text is still revealing. */}
         {!error && canPause && (
           <div
@@ -547,16 +684,38 @@ function GenerateReader({
           </div>
         )}
 
+        {/* Whole-story Continue with an optional steer: the field sits above the button, so
+            the reader can type a direction (or not) before continuing from the full text. */}
+        {!error && canContinue && (
+          <div className="px-4 pt-3">
+            <input
+              value={continueDirection}
+              onChange={e => setContinueDirection(e.target.value)}
+              onFocus={() => setContinueFieldFocused(true)}
+              onBlur={() => setContinueFieldFocused(false)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleContinue(continueDirection.trim())
+                }
+              }}
+              placeholder={t.directionPlaceholder}
+              enterKeyHint="send"
+              className="h-9 w-full rounded-full bg-paper-2 px-4 font-serif-zh text-[13px] italic leading-none text-ink placeholder:text-ink-4 focus:outline-none"
+            />
+          </div>
+        )}
+
         <div className="flex items-center justify-between px-4 py-3">
           {/* Left: speed steppers + pause while revealing, or Continue once finished. */}
           <div className="flex items-center gap-2">
             {!error && canContinue ? (
               // A finished read swaps the transport for Continue, which feeds the existing
-              // text + prompt back for more story.
+              // text (plus any typed direction) back for more story.
               <button
                 type="button"
                 aria-label={t.continueWriting}
-                onClick={handleContinue}
+                onClick={() => handleContinue(continueDirection.trim())}
                 className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full pr-3 pl-2 font-serif-zh text-[14px] italic leading-none text-ink-3 transition-opacity active:text-ink active:opacity-70"
               >
                 <ArrowRight aria-hidden="true" className="h-5 w-5" />
@@ -608,7 +767,11 @@ function GenerateReader({
             <button
               type="button"
               disabled={!canSave}
-              onClick={() => (mode === 'resume' ? onSaveOverwrite(displayText) : onSave(displayText))}
+              onClick={() => {
+                const structure = buildStructure(displayText)
+                if (mode === 'resume') onSaveOverwrite(displayText, structure)
+                else onSave(displayText, structure)
+              }}
               className="inline-flex h-9 items-center justify-center rounded-full bg-rose px-4 font-serif-zh text-[14px] italic leading-none text-white transition-opacity disabled:opacity-30 active:opacity-80"
             >
               {t.saveAndExit}
@@ -618,5 +781,47 @@ function GenerateReader({
       </div>
     </div>,
     document.body,
+  )
+}
+
+// Per-paragraph continuation controls: an always-present optional-direction field sitting
+// above the Expand / Continue pills. Whatever's typed (or nothing) is passed to whichever
+// pill the reader taps, so an empty field reproduces the plain one-tap behavior.
+function ParagraphActions({
+  onExpand,
+  onContinue,
+}: {
+  onExpand: (direction: string) => void
+  onContinue: (direction: string) => void
+}) {
+  const t = useUiText()
+  const [value, setValue] = useState('')
+  const direction = () => value.trim()
+  return (
+    <div className="mt-2">
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        placeholder={t.directionPlaceholder}
+        enterKeyHint="done"
+        className="mb-2 h-9 w-full rounded-full bg-paper-2 px-4 font-serif-zh text-[13px] italic leading-none text-ink placeholder:text-ink-4 focus:outline-none"
+      />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => onExpand(direction())}
+          className="inline-flex h-8 items-center justify-center rounded-full bg-paper-2 px-3.5 font-serif-zh text-[13px] italic leading-none text-rose-deep transition-colors active:bg-paper-3"
+        >
+          {t.expand}
+        </button>
+        <button
+          type="button"
+          onClick={() => onContinue(direction())}
+          className="inline-flex h-8 items-center justify-center rounded-full bg-paper-2 px-3.5 font-serif-zh text-[13px] italic leading-none text-rose-deep transition-colors active:bg-paper-3"
+        >
+          {t.continueWriting}
+        </button>
+      </div>
+    </div>
   )
 }

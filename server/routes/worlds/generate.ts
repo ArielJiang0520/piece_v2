@@ -51,6 +51,26 @@ const CONTINUATION_INSTRUCTION = [
   'Write only what happens next, matching the existing scene, language, voice, tense, and tone.',
 ].join('\n')
 
+// The reader can optionally steer a continuation/expansion. When they do, we append their
+// direction as an extra line on the trailing user turn; blank direction leaves the
+// instruction byte-identical to the un-steered version.
+function withExpansionDirection(direction: string): string {
+  if (!direction) return EXPANSION_INSTRUCTION
+  return `${EXPANSION_INSTRUCTION}\nThe reader wants this direction for the moment: "${direction}". Honor it while still only dwelling on the final paragraph — do not advance the plot.`
+}
+
+function withContinuationDirection(direction: string): string {
+  if (!direction) return CONTINUATION_INSTRUCTION
+  return `${CONTINUATION_INSTRUCTION}\nThe reader wants the story to go this way next: "${direction}". Steer the continuation toward it while keeping the same scene, voice, and tense.`
+}
+
+// Trim and cap the reader's optional steer. Kept short: it's a nudge, not a new prompt.
+const MAX_DIRECTION_CHARS = 500
+function normalizeDirection(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.trim().slice(0, MAX_DIRECTION_CHARS)
+}
+
 // Structured shape mirrored to the client so the UI can show a real debug message
 // (HTTP status, which upstream provider failed, retry timing) instead of a bare string.
 // See https://openrouter.ai/docs/api/reference/errors-and-debugging
@@ -174,8 +194,9 @@ function buildMessages(args: {
   priorTextValue: string
   isExpansion: boolean
   isContinuation: boolean
+  direction: string
 }): ChatMessage[] {
-  const { systemPrompt, promptText, priorTextValue, isExpansion, isContinuation } = args
+  const { systemPrompt, promptText, priorTextValue, isExpansion, isContinuation, direction } = args
   const system: ChatMessage = { role: 'system', content: systemPrompt }
 
   // Expansion intentionally omits the original user prompt: the model should loop
@@ -185,7 +206,7 @@ function buildMessages(args: {
     return [
       system,
       { role: 'assistant', content: priorTextValue },
-      { role: 'user', content: EXPANSION_INSTRUCTION },
+      { role: 'user', content: withExpansionDirection(direction) },
     ]
   }
 
@@ -199,7 +220,7 @@ function buildMessages(args: {
     return [
       system,
       { role: 'assistant', content: priorTextValue },
-      { role: 'user', content: CONTINUATION_INSTRUCTION },
+      { role: 'user', content: withContinuationDirection(direction) },
     ]
   }
 
@@ -212,7 +233,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, mode, priorText } = await c.req.json()
+  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, mode, priorText, direction } = await c.req.json()
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
@@ -236,6 +257,8 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   }
   const isExpansion = mode === 'expand' && priorTextValue.length > 0
   const isContinuation = (mode === 'continue' || mode === 'regenerate') && priorTextValue.length > 0
+  // Only a continuation/expansion can be steered; a fresh generation ignores any direction.
+  const directionValue = (isExpansion || isContinuation) ? normalizeDirection(direction) : ''
 
   const systemPrompt = buildSystemPrompt(world.body, isContinuation)
 
@@ -256,6 +279,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     priorTextValue,
     isExpansion,
     isContinuation,
+    direction: directionValue,
   })
 
   return streamSSE(c, async (stream) => {
@@ -299,6 +323,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
             mode: mode ?? 'fresh',
             attempt,
             model: modelOption.id,
+            directed: directionValue.length > 0,
           })
 
           response = await fetch('https://openrouter.ai/api/v1/chat/completions', {

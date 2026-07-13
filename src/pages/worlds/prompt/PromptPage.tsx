@@ -82,6 +82,7 @@ export default function PromptPage() {
     selectedPieceId,
     selectPiece,
     body,
+    structure,
     complete,
     pieceNumber,
     metaLabel,
@@ -347,6 +348,7 @@ export default function PromptPage() {
             model={model}
             onModelChange={setGenerationModel}
             onGenerate={handleGenerate}
+            onResume={complete && body ? handleResume : undefined}
             stickyTopOffset={showGenerateTabs ? 92 : 48}
           />
 
@@ -362,6 +364,7 @@ export default function PromptPage() {
 
             <PieceView
               body={body}
+              structure={structure}
               complete={complete}
               pieceMetaLabel={metaLabel}
               pieceModelLabel={modelLabel}
@@ -369,6 +372,9 @@ export default function PromptPage() {
               pieceNumber={pieceNumber}
               readingFont={readingFont}
               readingFontSize={readingFontSize}
+              // Below the sticky nav/tabs (48 or 92) plus the docked generate CTA (h-12),
+              // which sits at the top of the reading area while a piece is scrolled into view.
+              railTopOffset={(showGenerateTabs ? 92 : 48) + 48}
               onResume={complete && body ? handleResume : undefined}
             />
           </section>

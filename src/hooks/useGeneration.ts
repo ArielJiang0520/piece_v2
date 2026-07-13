@@ -130,7 +130,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
 
   // 'expand' dwells on the last paragraph; 'continue' resumes the story from the
   // full existing text. Both seed the buffer with priorText and stream below it.
-  async function runGeneration(input: GenerateInput, priorText: string, mode: 'fresh' | 'expand' | 'continue' | 'regenerate') {
+  async function runGeneration(input: GenerateInput, priorText: string, mode: 'fresh' | 'expand' | 'continue' | 'regenerate', direction = '') {
     if (!worldId) return
     const isContinuation = priorText.length > 0
     // A continuation replaces whatever is currently streaming. Abort the prior client
@@ -158,6 +158,7 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
         body: JSON.stringify({
           ...input,
           ...(mode !== 'fresh' ? { mode, priorText } : {}),
+          ...(direction ? { direction } : {}),
         }),
       })
 
@@ -225,25 +226,25 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     void runGeneration(input, '', 'fresh')
   }
 
-  function expand(input: GenerateInput & { priorText: string }) {
-    const { priorText, ...rest } = input
+  function expand(input: GenerateInput & { priorText: string; direction?: string }) {
+    const { priorText, direction, ...rest } = input
     if (!priorText) return
-    void runGeneration(rest, priorText, 'expand')
+    void runGeneration(rest, priorText, 'expand', direction)
   }
 
-  function continueStory(input: GenerateInput & { priorText: string }) {
-    const { priorText, ...rest } = input
+  function continueStory(input: GenerateInput & { priorText: string; direction?: string }) {
+    const { priorText, direction, ...rest } = input
     if (!priorText) return
-    void runGeneration(rest, priorText, 'continue')
+    void runGeneration(rest, priorText, 'continue', direction)
   }
 
   // Regenerate from a cut point: the kept text is fed straight back as an assistant
   // prefill the model simply continues — no special instruction, so it writes the next
   // paragraph fresh.
-  function regenerate(input: GenerateInput & { priorText: string }) {
-    const { priorText, ...rest } = input
+  function regenerate(input: GenerateInput & { priorText: string; direction?: string }) {
+    const { priorText, direction, ...rest } = input
     if (!priorText) return
-    void runGeneration(rest, priorText, 'regenerate')
+    void runGeneration(rest, priorText, 'regenerate', direction)
   }
 
   function stop() {

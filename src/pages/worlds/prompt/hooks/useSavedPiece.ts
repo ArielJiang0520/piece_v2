@@ -53,6 +53,7 @@ export function useSavedPiece({
     : null
 
   const body = selectedPiece?.body ?? ''
+  const structure = selectedPiece?.structure ?? null
   const countLabel = outputCountLabel(body, language)
   const metaLabel = selectedPiece
     ? `${relativeTime(selectedPiece.created_at, language)} - ${countLabel}`
@@ -66,6 +67,7 @@ export function useSavedPiece({
     selectedPieceId,
     selectPiece: (pieceId: number) => setSelectedPieceId(pieceId),
     body,
+    structure,
     complete: !!selectedPiece,
     pieceNumber,
     metaLabel,

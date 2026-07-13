@@ -8,8 +8,8 @@ export function containsChineseText(text: string) {
 
 // Streaming reveal speed (non-whitespace text units per second).
 // The slider is driven entirely by these three knobs — tune the feel here.
-export const READING_SPEED_MIN = 5
-export const READING_SPEED_MAX = 40
+export const READING_SPEED_MIN = 2
+export const READING_SPEED_MAX = 30
 export const READING_SPEED_STEP = 1
 
 const DEFAULT_READING_SPEED = 15

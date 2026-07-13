@@ -5,6 +5,7 @@ import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorldId, getUserId, isValidModelId, paramInt } from '../../route-helpers'
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
+import { parseStructure, serializeStructure } from '../../../src/pages/worlds/shared/pieceStructure'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
 
@@ -19,6 +20,11 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
 
   const pieceBody = typeof body.body === 'string' ? body.body : ''
   if (!pieceBody.trim()) return c.json({ error: 'Piece body required' }, 400)
+
+  // Optional action history. Validated against the body; a mismatch is dropped (stored as
+  // plain text) rather than rejected, so a save never fails over a bad structure payload.
+  const structure = parseStructure(body.structure, pieceBody)
+  const structureJson = structure ? serializeStructure(structure) : null
 
   if (!isValidModelId(body.model)) return c.json({ error: 'Invalid model' }, 400)
   const model = body.model
@@ -128,9 +134,11 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     world_id: worldId,
     prompt_id: promptRow.id,
     body: pieceBody,
+    structure: structureJson,
     model,
     provider,
     created_at: now,
+    updated_at: now,
   }).returning({ id: pieces.id }).get()
 
   let clusterId = existingPromptClusterId

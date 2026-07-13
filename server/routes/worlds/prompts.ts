@@ -34,6 +34,7 @@ promptRoutes.get('/:promptId', authMiddleware, (c: any) => {
       id: pieces.id,
       preview: sql<string>`substr(${pieces.body}, 1, 200)`,
       created_at: pieces.created_at,
+      updated_at: pieces.updated_at,
     })
     .from(pieces)
     .where(and(eq(pieces.prompt_id, promptId), eq(pieces.world_id, worldId), eq(pieces.user_id, userId)))
