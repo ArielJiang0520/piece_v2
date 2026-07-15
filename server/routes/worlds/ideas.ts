@@ -43,7 +43,6 @@ function buildIdeasSystemPrompt(worldBody: string): string {
       '',
       'Rules:',
       '- Stay true to the world setting. Use the world\'s own language/tone. Do not polish language.',
-      '- Remember what the world is meant to write - smutty erotica premises, with kinks.',
       `- Make the ${CANDIDATE_COUNT} prompts different from each other.`,
       '- A prompt is a short premise (one or two sentences), not the story itself. No too many details.',
     ].join('\n'),

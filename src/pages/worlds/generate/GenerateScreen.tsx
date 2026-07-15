@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, FastForward, Pause, Play, Rewind } from 'lucide-react'
+import { ArrowRight, FastForward, Heart, Pause, Play, Rewind } from 'lucide-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -10,6 +10,7 @@ import { useToast } from '@/components/Toast'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useUiText } from '@/i18n'
 import { MODELS, useGenerationModel } from '@/preferences/generationModel'
+import { useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
 import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
 import {
@@ -19,10 +20,11 @@ import {
   useReadingSpeed,
 } from '@/preferences/readingSpeed'
 import GenerateOutput from './components/GenerateOutput'
+import ParagraphLikePanel from '../taste/ParagraphLikePanel'
 import MarkerRail, { revealMarker } from '../shared/MarkerRail'
 import { useGatedReveal } from './hooks/useGatedReveal'
 import { useUnsavedExitGuard } from './hooks/useUnsavedExitGuard'
-import { buildExpandPrefix } from './paragraphs'
+import { buildExpandPrefix, buildLikeContext, splitParagraphs } from './paragraphs'
 import {
   PIECE_STRIP_LIMIT,
   parseVersionDraft,
@@ -53,6 +55,7 @@ export default function GenerateScreen() {
   const queryClient = useQueryClient()
   const toast = useToast()
   const model = useGenerationModel()
+  const useTaste = useTasteProfileEnabled()
   const readingFont = useReadingFont()
   const readingFontSize = useReadingFontSize()
 
@@ -71,6 +74,12 @@ export default function GenerateScreen() {
   const resumeParam = searchParams.get('resume')
   const resumePieceId = resumeParam ? Number(resumeParam) : null
   const resumeMode = resumePieceId !== null && Number.isFinite(resumePieceId)
+  // The paragraph the reader left off on (from the piece view); the seed opens there.
+  const resumeAtParam = searchParams.get('at')
+  const resumeParagraphIndex =
+    resumeMode && resumeAtParam !== null && Number.isFinite(Number(resumeAtParam))
+      ? Number(resumeAtParam)
+      : null
 
   const backHref = lockedMode ? `/worlds/${id}/prompt/${promptId}` : `/worlds/${id}/prompt/new`
   // Returning to a fresh/version draft restores what the user typed (not the original
@@ -129,7 +138,7 @@ export default function GenerateScreen() {
       return
     }
     startedRef.current = true
-    generate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING })
+    generate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste })
     // Reset the guard on cleanup so StrictMode's mount→unmount→mount in dev re-issues
     // the run instead of leaving the aborted first one stranded. runGeneration aborts
     // the prior controller and gates the stale run by generationId, so the replaced
@@ -160,6 +169,7 @@ export default function GenerateScreen() {
           structure: serializeStructure(structure),
           model,
           provider: provider || undefined,
+          useTaste,
         }),
       }) as SaveResponse
       stop()
@@ -169,6 +179,7 @@ export default function GenerateScreen() {
         structure,
         model,
         provider: provider || null,
+        used_taste: result.usedTaste,
         created_at: Date.now(),
       })
       // Prepend the new piece to the cached list so the prompt page (which remounts on
@@ -206,7 +217,7 @@ export default function GenerateScreen() {
     try {
       const result = await apiFetch(`/api/pieces/${resumePieceId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ body: text, structure: serializeStructure(structure), model, provider: provider || undefined }),
+        body: JSON.stringify({ body: text, structure: serializeStructure(structure), model, provider: provider || undefined, useTaste }),
       }) as OverwritePieceResponse
       queryClient.setQueryData(['piece', resumePieceId], {
         id: resumePieceId,
@@ -214,6 +225,7 @@ export default function GenerateScreen() {
         structure: result.structure,
         model: result.model,
         provider: result.provider,
+        used_taste: result.used_taste,
         created_at: result.created_at,
       })
       queryClient.invalidateQueries({ queryKey: ['piece', resumePieceId] })
@@ -241,6 +253,8 @@ export default function GenerateScreen() {
     <>
       <GenerateReader
         output={output}
+        worldId={id}
+        pieceId={resumeMode ? resumePieceId : null}
         phase={phase}
         displayComplete={displayComplete}
         provider={provider}
@@ -257,12 +271,13 @@ export default function GenerateScreen() {
         mode={resumeMode ? 'resume' : 'generate'}
         initialText={resumeMode ? resumePiece?.body ?? '' : ''}
         initialStructure={resumeMode ? resumePiece?.structure ?? null : null}
+        initialParagraphIndex={resumeParagraphIndex}
         onSave={saveNewPiece}
         onSaveOverwrite={saveResume}
         onExit={handleExit}
-        onExpand={(priorText, direction) => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText, direction })}
-        onContinue={(priorText, direction) => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText, direction })}
-        onRegenerate={(priorText, direction) => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, priorText, direction })}
+        onExpand={(priorText, direction) => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, priorText, direction })}
+        onContinue={(priorText, direction) => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, priorText, direction })}
+        onRegenerate={(priorText, direction) => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, priorText, direction })}
       />
       <ConfirmDialog
         open={confirmOpen}
@@ -285,6 +300,10 @@ export default function GenerateScreen() {
 
 interface GenerateReaderProps {
   output: string
+  // World route id and, when resuming a saved piece, its id — both used to record a
+  // paragraph "like" (a fresh, unsaved generation likes against the world alone).
+  worldId?: string
+  pieceId: number | null
   phase: ReturnType<typeof useGeneration>['phase']
   displayComplete: boolean
   provider: string
@@ -301,6 +320,8 @@ interface GenerateReaderProps {
   initialText: string
   // Recorded action history of a resumed piece (null for fresh generation or legacy pieces).
   initialStructure: PieceStructure | null
+  // Paragraph to open the resumed seed on, matching where the reader was on the piece view.
+  initialParagraphIndex: number | null
   onSave: (text: string, structure: PieceStructure) => void
   onSaveOverwrite: (text: string, structure: PieceStructure) => void
   onExit: () => void
@@ -313,6 +334,8 @@ interface GenerateReaderProps {
 // Ported from the former GenerateOverlay — same behavior, now a real screen.
 function GenerateReader({
   output,
+  worldId,
+  pieceId,
   phase,
   displayComplete,
   provider,
@@ -327,6 +350,7 @@ function GenerateReader({
   mode,
   initialText,
   initialStructure,
+  initialParagraphIndex,
   onSave,
   onSaveOverwrite,
   onExit,
@@ -343,9 +367,16 @@ function GenerateReader({
   const [paused, setPaused] = useState(false)
   const [frozenText, setFrozenText] = useState<string | null>(null)
   const [selectedParagraphIndex, setSelectedParagraphIndex] = useState<number | null>(null)
+  // Paragraphs liked this session (trimmed text). A like never needs a saved piece — it's
+  // recorded against the world (and the resumed piece id when present) — so the reader can
+  // mark loved paragraphs right here in the generate flow.
+  const [likedSnippets, setLikedSnippets] = useState<Set<string>>(new Set())
   // The whole-story Continue's optional steer, typed in the field above the bottom bar.
   const [continueDirection, setContinueDirection] = useState('')
   const [continueFieldFocused, setContinueFieldFocused] = useState(false)
+  // A field inside the docked paragraph controls (expand/continue steer or the like note) is
+  // focused — folded together with the whole-story field to lift the bar above the keyboard.
+  const [dockFieldFocused, setDockFieldFocused] = useState(false)
   const [revealEpoch, setRevealEpoch] = useState(0)
   const [baselineRevealed, setBaselineRevealed] = useState(0)
   const [expanded, setExpanded] = useState(false)
@@ -431,6 +462,16 @@ function GenerateReader({
   useEffect(() => {
     if (!canSelect) setSelectedParagraphIndex(null)
   }, [canSelect])
+
+  // The paragraph the docked controls act on: its text is the like snippet and the
+  // expand/continue seed. When one is selected, the docked switch (Expand · Continue · Like)
+  // takes over the bar and the whole-story transport/Continue is hidden so there's never a
+  // double set of controls.
+  const selectedParagraph =
+    canSelect && selectedParagraphIndex != null
+      ? splitParagraphs(displayText).find(p => p.index === selectedParagraphIndex) ?? null
+      : null
+  const paragraphSelected = selectedParagraph !== null
 
   // The marker rail only appears once the read is paused/finished (so the markers are
   // rendered as tappable chips) and the piece actually has boundaries to navigate.
@@ -531,9 +572,10 @@ function GenerateReader({
   // lift the bar by the keyboard's height (tracked via the VisualViewport API). The
   // per-paragraph fields live inside the scroll region and don't need this.
   const [keyboardInset, setKeyboardInset] = useState(0)
+  const keyboardFieldOpen = continueFieldFocused || dockFieldFocused
   useEffect(() => {
     const vv = window.visualViewport
-    if (!continueFieldFocused || !vv) {
+    if (!keyboardFieldOpen || !vv) {
       setKeyboardInset(0)
       return
     }
@@ -545,7 +587,24 @@ function GenerateReader({
       vv.removeEventListener('resize', update)
       vv.removeEventListener('scroll', update)
     }
-  }, [continueFieldFocused])
+  }, [keyboardFieldOpen])
+
+  // Open the resumed seed at the paragraph the reader left off on (carried from the piece
+  // view), placed before paint so there's no visible jump from the top. Runs once, only
+  // while the seed is showing; the moment the reader acts (expands/continues) it stops
+  // applying. `initialText` is a dep because the resumed body arrives async.
+  const didSeedScrollRef = useRef(false)
+  useLayoutEffect(() => {
+    if (didSeedScrollRef.current || initialParagraphIndex == null) return
+    if (mode !== 'resume' || !showingSeed) return
+    const sc = scrollRef.current
+    if (!sc || !initialText) return
+    const el = sc.querySelector<HTMLElement>(`[data-paragraph-index="${initialParagraphIndex}"]`)
+    if (!el) return
+    const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop
+    sc.scrollTop = Math.max(0, top - 8)
+    didSeedScrollRef.current = true
+  }, [initialParagraphIndex, showingSeed, mode, initialText])
 
   useEffect(() => {
     if (paused || finished) return
@@ -650,12 +709,7 @@ function GenerateReader({
             selectable={canSelect}
             selectedParagraphIndex={selectedParagraphIndex}
             onSelectParagraph={setSelectedParagraphIndex}
-            renderParagraphAction={index => (
-              <ParagraphActions
-                onExpand={direction => handleExpand(index, direction)}
-                onContinue={direction => handleContinueFrom(index, direction)}
-              />
-            )}
+            likedSnippets={likedSnippets}
           />
         )}
       </div>
@@ -670,8 +724,29 @@ function GenerateReader({
         className="shrink-0 border-t border-rose-line/70 bg-paper pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-transform"
         style={keyboardInset ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
       >
+        {/* A tapped paragraph swaps the whole-story transport for its own docked controls:
+            a switch between Expand / Continue / Like, each revealing just its own inputs. */}
+        {paragraphSelected && selectedParagraph && (
+          <ParagraphActionDock
+            key={selectedParagraph.index}
+            worldId={worldId}
+            pieceId={pieceId}
+            snippet={selectedParagraph.text}
+            context={buildLikeContext(displayText, selectedParagraph.index)}
+            liked={likedSnippets.has(selectedParagraph.text.trim())}
+            onExpand={direction => handleExpand(selectedParagraph.index, direction)}
+            onContinue={direction => handleContinueFrom(selectedParagraph.index, direction)}
+            onLiked={snippet => {
+              setLikedSnippets(prev => new Set(prev).add(snippet.trim()))
+              setSelectedParagraphIndex(null)
+            }}
+            onClose={() => setSelectedParagraphIndex(null)}
+            onFieldFocusChange={setDockFieldFocused}
+          />
+        )}
+
         {/* Current reading speed as a thin fill bar, only while text is still revealing. */}
-        {!error && canPause && (
+        {!error && canPause && !paragraphSelected && (
           <div
             role="slider"
             aria-label={t.speed}
@@ -686,7 +761,7 @@ function GenerateReader({
 
         {/* Whole-story Continue with an optional steer: the field sits above the button, so
             the reader can type a direction (or not) before continuing from the full text. */}
-        {!error && canContinue && (
+        {!error && canContinue && !paragraphSelected && (
           <div className="px-4 pt-3">
             <input
               value={continueDirection}
@@ -707,9 +782,10 @@ function GenerateReader({
         )}
 
         <div className="flex items-center justify-between px-4 py-3">
-          {/* Left: speed steppers + pause while revealing, or Continue once finished. */}
+          {/* Left: speed steppers + pause while revealing, or Continue once finished.
+              Hidden while a paragraph is selected — the docked controls own the bar then. */}
           <div className="flex items-center gap-2">
-            {!error && canContinue ? (
+            {paragraphSelected ? null : !error && canContinue ? (
               // A finished read swaps the transport for Continue, which feeds the existing
               // text (plus any typed direction) back for more story.
               <button
@@ -784,44 +860,122 @@ function GenerateReader({
   )
 }
 
-// Per-paragraph continuation controls: an always-present optional-direction field sitting
-// above the Expand / Continue pills. Whatever's typed (or nothing) is passed to whichever
-// pill the reader taps, so an empty field reproduces the plain one-tap behavior.
-function ParagraphActions({
+// The docked controls for a tapped paragraph, sitting just above the bottom action row.
+// A three-way switch (Expand · Continue · Like) reveals only the chosen intent's controls:
+// Expand/Continue are a steer field + send; Like is the full reason panel. Steer and react
+// stay one tap apart without crowding the surface — the resting state is just three pills.
+type DockTab = 'expand' | 'continue' | 'like'
+
+function ParagraphActionDock({
+  worldId,
+  pieceId,
+  snippet,
+  context,
+  liked,
   onExpand,
   onContinue,
+  onLiked,
+  onClose,
+  onFieldFocusChange,
 }: {
+  worldId?: string
+  pieceId: number | null
+  snippet: string
+  context: string
+  liked: boolean
   onExpand: (direction: string) => void
   onContinue: (direction: string) => void
+  onLiked: (snippet: string) => void
+  onClose: () => void
+  onFieldFocusChange: (focused: boolean) => void
 }) {
   const t = useUiText()
-  const [value, setValue] = useState('')
-  const direction = () => value.trim()
+  const [tab, setTab] = useState<DockTab>('expand')
+  const [direction, setDirection] = useState('')
+
+  const steer = () => {
+    const value = direction.trim()
+    if (tab === 'continue') onContinue(value)
+    else onExpand(value)
+    setDirection('')
+  }
+
+  const pills: { key: DockTab; label: string }[] = [
+    { key: 'expand', label: t.expand },
+    { key: 'continue', label: t.continueWriting },
+    { key: 'like', label: t.tasteLike },
+  ]
+
   return (
-    <div className="mt-2">
-      <input
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        placeholder={t.directionPlaceholder}
-        enterKeyHint="done"
-        className="mb-2 h-9 w-full rounded-full bg-paper-2 px-4 font-serif-zh text-[13px] italic leading-none text-ink placeholder:text-ink-4 focus:outline-none"
-      />
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onExpand(direction())}
-          className="inline-flex h-8 items-center justify-center rounded-full bg-paper-2 px-3.5 font-serif-zh text-[13px] italic leading-none text-rose-deep transition-colors active:bg-paper-3"
-        >
-          {t.expand}
-        </button>
-        <button
-          type="button"
-          onClick={() => onContinue(direction())}
-          className="inline-flex h-8 items-center justify-center rounded-full bg-paper-2 px-3.5 font-serif-zh text-[13px] italic leading-none text-rose-deep transition-colors active:bg-paper-3"
-        >
-          {t.continueWriting}
-        </button>
+    // Focus of any descendant field (steer input or the like note) lifts the bar above the
+    // keyboard; blur only counts when focus actually leaves the dock, not when it moves
+    // between the dock's own controls.
+    <div
+      className="border-b border-rose-line/70 px-4 pb-3 pt-3"
+      onFocus={() => onFieldFocusChange(true)}
+      onBlur={e => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onFieldFocusChange(false)
+      }}
+    >
+      <div className="flex gap-1.5">
+        {pills.map(pill => {
+          const on = tab === pill.key
+          return (
+            <button
+              key={pill.key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setTab(pill.key)}
+              className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 font-serif-zh text-[13px] italic leading-none transition-colors ${on ? 'bg-rose-pale text-rose-deep' : 'bg-paper-2 text-ink-3 active:bg-paper-3'}`}
+            >
+              {pill.key === 'like' && <Heart aria-hidden="true" className={`h-3 w-3 ${liked ? 'fill-current' : ''}`} />}
+              {pill.label}
+            </button>
+          )
+        })}
       </div>
+
+      {tab === 'like' ? (
+        liked ? (
+          <div className="mt-2 flex items-center gap-1.5 px-1 py-3 text-ink-3">
+            <Heart aria-hidden="true" className="h-3.5 w-3.5 fill-current" />
+            <span className="t-meta">{t.tasteYouLiked}</span>
+          </div>
+        ) : (
+          <ParagraphLikePanel
+            worldId={worldId ?? ''}
+            pieceId={pieceId}
+            snippet={snippet}
+            context={context}
+            onLiked={onLiked}
+            onClose={onClose}
+          />
+        )
+      ) : (
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            value={direction}
+            onChange={e => setDirection(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                steer()
+              }
+            }}
+            placeholder={t.directionPlaceholder}
+            enterKeyHint="send"
+            className="h-9 flex-1 rounded-full bg-paper-2 px-4 font-serif-zh text-[13px] italic leading-none text-ink placeholder:text-ink-4 focus:outline-none"
+          />
+          <button
+            type="button"
+            aria-label={tab === 'continue' ? t.continueWriting : t.expand}
+            onClick={steer}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose text-white transition-opacity active:opacity-80"
+          >
+            <ArrowRight aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -12,6 +12,7 @@ import WorldEditor from './pages/worlds/editor/WorldEditor'
 import PromptPage from './pages/worlds/prompt/PromptPage'
 import WorldIdeasScreen from './pages/worlds/ideas/WorldIdeasScreen'
 import GenerateScreen from './pages/worlds/generate/GenerateScreen'
+import TasteScreen from './pages/worlds/taste/TasteScreen'
 
 function RootLayout() {
   return (
@@ -47,6 +48,7 @@ const router = createBrowserRouter([
         children: [
           { path: '/', element: <Navigate to="/worlds" replace /> },
           { path: '/worlds', element: <WorldList /> },
+          { path: '/taste', element: <TasteScreen /> },
           { path: '/worlds/new', element: <WorldEditor /> },
           { path: '/worlds/:id', element: <WorldPrompts /> },
           { path: '/worlds/:id/ideas', element: <WorldIdeasScreen /> },

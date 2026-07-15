@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, CircleUserRound, Ellipsis, Moon, Sun, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ChevronRight, CircleUserRound, Ellipsis, Heart, Moon, Sun, Trash2, X } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/auth'
@@ -82,6 +82,11 @@ export default function TopNav() {
   function goToWorldList() {
     closeMenu()
     navigate('/worlds')
+  }
+
+  function goToTaste() {
+    closeMenu()
+    navigate('/taste')
   }
 
   function openDeleteAccountDialog() {
@@ -231,6 +236,18 @@ export default function TopNav() {
                 ))}
               </ul>
             )}
+            <button
+              type="button"
+              className="mt-6 flex w-full items-center justify-between border-t border-rose-line pt-4 font-serif-zh text-[15px] text-ink-2 transition-colors hover:text-ink"
+              onClick={goToTaste}
+            >
+              <span className="flex items-center gap-2">
+                <Heart aria-hidden="true" className="h-4 w-4 text-ink-3" />
+                {t.tasteTitle}
+              </span>
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
+            </button>
+
             <div className="mt-auto flex items-center justify-end gap-3">
               <div
                 className="grid w-24 grid-cols-2 overflow-hidden rounded-full border border-rose-line p-0.5"

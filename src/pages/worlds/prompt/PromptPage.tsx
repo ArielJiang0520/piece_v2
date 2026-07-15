@@ -87,6 +87,7 @@ export default function PromptPage() {
     pieceNumber,
     metaLabel,
     modelLabel,
+    tasteLabel,
     footerStatsLabel,
   } = useSavedPiece({
     lockedMode,
@@ -206,9 +207,24 @@ export default function PromptPage() {
     navigate(genBase, { state: { prompt, versionDraft: routeState?.versionDraft, similarToPromptId, generated } })
   }
 
+  // The paragraph the reader is currently on: the topmost one still below the sticky chrome
+  // (nav + docked CTA). Read live from the DOM so either Resume button — the piece-view one
+  // or the docked controls one — resumes at the same place the screen was showing.
+  function currentReadingParagraphIndex(): number | null {
+    const threshold = (showGenerateTabs ? 92 : 48) + 48 + 4
+    for (const el of document.querySelectorAll<HTMLElement>('[data-paragraph-index]')) {
+      if (el.getBoundingClientRect().bottom > threshold) {
+        return Number(el.dataset.paragraphIndex)
+      }
+    }
+    return null
+  }
+
   function handleResume() {
     if (selectedPieceId === null) return
-    navigate(`${genBase}?resume=${selectedPieceId}`)
+    const idx = currentReadingParagraphIndex()
+    const at = idx != null ? `&at=${idx}` : ''
+    navigate(`${genBase}?resume=${selectedPieceId}${at}`)
   }
 
   function handleEditFromPrompt(sourcePrompt: ClusterPrompt) {
@@ -368,6 +384,7 @@ export default function PromptPage() {
               complete={complete}
               pieceMetaLabel={metaLabel}
               pieceModelLabel={modelLabel}
+              pieceTasteLabel={tasteLabel}
               pieceFooterStatsLabel={footerStatsLabel}
               pieceNumber={pieceNumber}
               readingFont={readingFont}

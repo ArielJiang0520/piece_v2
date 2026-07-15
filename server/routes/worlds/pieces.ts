@@ -6,6 +6,7 @@ import { findUserWorldId, getUserId, isValidModelId, paramInt } from '../../rout
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 import { parseStructure, serializeStructure } from '../../../src/pages/worlds/shared/pieceStructure'
+import { tasteApplies } from '../../taste-profile'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
 
@@ -30,6 +31,11 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   const model = body.model
   const providerRaw = typeof body.provider === 'string' ? body.provider.trim() : ''
   const provider = providerRaw ? providerRaw : null
+
+  // Record whether the taste profile actually shaped this generation: the reader had the
+  // toggle on AND had enabled statements for this world. Toggle-on with an empty profile
+  // injects nothing, so it doesn't count.
+  const usedTaste = body.useTaste === true && tasteApplies(userId, worldId)
 
   let existingPromptId: number | undefined
   let existingPromptClusterId: number | null = null
@@ -137,6 +143,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     structure: structureJson,
     model,
     provider,
+    used_taste: usedTaste ? 1 : 0,
     created_at: now,
     updated_at: now,
   }).returning({ id: pieces.id }).get()
@@ -178,6 +185,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     pieceCount: savedPrompt?.piece_count ?? (isNewPrompt ? 1 : 0),
     clusterId,
     isNewPrompt,
+    usedTaste,
   })
 })
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, ArrowUp } from 'lucide-react'
+import { ArrowRight, ArrowUp, Sparkles } from 'lucide-react'
 import { entityLabel, formatEndOfPiece } from '@/config'
 import { useUiText } from '@/i18n'
 import { useLanguageId } from '@/preferences/language'
@@ -21,6 +21,8 @@ interface PieceViewProps {
   complete: boolean
   pieceMetaLabel: string | null
   pieceModelLabel: string | null
+  // Non-null when the reader's taste profile shaped this piece; rendered as a meta line.
+  pieceTasteLabel: string | null
   pieceFooterStatsLabel: string | null
   pieceNumber: number | null
   readingFont: ReadingFont
@@ -39,6 +41,7 @@ export default function PieceView({
   complete,
   pieceMetaLabel,
   pieceModelLabel,
+  pieceTasteLabel,
   pieceFooterStatsLabel,
   pieceNumber,
   readingFont,
@@ -51,7 +54,7 @@ export default function PieceView({
   const [endRevealed, setEndRevealed] = useState(false)
 
   const annotated = useMemo(
-    () => (structure ? annotateParagraphs(body, structure.segments) : []),
+    () => annotateParagraphs(body, structure?.segments ?? []),
     [structure, body],
   )
   const actionLabel = (action: PieceAction): string =>
@@ -174,6 +177,12 @@ export default function PieceView({
                   {pieceModelLabel}
                 </div>
               )}
+              {pieceTasteLabel && (
+                <div className="t-meta mt-0.5 flex items-center gap-1 text-ink-4">
+                  <Sparkles aria-hidden="true" className="h-3 w-3" />
+                  {pieceTasteLabel}
+                </div>
+              )}
             </div>
             {onResume && (
               <button
@@ -202,7 +211,10 @@ export default function PieceView({
                     </span>
                   </div>
                 )}
-                <p className={proseTextClass(readingFont)} style={proseTextStyle(readingFontSize)}>
+                <p
+                  className={proseTextClass(readingFont)}
+                  style={proseTextStyle(readingFontSize)}
+                >
                   {paragraph.text}
                 </p>
               </div>

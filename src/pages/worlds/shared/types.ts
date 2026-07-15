@@ -48,6 +48,9 @@ export interface SaveResponse {
   pieceId: number
   pieceCount: number
   clusterId: number | null
+  // Whether the reader's taste profile actually shaped this generation (toggle on AND they
+  // had enabled statements for this world).
+  usedTaste: boolean
 }
 
 export interface PromptDetail {
@@ -75,6 +78,7 @@ export interface PieceDetail {
   structure: PieceStructure | null
   model: string | null
   provider: string | null
+  used_taste: boolean
   created_at: number
 }
 
@@ -85,6 +89,7 @@ export interface OverwritePieceResponse {
   structure: PieceStructure | null
   model: string | null
   provider: string | null
+  used_taste: boolean
   created_at: number
 }
 

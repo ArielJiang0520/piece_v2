@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { MODELS } from '@/preferences/generationModel'
 import { useLanguageId, type LanguageId } from '@/preferences/language'
+import { useUiText } from '@/i18n'
 import { containsChineseText } from '@/preferences/readingSpeed'
 import { relativeTime } from '@/utils/time'
 import type { PieceDetail, PieceStripPiece } from '../../shared/types'
@@ -25,6 +26,7 @@ export function useSavedPiece({
   activePromptPieceCount,
 }: UseSavedPieceOptions) {
   const language = useLanguageId()
+  const t = useUiText()
   const [selectedPieceId, setSelectedPieceId] = useState<number | null>(null)
   const latestPieceId = promptPieces[0]?.id ?? null
 
@@ -62,6 +64,7 @@ export function useSavedPiece({
     ? `${MODELS.find(m => m.id === selectedPiece.model)?.label ?? selectedPiece.model} (${selectedPiece.provider || 'Unknown Provider'})`
     : null
   const footerStatsLabel = language === 'zh' ? `${countLabel}已生成` : `${countLabel} generated`
+  const tasteLabel = selectedPiece?.used_taste ? t.tasteShaped : null
 
   return {
     selectedPieceId,
@@ -72,6 +75,7 @@ export function useSavedPiece({
     pieceNumber,
     metaLabel,
     modelLabel,
+    tasteLabel,
     footerStatsLabel,
   }
 }

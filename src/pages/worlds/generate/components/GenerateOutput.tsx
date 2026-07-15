@@ -1,5 +1,5 @@
-import { useMemo, type ReactNode } from 'react'
-import { RotateCw } from 'lucide-react'
+import { useMemo } from 'react'
+import { Heart, RotateCw } from 'lucide-react'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { useUiText } from '@/i18n'
 import type { GenerationPhase } from '@/hooks/useGeneration'
@@ -23,7 +23,9 @@ interface GenerateOutputProps {
   selectable: boolean
   selectedParagraphIndex: number | null
   onSelectParagraph: (index: number | null) => void
-  renderParagraphAction: (index: number) => ReactNode
+  // Snippets liked this session (trimmed paragraph text) — a liked paragraph shows a badge.
+  // The action controls themselves live in the docked bar below, keyed to the selection.
+  likedSnippets: Set<string>
   // Re-run the action recorded at a boundary marker (segment index), replacing downstream.
   onRerunSegment: (segmentIndex: number) => void
 }
@@ -42,9 +44,10 @@ export default function GenerateOutput({
   selectable,
   selectedParagraphIndex,
   onSelectParagraph,
-  renderParagraphAction,
+  likedSnippets,
   onRerunSegment,
 }: GenerateOutputProps) {
+  const t = useUiText()
   const annotated = useMemo(
     () => (selectable ? annotateParagraphs(output, segments) : []),
     [output, selectable, segments],
@@ -77,8 +80,9 @@ export default function GenerateOutput({
           <div>
             {annotated.map(paragraph => {
               const selected = selectedParagraphIndex === paragraph.index
+              const liked = likedSnippets.has(paragraph.text.trim())
               return (
-                <div key={paragraph.index} className="mb-4 last:mb-0">
+                <div key={paragraph.index} data-paragraph-index={paragraph.index} className="mb-4 last:mb-0">
                   {paragraph.action && paragraph.segmentIndex != null && (
                     <ActionMarker
                       segmentIndex={paragraph.segmentIndex}
@@ -94,7 +98,12 @@ export default function GenerateOutput({
                   >
                     {paragraph.text}
                   </p>
-                  {selected && renderParagraphAction(paragraph.index)}
+                  {liked && (
+                    <div className="mt-1 flex items-center gap-1 text-ink-4">
+                      <Heart aria-hidden="true" className="h-3 w-3 fill-current" />
+                      <span className="t-meta">{t.tasteYouLiked}</span>
+                    </div>
+                  )}
                 </div>
               )
             })}

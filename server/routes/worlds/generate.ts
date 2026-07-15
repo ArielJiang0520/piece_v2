@@ -6,6 +6,7 @@ import { normalizePromptInput } from '../../prompt-text'
 import { BLACKLISTED_PROVIDERS } from '../../../src/preferences/generationModel'
 import { readServerSentEvents } from '../../../src/utils/sse'
 import { abortGeneration, clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
+import { loadTasteForGeneration } from '../../taste-profile'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
 
@@ -14,7 +15,7 @@ function ownerKey(userId: number, worldId: number) {
   return `${userId}:${worldId}`
 }
 
-function buildSystemPrompt(worldBody: string, continuing: boolean): string {
+function buildSystemPrompt(worldBody: string, continuing: boolean, tasteSection: string): string {
   const sections: string[] = []
   if (worldBody.trim()) {
     sections.push(`# World setting\n${worldBody.trim()}`)
@@ -32,6 +33,14 @@ function buildSystemPrompt(worldBody: string, continuing: boolean): string {
     )
   }
 
+  // The reader's distilled taste, injected as a SECONDARY nudge: the world and prompt above
+  // decide WHAT happens; this only tints HOW it reads. Deliberately last and softly worded so
+  // it never overrides the brief or steers the plot toward past likes (which would just
+  // reproduce the same scenes).
+  if (tasteSection) {
+    sections.push(tasteSection)
+  }
+
   sections.push(
     `# Language\nRegardless of the language of these instructions, always reply in the same language as the user's prompt.`,
   )
@@ -39,8 +48,31 @@ function buildSystemPrompt(worldBody: string, continuing: boolean): string {
   return sections.join('\n\n')
 }
 
+// Format the reader's enabled taste statements into a soft, secondary system-prompt section.
+// Craft statements are global "how to write" guidance; content statements are world-scoped
+// and phrased as an optional lean-in, never a mandate — so the profile shapes voice without
+// forcing the story back onto previously-liked subject matter.
+function buildTasteSection(userId: number, worldId: number): string {
+  const { craft, content } = loadTasteForGeneration(userId, worldId)
+  if (craft.length === 0 && content.length === 0) return ''
+
+  const lines: string[] = [
+    '# Reader sensibilities (secondary — the world setting and the prompt above take precedence)',
+    'This reader has shown, across their reading, what they respond to. Treat it as a light seasoning on your voice and choices, NOT as instructions about what to write. Do not force any of it in; never steer the plot just to satisfy it.',
+  ]
+  if (craft.length > 0) {
+    lines.push('How they like the writing to feel:')
+    for (const s of craft) lines.push(`- ${s.text}`)
+  }
+  if (content.length > 0) {
+    lines.push('Themes they have gravitated toward in this world — lean in only where the prompt and world naturally allow:')
+    for (const s of content) lines.push(`- ${s.text}`)
+  }
+  return lines.join('\n')
+}
+
 const EXPANSION_INSTRUCTION = [
-  'Focus ONLY on the final paragraph above. Your sole task is to dwell on that single moment, even writing the same actions repeatedly is fine.',
+  'Focus ONLY on the final action piece above. Your sole task is to dwell on that single moment.',
   'Do NOT advance the story, introduce new events, or continue toward any earlier goal or prompt — stay on this same moment and keep writing about it:enrich it with more dirty descriptions and more dirty talk dialogues. Let users enjoy it.',
   'Do NOT repeat or rewrite any text already written. Pick up seamlessly from the last sentence so the new prose reads as a natural continuation. Match the existing language, voice, tense, and tone exactly.',
 ].join('\n')
@@ -233,7 +265,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, mode, priorText, direction } = await c.req.json()
+  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, useTaste, mode, priorText, direction } = await c.req.json()
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
@@ -260,7 +292,10 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   // Only a continuation/expansion can be steered; a fresh generation ignores any direction.
   const directionValue = (isExpansion || isContinuation) ? normalizeDirection(direction) : ''
 
-  const systemPrompt = buildSystemPrompt(world.body, isContinuation)
+  // The reader can switch the taste profile off; when on, inject their enabled statements
+  // (craft globally, content scoped to this world) as a soft secondary section.
+  const tasteSection = useTaste === true ? buildTasteSection(userId, worldId) : ''
+  const systemPrompt = buildSystemPrompt(world.body, isContinuation, tasteSection)
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)

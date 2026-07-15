@@ -4,31 +4,35 @@ import { db, prompts, pieces } from '../db'
 import { type Variables, authMiddleware } from '../middleware'
 import { getUserId, isValidModelId, paramInt } from '../route-helpers'
 import { parseStructure, serializeStructure } from '../../src/pages/worlds/shared/pieceStructure'
+import { tasteApplies } from '../taste-profile'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
+
+const PIECE_SELECT = {
+  id: pieces.id,
+  user_id: pieces.user_id,
+  world_id: pieces.world_id,
+  prompt_id: pieces.prompt_id,
+  prompt: prompts.text,
+  body: pieces.body,
+  structure: pieces.structure,
+  model: pieces.model,
+  provider: pieces.provider,
+  used_taste: pieces.used_taste,
+  created_at: pieces.created_at,
+} as const
 
 pieceRoutes.get('/:id', authMiddleware, (c) => {
   const userId = getUserId(c)
   const id = paramInt(c, 'id')
   const piece = db
-    .select({
-      id: pieces.id,
-      user_id: pieces.user_id,
-      world_id: pieces.world_id,
-      prompt_id: pieces.prompt_id,
-      prompt: prompts.text,
-      body: pieces.body,
-      structure: pieces.structure,
-      model: pieces.model,
-      provider: pieces.provider,
-      created_at: pieces.created_at,
-    })
+    .select(PIECE_SELECT)
     .from(pieces)
     .innerJoin(prompts, eq(pieces.prompt_id, prompts.id))
     .where(and(eq(pieces.id, id), eq(pieces.user_id, userId)))
     .get()
   if (!piece) return c.json({ error: 'Not found' }, 404)
-  return c.json({ ...piece, structure: parseStructure(piece.structure, piece.body) })
+  return c.json({ ...piece, used_taste: !!piece.used_taste, structure: parseStructure(piece.structure, piece.body) })
 })
 
 // Overwrite a piece in place — used when a saved piece is resumed, continued, and
@@ -45,7 +49,7 @@ pieceRoutes.patch('/:id', authMiddleware, async (c) => {
   // any prior structure so the stored decomposition never disagrees with the text.
   const structure = parseStructure(body.structure, pieceBody)
 
-  const updates: { body: string; structure: string | null; updated_at: number; model?: string; provider?: string | null } = {
+  const updates: { body: string; structure: string | null; updated_at: number; model?: string; provider?: string | null; used_taste?: number } = {
     body: pieceBody,
     structure: structure ? serializeStructure(structure) : null,
     updated_at: Date.now(),
@@ -58,6 +62,16 @@ pieceRoutes.patch('/:id', authMiddleware, async (c) => {
     const providerRaw = typeof body.provider === 'string' ? body.provider.trim() : ''
     updates.provider = providerRaw ? providerRaw : null
   }
+  // Resuming with taste applied marks the piece as taste-shaped, but never clears it: a piece
+  // that was already shaped by taste stays flagged even if the reader later toggles it off.
+  const owned = db
+    .select({ world_id: pieces.world_id })
+    .from(pieces)
+    .where(and(eq(pieces.id, id), eq(pieces.user_id, userId)))
+    .get()
+  if (owned && body.useTaste === true && tasteApplies(userId, owned.world_id)) {
+    updates.used_taste = 1
+  }
 
   const updated = db
     .update(pieces)
@@ -68,24 +82,13 @@ pieceRoutes.patch('/:id', authMiddleware, async (c) => {
   if (!updated) return c.json({ error: 'Not found' }, 404)
 
   const piece = db
-    .select({
-      id: pieces.id,
-      user_id: pieces.user_id,
-      world_id: pieces.world_id,
-      prompt_id: pieces.prompt_id,
-      prompt: prompts.text,
-      body: pieces.body,
-      structure: pieces.structure,
-      model: pieces.model,
-      provider: pieces.provider,
-      created_at: pieces.created_at,
-    })
+    .select(PIECE_SELECT)
     .from(pieces)
     .innerJoin(prompts, eq(pieces.prompt_id, prompts.id))
     .where(and(eq(pieces.id, id), eq(pieces.user_id, userId)))
     .get()
   if (!piece) return c.json({ error: 'Not found' }, 404)
-  return c.json({ ...piece, structure: parseStructure(piece.structure, piece.body) })
+  return c.json({ ...piece, used_taste: !!piece.used_taste, structure: parseStructure(piece.structure, piece.body) })
 })
 
 export default pieceRoutes

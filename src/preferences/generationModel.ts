@@ -50,11 +50,22 @@ export const MODELS: ModelOption[] = [
   },
 ]
 
+// ─── Model roles ────────────────────────────────────────────────────────────
+// Three independent jobs, each pinned to its own model so they can be tuned
+// separately. Keep them all here — this file is the single source of truth.
+//
+//   1. Piece generation — the story stream. User-selectable from MODELS above;
+//      DEFAULT_MODEL_ID is the fallback when the user hasn't chosen.
+//   2. Similar prompts / ideas — one-shot muse candidates, independent of the
+//      user's story-model choice.
+//   3. Taste distillation — cheap offline pass that turns liked passages into
+//      sensibility statements.
+
 export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
-// Fixed model for the "Similar prompts" muse (one-shot candidate generation), independent of
-// the user's story-generation model choice. Change it here.
 export const SIMILAR_MODEL_ID = 'deepseek/deepseek-v4-pro'
+
+export const TASTE_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
 export const BLACKLISTED_PROVIDERS: string[] = ['alibaba', 'together']
 

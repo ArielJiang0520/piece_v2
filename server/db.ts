@@ -75,7 +75,40 @@ sqlite.run(`
     structure TEXT,
     model TEXT,
     provider TEXT,
+    -- 1 when this piece was generated with the reader's taste profile applied (toggle on AND
+    -- they had enabled statements for this world). Drives the "shaped by your taste" meta line.
+    used_taste INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  -- One row per paragraph the reader marked as a "spark". Global to the user (their taste
+  -- carries across worlds) but each like records the world/piece it came from, so the
+  -- distiller can keep content-tagged likes tied to their world. reasons is the reader's
+  -- single free-form "why I liked this" text — the quick-pick chips and any typed note are
+  -- folded into it on the client; they are not stored as separate structured props.
+  CREATE TABLE IF NOT EXISTS taste_likes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    piece_id INTEGER REFERENCES pieces(id) ON DELETE CASCADE,
+    snippet TEXT NOT NULL,
+    -- The liked paragraph plus a paragraph or two on either side, so the distiller can read
+    -- the loved passage in the flow it sat in (what led up to it, what it paid off) rather
+    -- than the bare line. Null for likes recorded before this was captured.
+    context TEXT,
+    reasons TEXT,
+    created_at INTEGER NOT NULL
+  );
+
+  -- One row per user: the distilled taste profile. statements is a JSON array of
+  -- { id, dimension, text, enabled } sensibility statements injected into generation.
+  -- distilled_like_count is how many likes existed at the last distill, so the background
+  -- trigger knows when enough new likes have accumulated to re-distill.
+  CREATE TABLE IF NOT EXISTS taste_profile (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    statements TEXT,
+    distilled_like_count INTEGER NOT NULL DEFAULT 0,
     updated_at INTEGER NOT NULL
   );
 
@@ -162,16 +195,44 @@ function rebuildPiecesTable() {
         structure TEXT,
         model TEXT,
         provider TEXT,
+        used_taste INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
     `)
     sqlite.run(`
-      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, structure, model, provider, created_at, updated_at)
-      SELECT id, user_id, world_id, prompt_id, body, structure, model, provider, created_at, updated_at FROM pieces;
+      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, structure, model, provider, used_taste, created_at, updated_at)
+      SELECT id, user_id, world_id, prompt_id, body, structure, model, provider, used_taste, created_at, updated_at FROM pieces;
     `)
     sqlite.run('DROP TABLE pieces;')
     sqlite.run('ALTER TABLE pieces_new RENAME TO pieces;')
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
+  }
+}
+
+function rebuildTasteLikesTable() {
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run('DROP TABLE IF EXISTS taste_likes_new;')
+    sqlite.run(`
+      CREATE TABLE IF NOT EXISTS taste_likes_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+        piece_id INTEGER REFERENCES pieces(id) ON DELETE CASCADE,
+        snippet TEXT NOT NULL,
+        context TEXT,
+        reasons TEXT,
+        created_at INTEGER NOT NULL
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO taste_likes_new (id, user_id, world_id, piece_id, snippet, context, reasons, created_at)
+      SELECT id, user_id, world_id, piece_id, snippet, context, reasons, created_at FROM taste_likes;
+    `)
+    sqlite.run('DROP TABLE taste_likes;')
+    sqlite.run('ALTER TABLE taste_likes_new RENAME TO taste_likes;')
   } finally {
     sqlite.run('PRAGMA foreign_keys = ON;')
   }
@@ -195,6 +256,10 @@ function dropColumnIfPresent(table: string, column: string) {
         rebuildPiecesTable()
         return
       }
+      if (table === 'taste_likes' && ['tags', 'note'].includes(column)) {
+        rebuildTasteLikesTable()
+        return
+      }
       throw error
     }
   }
@@ -208,10 +273,37 @@ addColumnIfMissing('pieces', 'updated_at', 'updated_at INTEGER NOT NULL DEFAULT 
 // Sidecar action history (JSON). Added before the world_version_id drop below so the
 // pieces-table rebuild fallback, if it fires, can copy the column.
 addColumnIfMissing('pieces', 'structure', 'structure TEXT')
+// Whether the reader's taste profile shaped this generation. Added before the
+// world_version_id drop below so the pieces-table rebuild fallback can copy the column.
+addColumnIfMissing('pieces', 'used_taste', 'used_taste INTEGER NOT NULL DEFAULT 0')
 // Backfill: existing pieces last "updated" when they were created.
 sqlite.run('UPDATE pieces SET updated_at = created_at WHERE updated_at = 0;')
 addColumnIfMissing('prompts', 'similar_to_prompt_id', 'similar_to_prompt_id INTEGER REFERENCES prompts(id)')
 addColumnIfMissing('prompts', 'is_generated', 'is_generated INTEGER NOT NULL DEFAULT 0')
+addColumnIfMissing('taste_likes', 'context', 'context TEXT')
+// Fold the old separate `tags` (JSON array) + free-typed `note` into a single `reasons`
+// text field, then drop them. tags like ["language","dialogue"] degrade to the readable
+// "language, dialogue"; a note is joined on with an em dash. Guarded on the old columns
+// still existing, since the UPDATE references them by name (a fresh DB never has them).
+addColumnIfMissing('taste_likes', 'reasons', 'reasons TEXT')
+if (sqlite.query(`PRAGMA table_info(taste_likes)`).all().some((r: any) => r.name === 'tags')) {
+  sqlite.run(`
+    UPDATE taste_likes
+    SET reasons = NULLIF(TRIM(
+      REPLACE(REPLACE(REPLACE(COALESCE(tags, '[]'), '[', ''), ']', ''), '"', '')
+      || CASE
+           WHEN COALESCE(note, '') != ''
+                AND REPLACE(REPLACE(REPLACE(COALESCE(tags, '[]'), '[', ''), ']', ''), '"', '') != ''
+             THEN ' — ' || note
+           WHEN COALESCE(note, '') != '' THEN note
+           ELSE ''
+         END
+    ), '')
+    WHERE reasons IS NULL;
+  `)
+}
+dropColumnIfPresent('taste_likes', 'tags')
+dropColumnIfPresent('taste_likes', 'note')
 sqlite.run('DROP INDEX IF EXISTS idx_pieces_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_prompts_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_world_versions_world_restored_from;')
@@ -255,6 +347,7 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_worlds_user_updated ON worlds(user_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_world_versions_world_created ON world_versions(world_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_taste_likes_user_created ON taste_likes(user_id, created_at DESC);
 `)
 
 sqlite.run(`
@@ -354,8 +447,27 @@ export const pieces = sqliteTable('pieces', {
   structure: text('structure'),
   model: text('model'),
   provider: text('provider'),
+  used_taste: integer('used_taste').notNull().default(0),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })
 
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces } })
+export const tasteLikes = sqliteTable('taste_likes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  world_id: integer('world_id').notNull().references(() => worlds.id),
+  piece_id: integer('piece_id').references(() => pieces.id),
+  snippet: text('snippet').notNull(),
+  context: text('context'),
+  reasons: text('reasons'),
+  created_at: integer('created_at').notNull(),
+})
+
+export const tasteProfile = sqliteTable('taste_profile', {
+  user_id: integer('user_id').primaryKey().references(() => users.id),
+  statements: text('statements'),
+  distilled_like_count: integer('distilled_like_count').notNull().default(0),
+  updated_at: integer('updated_at').notNull(),
+})
+
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, tasteLikes, tasteProfile } })

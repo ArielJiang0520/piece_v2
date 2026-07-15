@@ -34,6 +34,19 @@ export function buildExpandPrefix(text: string, paragraphIndex: number): string 
   return `${through.replace(/\s+$/, '')}\n\n`
 }
 
+// The window of prose around a liked paragraph: up to `radius` paragraphs before and after
+// it, joined with blank lines. Stored alongside the like so the taste distiller reads the
+// loved passage inside its surrounding flow, not as a bare line. Returns just the paragraph
+// itself when it sits at the very start/end (or can't be located).
+export function buildLikeContext(text: string, paragraphIndex: number, radius = 1): string {
+  const paragraphs = splitParagraphs(text)
+  const at = paragraphs.findIndex(p => p.index === paragraphIndex)
+  if (at === -1) return ''
+  const start = Math.max(0, at - radius)
+  const end = Math.min(paragraphs.length, at + radius + 1)
+  return paragraphs.slice(start, end).map(p => p.text.trim()).join('\n\n')
+}
+
 export interface AnnotatedParagraph extends Paragraph {
   // Set when a recorded action's output begins at this paragraph, so the static reader can
   // show a marker there. `segmentIndex` keys the re-run; `action`/`direction` describe it.
