@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, GitBranch, Search, Plus, X, Lightbulb } from 'lucide-react'
+import { ArrowUp, ChevronRight, GitBranch, Heart, Search, Plus, X, Lightbulb } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -336,6 +336,24 @@ export default function WorldPrompts() {
           </span>
           <span>{t.newEntity(entityLabel('prompt', { capitalize: true }, language))}</span>
         </Link>
+
+        {!isSearching && (
+          <Link
+            to={`/worlds/${id}/taste`}
+            className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-rose-line/80 bg-paper/60 px-4 py-4 transition-colors active:bg-rose-tint/45"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-rose-pale text-rose-deep">
+                <Heart aria-hidden="true" className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-serif-zh text-[15px] italic text-ink">{t.tasteTitle}</span>
+                <span className="t-meta mt-0.5 block text-ink-3">{t.tasteAboutHint}</span>
+              </span>
+            </span>
+            <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" />
+          </Link>
+        )}
 
         {loadingSearch ? (
           <ClusterCardSkeletons count={3} />

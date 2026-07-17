@@ -76,17 +76,15 @@ sqlite.run(`
     model TEXT,
     provider TEXT,
     -- 1 when this piece was generated with the reader's taste profile applied (toggle on AND
-    -- they had enabled statements for this world). Drives the "shaped by your taste" meta line.
+    -- they had a non-empty profile for this world). Drives the "shaped by your taste" meta line.
     used_taste INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
 
-  -- One row per paragraph the reader marked as a "spark". Global to the user (their taste
-  -- carries across worlds) but each like records the world/piece it came from, so the
-  -- distiller can keep content-tagged likes tied to their world. reasons is the reader's
-  -- single free-form "why I liked this" text — the quick-pick chips and any typed note are
-  -- folded into it on the client; they are not stored as separate structured props.
+  -- One row per paragraph the reader marked as a "spark". Scoped to the world it came from
+  -- (taste is per-world), and records the piece too when there is one. reasons is the reader's
+  -- single free-form "why I liked this" text — optional, no structured tags/chips.
   CREATE TABLE IF NOT EXISTS taste_likes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -101,13 +99,14 @@ sqlite.run(`
     created_at INTEGER NOT NULL
   );
 
-  -- One row per user: the distilled taste profile. statements is a JSON array of
-  -- { id, dimension, text, enabled } sensibility statements injected into generation.
-  -- distilled_like_count is how many likes existed at the last distill, so the background
-  -- trigger knows when enough new likes have accumulated to re-distill.
+  -- One row per world: the distilled taste profile for that world. profile is a single freeform
+  -- prose profile of what the reader responds to, injected into that world's generation.
+  -- distilled_like_count is how many of the world's likes existed at the last distill, so the
+  -- background trigger knows when enough new likes have accumulated to re-distill.
   CREATE TABLE IF NOT EXISTS taste_profile (
-    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    statements TEXT,
+    world_id INTEGER PRIMARY KEY REFERENCES worlds(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    profile TEXT,
     distilled_like_count INTEGER NOT NULL DEFAULT 0,
     updated_at INTEGER NOT NULL
   );
@@ -304,6 +303,43 @@ if (sqlite.query(`PRAGMA table_info(taste_likes)`).all().some((r: any) => r.name
 }
 dropColumnIfPresent('taste_likes', 'tags')
 dropColumnIfPresent('taste_likes', 'note')
+
+// Taste went from per-user to per-world. The old taste_profile was keyed by user_id with no
+// world_id and stored per-user aggregated statements — those can't be split back apart, so
+// drop the table and let it recreate world-keyed (below). The likes survive and re-distill
+// per world on demand. Guarded on the absence of the new world_id column so it runs once.
+if (
+  sqlite.query(`PRAGMA table_info(taste_profile)`).all().length > 0 &&
+  !sqlite.query(`PRAGMA table_info(taste_profile)`).all().some((r: any) => r.name === 'world_id')
+) {
+  sqlite.run('DROP TABLE taste_profile;')
+  sqlite.run(`
+    CREATE TABLE taste_profile (
+      world_id INTEGER PRIMARY KEY REFERENCES worlds(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      statements TEXT,
+      distilled_like_count INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+  `)
+}
+
+// The taste profile went from a JSON array of toggleable statements (column `statements`) to a
+// single freeform prose profile (column `profile`). The old JSON is meaningless as prose, and a
+// profile is derived from the world's likes, so drop and recreate with the new column; the likes
+// survive and re-distill on demand. Guarded on the old column so it runs once.
+if (sqlite.query(`PRAGMA table_info(taste_profile)`).all().some((r: any) => r.name === 'statements')) {
+  sqlite.run('DROP TABLE taste_profile;')
+  sqlite.run(`
+    CREATE TABLE taste_profile (
+      world_id INTEGER PRIMARY KEY REFERENCES worlds(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      profile TEXT,
+      distilled_like_count INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+  `)
+}
 sqlite.run('DROP INDEX IF EXISTS idx_pieces_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_prompts_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_world_versions_world_restored_from;')
@@ -464,8 +500,9 @@ export const tasteLikes = sqliteTable('taste_likes', {
 })
 
 export const tasteProfile = sqliteTable('taste_profile', {
-  user_id: integer('user_id').primaryKey().references(() => users.id),
-  statements: text('statements'),
+  world_id: integer('world_id').primaryKey().references(() => worlds.id),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  profile: text('profile'),
   distilled_like_count: integer('distilled_like_count').notNull().default(0),
   updated_at: integer('updated_at').notNull(),
 })

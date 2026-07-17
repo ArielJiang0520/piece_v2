@@ -48,11 +48,11 @@ const router = createBrowserRouter([
         children: [
           { path: '/', element: <Navigate to="/worlds" replace /> },
           { path: '/worlds', element: <WorldList /> },
-          { path: '/taste', element: <TasteScreen /> },
           { path: '/worlds/new', element: <WorldEditor /> },
           { path: '/worlds/:id', element: <WorldPrompts /> },
           { path: '/worlds/:id/ideas', element: <WorldIdeasScreen /> },
           { path: '/worlds/:id/about', element: <WorldAbout /> },
+          { path: '/worlds/:id/taste', element: <TasteScreen /> },
           { path: '/worlds/:id/edit', element: <WorldEditor /> },
           { path: '/worlds/:id/prompt/new', element: <PromptPage /> },
           { path: '/worlds/:id/prompt/new/generate', element: <GenerateScreen /> },

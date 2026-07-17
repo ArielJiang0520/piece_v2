@@ -4,14 +4,12 @@ import { type Variables } from './middleware'
 import authRoutes from './routes/auth'
 import worldRoutes from './routes/worlds'
 import pieceRoutes from './routes/pieces'
-import tasteRoutes from './routes/taste'
 
 const app = new Hono<{ Variables: Variables }>()
 
 app.route('/api', authRoutes)
 app.route('/api/worlds', worldRoutes)
 app.route('/api/pieces', pieceRoutes)
-app.route('/api/taste', tasteRoutes)
 
 if (process.env.NODE_ENV === 'production') {
   app.use('/*', serveStatic({ root: './dist' }))

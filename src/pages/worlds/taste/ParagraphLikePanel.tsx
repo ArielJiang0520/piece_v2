@@ -3,8 +3,6 @@ import { Heart } from 'lucide-react'
 import { apiFetch } from '@/api'
 import { useToast } from '@/components/Toast'
 import { useUiText } from '@/i18n'
-import { useLanguageId } from '@/preferences/language'
-import { TASTE_TAGS, tasteTagLabel, type TasteTag } from '../shared/tasteTags'
 
 interface ParagraphLikePanelProps {
   worldId: string
@@ -21,31 +19,23 @@ interface ParagraphLikePanelProps {
   onClose: () => void
 }
 
-// The inline "why do you like this?" panel that opens under a tapped paragraph in the
-// static reader. Multi-select reason chips + an optional free-typed note, then a single
-// "like this" confirm. Matches the app's pill / italic-serif-zh aesthetic — no new widgets.
+// The "like" row inside the paragraph dock — structurally identical to the Expand/Continue
+// steer row: one optional free-text reaction field + one round submit button. No chips, no
+// card, no label: the reader isn't a critic, they just felt something and can type it or not.
 export default function ParagraphLikePanel({ worldId, pieceId, snippet, context, onLiked, onClose }: ParagraphLikePanelProps) {
   const t = useUiText()
-  const lang = useLanguageId()
   const toast = useToast()
-  const [tags, setTags] = useState<TasteTag[]>([])
   const [note, setNote] = useState('')
   const [pending, setPending] = useState(false)
-
-  function toggleTag(tag: TasteTag) {
-    setTags(prev => (prev.includes(tag) ? prev.filter(x => x !== tag) : [...prev, tag]))
-  }
 
   async function submit() {
     if (pending) return
     setPending(true)
     try {
-      // Fold the selected chips and the typed note into one free-form reason string — the
-      // server stores it as a single field, the chips aren't special props.
-      const reasons = [tags.map(tag => tasteTagLabel(tag, lang)).join(', '), note.trim()].filter(Boolean).join(' — ')
-      await apiFetch('/api/taste/likes', {
+      const reasons = note.trim()
+      await apiFetch(`/api/worlds/${worldId}/taste/likes`, {
         method: 'POST',
-        body: JSON.stringify({ worldId: Number(worldId), pieceId: pieceId ?? undefined, snippet, context, reasons }),
+        body: JSON.stringify({ pieceId: pieceId ?? undefined, snippet, context, reasons }),
       })
       onLiked(snippet)
       toast.show({ kind: 'success', title: t.tasteLiked })
@@ -58,45 +48,30 @@ export default function ParagraphLikePanel({ worldId, pieceId, snippet, context,
   }
 
   return (
-    <div className="fade-in-up mt-2 rounded-lg bg-paper-2 p-3">
-      <p className="t-eyebrow mb-2">{t.tasteWhyPrompt}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {TASTE_TAGS.map(tag => {
-          const on = tags.includes(tag)
-          return (
-            <button
-              key={tag}
-              type="button"
-              aria-pressed={on}
-              onClick={() => toggleTag(tag)}
-              className={`rounded-full px-3 py-1 font-serif-zh text-[13px] italic leading-none transition-colors ${on ? 'bg-rose-pale text-rose-deep' : 'bg-paper text-ink-3 active:bg-paper-3'}`}
-            >
-              {tasteTagLabel(tag, lang)}
-            </button>
-          )
-        })}
-      </div>
+    <div className="mt-2 flex items-center gap-2">
       <input
         value={note}
         onChange={e => setNote(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            submit()
+          }
+        }}
         maxLength={500}
         placeholder={t.tasteNotePlaceholder}
-        className="mt-3 w-full rounded-md bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-4 focus:outline-none"
+        enterKeyHint="done"
+        className="h-9 flex-1 rounded-full bg-paper-2 px-4 font-serif-zh text-[13px] italic leading-none text-ink placeholder:text-ink-4 focus:outline-none"
       />
-      <div className="mt-3 flex items-center justify-end gap-4">
-        <button type="button" onClick={onClose} className="t-meta transition-colors active:text-ink">
-          {t.cancel}
-        </button>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={pending}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-rose px-4 font-serif-zh text-[13px] italic leading-none text-white transition-opacity active:opacity-80 disabled:opacity-50"
-        >
-          <Heart aria-hidden="true" className="h-3.5 w-3.5" />
-          {pending ? t.tasteLiking : t.tasteLikeThis}
-        </button>
-      </div>
+      <button
+        type="button"
+        aria-label={t.tasteLikeThis}
+        onClick={submit}
+        disabled={pending}
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose text-white transition-opacity active:opacity-80 disabled:opacity-50"
+      >
+        <Heart aria-hidden="true" className="h-4 w-4" />
+      </button>
     </div>
   )
 }

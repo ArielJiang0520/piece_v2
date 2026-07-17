@@ -270,7 +270,7 @@ export default function WorldAbout() {
           </h1>
         </header>
 
-        <article className="mt-7 whitespace-pre-wrap font-serif-zh text-[17px] leading-8 text-ink-2">
+        <article className="mt-8 whitespace-pre-wrap font-serif-zh text-[17px] leading-8 text-ink-2">
           {hasBody ? body : <p className="t-meta">{t.noBodyYet}</p>}
         </article>
 

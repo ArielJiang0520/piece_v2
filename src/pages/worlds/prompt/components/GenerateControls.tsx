@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUiText, type UiText } from '@/i18n'
 import { useLanguageId, type LanguageId } from '@/preferences/language'
+import { setTasteProfileEnabled, useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
 import ModelSelector from './ModelSelector'
 import { entityLabel } from '@/config'
 
@@ -30,6 +31,7 @@ export default function GenerateControls({
 }: GenerateControlsProps) {
   const language = useLanguageId()
   const t = useUiText()
+  const useTaste = useTasteProfileEnabled()
   const ctaAnchorRef = useRef<HTMLDivElement>(null)
   const [ctaDocked, setCtaDocked] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
@@ -100,12 +102,22 @@ export default function GenerateControls({
       </div>
 
       <div className={`relative flex items-center justify-center ${modelMenuOpen ? 'z-50' : 'z-0'}`}>
-        <div className="flex w-[78%] max-w-md min-w-0 flex-col items-center">
+        <div className="mt-0.5 mb-2 flex w-[78%] max-w-md min-w-0 flex-row items-center justify-center gap-1">
           <ModelSelector
             model={model}
             onModelChange={onModelChange}
             onMenuOpenChange={handleModelMenuOpenChange}
           />
+          <span aria-hidden="true" className="text-[11px] leading-none text-ink-4/60">·</span>
+          <button
+            type="button"
+            aria-pressed={useTaste}
+            onClick={() => setTasteProfileEnabled(!useTaste)}
+            className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1.5 font-serif-zh text-[11px] italic leading-none text-ink-3 transition-colors active:text-ink focus:outline-none"
+          >
+            <span className="shrink-0 text-ink-4">{t.tasteToggle}:</span>
+            <span className={useTaste ? 'text-rose-deep' : 'text-ink-4'}>{useTaste ? t.tasteOn : t.tasteOff}</span>
+          </button>
         </div>
       </div>
     </>

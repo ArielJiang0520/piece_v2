@@ -51,7 +51,7 @@ export default function ModelSelector({
   }
 
   return (
-    <div ref={modelMenuRef} className="relative mt-0.5 mb-2 flex w-full min-w-0 justify-center">
+    <div ref={modelMenuRef} className="relative flex min-w-0 justify-center">
       <button
         id={modelButtonId}
         type="button"
@@ -74,7 +74,7 @@ export default function ModelSelector({
       {menuOpen && (
         <div
           id={modelListboxId}
-          className="absolute right-0 top-full z-40 mt-2 w-[min(15rem,calc(100vw-2rem))] overflow-hidden rounded-sm border border-rose-line bg-paper p-0.5 shadow-(--shadow-menu)"
+          className="absolute left-1/2 top-full z-40 mt-2 w-[min(15rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-sm border border-rose-line bg-paper p-0.5 shadow-(--shadow-menu)"
           role="listbox"
           aria-labelledby={modelButtonId}
         >

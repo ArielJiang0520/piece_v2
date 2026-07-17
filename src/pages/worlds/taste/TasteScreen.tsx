@@ -1,78 +1,178 @@
-import { useState } from 'react'
-import { Eye, EyeOff, Heart, RotateCw, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, Heart, Pencil, RotateCw, Trash2 } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { useUiText } from '@/i18n'
 import Skeleton from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { setTasteProfileEnabled, useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
-import { useLanguageId } from '@/preferences/language'
-import { TASTE_TAGS, tasteTagLabel, type TasteTag } from '../shared/tasteTags'
-
-interface Statement {
-  id: string
-  dimension: TasteTag
-  text: string
-  enabled: boolean
-  world_id?: number
-}
 
 interface ProfileResponse {
-  statements: Statement[]
+  // The reader's taste profile for this world, as freeform prose ('' when there's none yet).
+  profile: string
   likeCount: number
+  // Advances every time a distill finishes and persists — the client's completion signal.
+  updatedAt: number
+  // Whether a distill is running server-side right now.
+  distilling: boolean
 }
+
+// How long the UI keeps polling for a manual refresh before it stops waiting and tells the
+// reader to check back. A distill queues behind any live story generation on the single
+// OpenRouter slot, so give it real room.
+const REFRESH_POLL_TIMEOUT_MS = 150_000
 
 interface LikeRow {
   id: number
   snippet: string
+  // The liked passage in its surrounding paragraphs — shown when the reader expands the like.
+  // Falls back to the snippet itself server-side, so it's always present.
+  context: string
   reasons: string | null
 }
 
-// The global taste screen: the on/off toggle, the distilled sensibility statements (with a
-// per-statement veto and a manual refresh), and the raw liked passages that feed them.
+// One world's taste screen (reached from its About page): the on/off toggle, the reader's
+// distilled taste profile (a piece of prose the app maintains, with a manual refresh), and the
+// raw liked passages that feed it. Everything here is scoped to this world.
 export default function TasteScreen() {
   const t = useUiText()
-  const lang = useLanguageId()
+  const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
   const enabled = useTasteProfileEnabled()
   const [refreshing, setRefreshing] = useState(false)
+  // The last refresh outcome, shown inline so a manual refresh is never a silent no-op:
+  // distillation often re-derives the same profile, and a failure leaves it untouched — either
+  // way the text looks unchanged, so we say what happened instead.
+  const [refreshNote, setRefreshNote] = useState<{ text: string; error: boolean } | null>(null)
+  // Captured at the moment a refresh is triggered, so the polling effect can tell when the
+  // background distill has finished (updatedAt advanced) and whether it changed anything.
+  const baselineUpdatedAtRef = useRef(0)
+  const beforeProfileRef = useRef('')
+  // The like whose note is being edited inline, plus its working text. Null = nothing open.
+  const [editingLikeId, setEditingLikeId] = useState<number | null>(null)
+  const [editingNote, setEditingNote] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  // The like whose full surrounding context is expanded for reading. Null = none.
+  const [expandedLikeId, setExpandedLikeId] = useState<number | null>(null)
+  // Delete is two-tap: the first tap arms the confirm on this like, the second commits.
+  // Auto-disarms after a moment so a stray tap doesn't leave it primed.
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null)
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(confirmTimerRef.current), [])
 
-  useTopNavConfig({ mainTitle: t.tasteTitle, backHref: '/worlds' })
+  useTopNavConfig({ mainTitle: t.tasteTitle, backHref: `/worlds/${id}/about` })
 
   const profileQuery = useQuery({
-    queryKey: ['taste-profile'],
-    queryFn: () => apiFetch('/api/taste/profile') as Promise<ProfileResponse>,
+    queryKey: ['taste-profile', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}/taste/profile`) as Promise<ProfileResponse>,
+    enabled: !!id,
+    // While a manual refresh is in flight, poll for the background distill's result.
+    refetchInterval: refreshing ? 2500 : false,
   })
   const likesQuery = useQuery({
-    queryKey: ['taste-likes-all'],
-    queryFn: () => apiFetch('/api/taste/likes') as Promise<LikeRow[]>,
+    queryKey: ['taste-likes-all', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}/taste/likes`) as Promise<LikeRow[]>,
+    enabled: !!id,
   })
 
-  const statements = profileQuery.data?.statements ?? []
+  const profile = profileQuery.data?.profile ?? ''
   const likes = likesQuery.data ?? []
 
+  // A distill can take a while (it waits for the single OpenRouter generation slot, then runs),
+  // so the refresh only *triggers* it and returns; we then poll the profile for the result
+  // rather than holding one request open and mistaking its slowness for a failure.
   async function refresh() {
     if (refreshing) return
+    // Snapshot what "done" will look like, so the polling effect can detect completion and
+    // whether anything actually changed.
+    baselineUpdatedAtRef.current = profileQuery.data?.updatedAt ?? 0
+    beforeProfileRef.current = profile
+    setRefreshNote({ text: t.tasteRefreshing, error: false })
     setRefreshing(true)
     try {
-      await apiFetch('/api/taste/profile/refresh', { method: 'POST' })
-      await queryClient.invalidateQueries({ queryKey: ['taste-profile'] })
+      await apiFetch(`/api/worlds/${id}/taste/profile/refresh`, { method: 'POST' })
     } catch {
-      // Silent: a failed distill leaves the existing profile intact.
-    } finally {
+      // Only the trigger itself failed (e.g. auth/network) — that's a real error worth showing.
+      // A slow distill is NOT this path; it succeeds here and resolves via polling below.
       setRefreshing(false)
+      setRefreshNote({ text: t.tasteRefreshFailed, error: true })
     }
   }
 
-  async function patchStatement(id: string, change: { enabled?: boolean; deleted?: boolean }) {
-    await apiFetch(`/api/taste/profile/statements/${id}`, { method: 'PATCH', body: JSON.stringify(change) })
-    await queryClient.invalidateQueries({ queryKey: ['taste-profile'] })
+  // Completion: the background distill stamps a newer updatedAt when it persists. Report the
+  // outcome (changed / unchanged / empty) and stop polling.
+  const polledUpdatedAt = profileQuery.data?.updatedAt ?? 0
+  useEffect(() => {
+    if (!refreshing) return
+    if (polledUpdatedAt <= baselineUpdatedAtRef.current) return
+    const next = profileQuery.data?.profile ?? ''
+    const note = !next && likes.length === 0
+      ? t.tasteRefreshEmpty
+      : next === beforeProfileRef.current
+        ? t.tasteRefreshedNoChange
+        : t.tasteRefreshed
+    setRefreshNote({ text: note, error: false })
+    setRefreshing(false)
+  }, [refreshing, polledUpdatedAt, profileQuery.data, likes.length, t])
+
+  // Soft ceiling: if the distill hasn't landed in this long, stop spinning and tell the reader
+  // to check back — it's still running server-side, so this is a status, not an error.
+  useEffect(() => {
+    if (!refreshing) return
+    const timer = setTimeout(() => {
+      setRefreshing(false)
+      setRefreshNote({ text: t.tasteRefreshStillWorking, error: false })
+    }, REFRESH_POLL_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [refreshing, t])
+
+  // First tap arms the confirm; second tap (while armed) deletes. Any other tap re-arms/resets.
+  function requestDelete(likeId: number) {
+    clearTimeout(confirmTimerRef.current)
+    if (confirmingDeleteId === likeId) {
+      setConfirmingDeleteId(null)
+      void deleteLike(likeId)
+      return
+    }
+    setConfirmingDeleteId(likeId)
+    confirmTimerRef.current = setTimeout(() => setConfirmingDeleteId(null), 3500)
   }
 
-  async function deleteLike(id: number) {
-    await apiFetch(`/api/taste/likes/${id}`, { method: 'DELETE' })
-    await queryClient.invalidateQueries({ queryKey: ['taste-likes-all'] })
-    await queryClient.invalidateQueries({ queryKey: ['taste-likes'] })
+  async function deleteLike(likeId: number) {
+    await apiFetch(`/api/worlds/${id}/taste/likes/${likeId}`, { method: 'DELETE' })
+    await queryClient.invalidateQueries({ queryKey: ['taste-likes-all', id] })
+    await queryClient.invalidateQueries({ queryKey: ['taste-likes', id] })
+  }
+
+  function startEditing(like: LikeRow) {
+    setConfirmingDeleteId(null)
+    setEditingLikeId(like.id)
+    setEditingNote(like.reasons ?? '')
+  }
+
+  // Save-on-commit (blur or Enter), iOS-notes style — no explicit Save button. A no-op edit
+  // just closes without a round-trip.
+  async function saveEdit() {
+    if (editingLikeId === null || savingEdit) return
+    const current = likes.find(l => l.id === editingLikeId)
+    const next = editingNote.trim()
+    if (current && (current.reasons ?? '') === next) {
+      setEditingLikeId(null)
+      return
+    }
+    setSavingEdit(true)
+    try {
+      await apiFetch(`/api/worlds/${id}/taste/likes/${editingLikeId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ reasons: next }),
+      })
+      await queryClient.invalidateQueries({ queryKey: ['taste-likes-all', id] })
+      await queryClient.invalidateQueries({ queryKey: ['taste-likes', id] })
+      setEditingLikeId(null)
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   return (
@@ -103,7 +203,7 @@ export default function TasteScreen() {
         </div>
       </div>
 
-      {/* Distilled statements */}
+      {/* The taste profile */}
       <div className="mb-4 flex items-center justify-between gap-3">
         <span className="t-eyebrow">{t.tasteProfileHeading}</span>
         <button
@@ -117,51 +217,22 @@ export default function TasteScreen() {
         </button>
       </div>
 
+      {refreshNote && (
+        <p className={`t-meta -mt-2 mb-4 ${refreshNote.error ? 'text-signal-red' : 'text-ink-4'}`} aria-live="polite">
+          {refreshNote.text}
+        </p>
+      )}
+
       {profileQuery.isLoading ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-6 w-full" />)}
+        <div className="mb-8 flex flex-col gap-2">
+          {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-5 w-full" />)}
         </div>
-      ) : statements.length === 0 ? (
+      ) : !profile ? (
         <p className="t-meta mb-8 text-ink-4">{t.tasteProfileEmpty}</p>
       ) : (
-        <div className="mb-8 flex flex-col gap-4">
-          {TASTE_TAGS.map(dimension => {
-            const group = statements.filter(s => s.dimension === dimension)
-            if (group.length === 0) return null
-            return (
-              <div key={dimension}>
-                <p className="t-meta mb-1.5 text-ink-4">{tasteTagLabel(dimension, lang)}</p>
-                <ul className="flex flex-col gap-1.5">
-                  {group.map(statement => (
-                    <li key={statement.id} className="flex items-start gap-2">
-                      <p className={`flex-1 font-serif-zh text-[15px] leading-snug ${statement.enabled ? 'text-ink-2' : 'text-ink-4 line-through'}`}>
-                        {statement.text}
-                      </p>
-                      <button
-                        type="button"
-                        aria-label={statement.enabled ? t.tasteDisable : t.tasteEnable}
-                        onClick={() => patchStatement(statement.id, { enabled: !statement.enabled })}
-                        className="mt-0.5 shrink-0 text-ink-4 transition-colors active:text-ink"
-                      >
-                        {statement.enabled
-                          ? <Eye aria-hidden="true" className="h-4 w-4" />
-                          : <EyeOff aria-hidden="true" className="h-4 w-4" />}
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={t.tasteDelete}
-                        onClick={() => patchStatement(statement.id, { deleted: true })}
-                        className="mt-0.5 shrink-0 text-ink-4 transition-colors active:text-signal-red"
-                      >
-                        <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )
-          })}
-        </div>
+        <p className="mb-8 whitespace-pre-line font-serif-zh text-[15px] leading-relaxed text-ink-2">
+          {profile}
+        </p>
       )}
 
       {/* Liked passages (evidence) */}
@@ -179,18 +250,79 @@ export default function TasteScreen() {
         <ul className="flex flex-col gap-3">
           {likes.map(like => (
             <li key={like.id} className="rounded-lg bg-paper-2 p-3">
-              <div className="flex items-start gap-2">
+              {/* Tap the passage itself to open / close its full surrounding context — accordion, no icon. */}
+              <button
+                type="button"
+                aria-expanded={expandedLikeId === like.id}
+                onClick={() => setExpandedLikeId(prev => (prev === like.id ? null : like.id))}
+                className="flex w-full items-start gap-2 text-left"
+              >
                 <p className="flex-1 font-serif-zh text-[14px] leading-snug text-ink-2">{like.snippet}</p>
-                <button
-                  type="button"
-                  aria-label={t.tasteDelete}
-                  onClick={() => deleteLike(like.id)}
-                  className="shrink-0 text-ink-4 transition-colors active:text-signal-red"
-                >
-                  <Trash2 aria-hidden="true" className="h-4 w-4" />
-                </button>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`mt-0.5 h-4 w-4 shrink-0 text-ink-4 transition-transform ${expandedLikeId === like.id ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {expandedLikeId === like.id && (
+                <p className="mt-2 whitespace-pre-line rounded-lg bg-paper p-3 font-serif-zh text-[13px] leading-relaxed text-ink-3">
+                  {like.context}
+                </p>
+              )}
+
+              {/* Note + delete on one line. The note is edited in place — tap it, type, tap away. */}
+              <div className="mt-2 flex items-center gap-3">
+                {editingLikeId === like.id ? (
+                  <input
+                    value={editingNote}
+                    onChange={e => setEditingNote(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        e.currentTarget.blur()
+                      }
+                    }}
+                    onBlur={saveEdit}
+                    maxLength={600}
+                    autoFocus
+                    placeholder={t.tasteNotePlaceholder}
+                    enterKeyHint="done"
+                    className="h-8 flex-1 rounded-full bg-paper px-3 font-serif-zh text-[13px] italic leading-none text-ink placeholder:text-ink-4 focus:outline-none"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startEditing(like)}
+                    className="group flex flex-1 items-center gap-1.5 text-left"
+                  >
+                    <span className={`t-meta ${like.reasons ? 'text-ink-4' : 'italic text-ink-4/70'}`}>
+                      {like.reasons || t.tasteAddNote}
+                    </span>
+                    <Pencil aria-hidden="true" className="h-3 w-3 shrink-0 text-ink-4/60" />
+                  </button>
+                )}
+
+                {editingLikeId !== like.id && (
+                  confirmingDeleteId === like.id ? (
+                    <button
+                      type="button"
+                      onClick={() => requestDelete(like.id)}
+                      className="inline-flex h-8 shrink-0 items-center rounded-full bg-signal-red/10 px-3 font-serif-zh text-[12px] italic leading-none text-signal-red transition-opacity active:opacity-70"
+                    >
+                      {t.tasteDeleteConfirm}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={t.tasteDelete}
+                      onClick={() => requestDelete(like.id)}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-4 transition-colors active:bg-rose-line/50 active:text-signal-red"
+                    >
+                      <Trash2 aria-hidden="true" className="h-[17px] w-[17px]" />
+                    </button>
+                  )
+                )}
               </div>
-              {like.reasons && <p className="t-meta mt-2 text-ink-4">{like.reasons}</p>}
             </li>
           ))}
         </ul>

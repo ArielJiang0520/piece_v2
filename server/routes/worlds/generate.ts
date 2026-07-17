@@ -48,27 +48,19 @@ function buildSystemPrompt(worldBody: string, continuing: boolean, tasteSection:
   return sections.join('\n\n')
 }
 
-// Format the reader's enabled taste statements into a soft, secondary system-prompt section.
-// Craft statements are global "how to write" guidance; content statements are world-scoped
-// and phrased as an optional lean-in, never a mandate — so the profile shapes voice without
-// forcing the story back onto previously-liked subject matter.
+// Wrap this world's taste profile in a soft, secondary system-prompt section. Phrased as an
+// optional lean-in, never a mandate — so the profile shapes voice and choices without forcing
+// the story back onto previously-liked subject matter.
 function buildTasteSection(userId: number, worldId: number): string {
-  const { craft, content } = loadTasteForGeneration(userId, worldId)
-  if (craft.length === 0 && content.length === 0) return ''
+  const profile = loadTasteForGeneration(userId, worldId)
+  if (!profile) return ''
 
-  const lines: string[] = [
+  return [
     '# Reader sensibilities (secondary — the world setting and the prompt above take precedence)',
-    'This reader has shown, across their reading, what they respond to. Treat it as a light seasoning on your voice and choices, NOT as instructions about what to write. Do not force any of it in; never steer the plot just to satisfy it.',
-  ]
-  if (craft.length > 0) {
-    lines.push('How they like the writing to feel:')
-    for (const s of craft) lines.push(`- ${s.text}`)
-  }
-  if (content.length > 0) {
-    lines.push('Themes they have gravitated toward in this world — lean in only where the prompt and world naturally allow:')
-    for (const s of content) lines.push(`- ${s.text}`)
-  }
-  return lines.join('\n')
+    'This is a profile of what this reader responds to, built from the passages they have loved in this world. Treat it as a light seasoning on your voice and choices, NOT as instructions about what to write. Do not force any of it in; never steer the plot just to satisfy it.',
+    '',
+    profile,
+  ].join('\n')
 }
 
 const EXPANSION_INSTRUCTION = [
@@ -292,8 +284,8 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   // Only a continuation/expansion can be steered; a fresh generation ignores any direction.
   const directionValue = (isExpansion || isContinuation) ? normalizeDirection(direction) : ''
 
-  // The reader can switch the taste profile off; when on, inject their enabled statements
-  // (craft globally, content scoped to this world) as a soft secondary section.
+  // The reader can switch the taste profile off; when on, inject this world's taste profile
+  // as a soft secondary section.
   const tasteSection = useTaste === true ? buildTasteSection(userId, worldId) : ''
   const systemPrompt = buildSystemPrompt(world.body, isContinuation, tasteSection)
 

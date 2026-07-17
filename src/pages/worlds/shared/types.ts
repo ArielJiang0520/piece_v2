@@ -49,7 +49,7 @@ export interface SaveResponse {
   pieceCount: number
   clusterId: number | null
   // Whether the reader's taste profile actually shaped this generation (toggle on AND they
-  // had enabled statements for this world).
+  // had a non-empty profile for this world).
   usedTaste: boolean
 }
 

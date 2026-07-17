@@ -33,7 +33,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   const provider = providerRaw ? providerRaw : null
 
   // Record whether the taste profile actually shaped this generation: the reader had the
-  // toggle on AND had enabled statements for this world. Toggle-on with an empty profile
+  // toggle on AND had a non-empty profile for this world. Toggle-on with an empty profile
   // injects nothing, so it doesn't count.
   const usedTaste = body.useTaste === true && tasteApplies(userId, worldId)
 
