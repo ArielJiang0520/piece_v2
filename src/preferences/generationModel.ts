@@ -54,7 +54,7 @@ export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
 export const SIMILAR_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
-export const TASTE_MODEL_ID = 'deepseek/deepseek-v4-pro'
+export const TASTE_MODEL_ID = 'z-ai/glm-5.2'
 
 export const BLACKLISTED_PROVIDERS: string[] = ['alibaba', 'together']
 

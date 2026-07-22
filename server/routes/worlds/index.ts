@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { eq, and, desc, inArray, sql } from 'drizzle-orm'
+import { eq, and, desc, inArray, ne, sql } from 'drizzle-orm'
 import { db, pieces, promptClusters, worldVersions, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, findUserWorldId, getUserId, paramInt } from '../../route-helpers'
@@ -10,8 +10,20 @@ import pieceRoutes from './pieces'
 import similarRoutes from './similar'
 import ideasRoutes from './ideas'
 import tasteRoutes from './taste'
+import chatRoutes from './chat'
 
 const worldRoutes = new Hono<{ Variables: Variables }>()
+
+// Version numbers are stable: each new version takes the highest number this
+// world has ever used +1, so deleting a version never renumbers the others.
+function nextVersionNumber(worldId: number) {
+  const row = db
+    .select({ max: sql<number | null>`MAX(${worldVersions.version_number})` })
+    .from(worldVersions)
+    .where(eq(worldVersions.world_id, worldId))
+    .get()
+  return (row?.max ?? 0) + 1
+}
 
 function bodySummary(value: string) {
   return value
@@ -102,6 +114,7 @@ worldRoutes.post('/', authMiddleware, async (c) => {
     const version = tx.insert(worldVersions).values({
       world_id: world.id,
       body: world.body,
+      version_number: 1,
       created_at: now,
     }).returning({ id: worldVersions.id }).get()
 
@@ -131,6 +144,7 @@ worldRoutes.get('/:id/versions', authMiddleware, (c) => {
     .select({
       id: worldVersions.id,
       name: worldVersions.name,
+      number: worldVersions.version_number,
       created_at: worldVersions.created_at,
     })
     .from(worldVersions)
@@ -192,6 +206,7 @@ worldRoutes.post('/:id/versions', authMiddleware, async (c) => {
       world_id: id,
       body: nextBody,
       name: versionName,
+      version_number: nextVersionNumber(id),
       created_at: now,
     }).returning({ id: worldVersions.id }).get()
     // The new version becomes the checked-out one; the previous version stays frozen.
@@ -205,15 +220,73 @@ worldRoutes.post('/:id/versions', authMiddleware, async (c) => {
   return c.json({ ok: true, version_id: created.id })
 })
 
+// Delete a version. Deleting the checked-out version first moves HEAD to the most
+// recent remaining one and mirrors its body onto the world. Only the last remaining
+// version can't be deleted — a world always has one.
+worldRoutes.delete('/:id/versions/:versionId', authMiddleware, (c) => {
+  const id = paramInt(c, 'id')
+  const world = findUserWorld(getUserId(c), id)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const targetVersionId = paramInt(c, 'versionId')
+  const targetVersion = db
+    .select({ id: worldVersions.id })
+    .from(worldVersions)
+    .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, targetVersionId)))
+    .get()
+  if (!targetVersion) return c.json({ error: 'Not found' }, 404)
+
+  const remaining = db
+    .select({ count: sql<number>`count(*)` })
+    .from(worldVersions)
+    .where(eq(worldVersions.world_id, id))
+    .get()
+  if ((remaining?.count ?? 0) <= 1) {
+    return c.json({ error: 'Cannot delete the last version' }, 400)
+  }
+
+  const fallbackVersion = world.current_version_id === targetVersion.id
+    ? db
+        .select({ id: worldVersions.id, body: worldVersions.body })
+        .from(worldVersions)
+        .where(and(eq(worldVersions.world_id, id), ne(worldVersions.id, targetVersion.id)))
+        .orderBy(desc(worldVersions.created_at), desc(worldVersions.id))
+        .limit(1)
+        .get()
+    : null
+
+  db.transaction(tx => {
+    if (fallbackVersion) {
+      tx.update(worlds)
+        .set({ body: fallbackVersion.body, current_version_id: fallbackVersion.id, updated_at: Date.now() })
+        .where(eq(worlds.id, id))
+        .run()
+    }
+    tx.delete(worldVersions)
+      .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, targetVersionId)))
+      .run()
+  })
+
+  return c.json({ ok: true })
+})
+
 worldRoutes.get('/:id', authMiddleware, (c) => {
   const world = findUserWorld(getUserId(c), paramInt(c, 'id'))
   if (!world) return c.json({ error: 'Not found' }, 404)
+  const currentVersion = world.current_version_id != null
+    ? db
+        .select({ name: worldVersions.name })
+        .from(worldVersions)
+        .where(and(eq(worldVersions.world_id, world.id), eq(worldVersions.id, world.current_version_id)))
+        .get()
+    : null
   return c.json({
     id: world.id,
     name: world.name,
     is_example: Boolean(world.is_example),
     body: world.body,
     current_version_id: world.current_version_id,
+    current_version_name: currentVersion?.name ?? null,
     updated_at: world.updated_at,
   })
 })
@@ -234,10 +307,24 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
   }
   if (body.body !== undefined) nextBody = typeof body.body === 'string' ? body.body : ''
 
+  // The version name applies to the checked-out version. An empty string clears it.
+  const currentVersion = world.current_version_id != null
+    ? db
+        .select({ id: worldVersions.id, name: worldVersions.name })
+        .from(worldVersions)
+        .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, world.current_version_id)))
+        .get()
+    : null
+  const versionNameProvided = body.version_name !== undefined
+  const nextVersionName = versionNameProvided
+    ? (typeof body.version_name === 'string' && body.version_name.trim().length > 0 ? body.version_name.trim() : null)
+    : (currentVersion?.name ?? null)
+
   const nameChanged = nextName !== world.name
   const bodyChanged = nextBody !== world.body
+  const versionNameChanged = versionNameProvided && !!currentVersion && nextVersionName !== currentVersion.name
 
-  if (!nameChanged && !bodyChanged) {
+  if (!nameChanged && !bodyChanged && !versionNameChanged) {
     return c.json({ ok: true, changed: false })
   }
 
@@ -247,25 +334,20 @@ worldRoutes.patch('/:id', authMiddleware, async (c) => {
       .set({ name: nextName, body: nextBody, updated_at: now })
       .where(eq(worlds.id, id))
       .run()
-    if (bodyChanged) {
+    if (bodyChanged || versionNameChanged) {
       // Edit the checked-out version in place; new versions come only from
       // POST /:id/versions, and switching moves worlds.current_version_id.
-      const target = world.current_version_id != null
-        ? tx
-            .select({ id: worldVersions.id })
-            .from(worldVersions)
-            .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, world.current_version_id)))
-            .get()
-        : null
-      if (target) {
+      if (currentVersion) {
         tx.update(worldVersions)
-          .set({ body: nextBody })
-          .where(eq(worldVersions.id, target.id))
+          .set({ body: nextBody, name: nextVersionName })
+          .where(eq(worldVersions.id, currentVersion.id))
           .run()
       } else {
         const inserted = tx.insert(worldVersions).values({
           world_id: id,
           body: nextBody,
+          name: nextVersionName,
+          version_number: nextVersionNumber(id),
           created_at: now,
         }).returning({ id: worldVersions.id }).get()
         tx.update(worlds)
@@ -294,5 +376,6 @@ worldRoutes.route('/:id/pieces', pieceRoutes)
 worldRoutes.route('/:id/similar', similarRoutes)
 worldRoutes.route('/:id/ideas', ideasRoutes)
 worldRoutes.route('/:id/taste', tasteRoutes)
+worldRoutes.route('/:id/chat', chatRoutes)
 
 export default worldRoutes

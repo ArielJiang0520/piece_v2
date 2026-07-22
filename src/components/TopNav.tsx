@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, CircleUserRound, Ellipsis, Moon, Sun, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, ChevronRight, CircleUserRound, Ellipsis, Loader2, Moon, Sun, Trash2, X } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/auth'
@@ -8,6 +8,7 @@ import { entityLabel } from '@/config'
 import { useUiText } from '@/i18n'
 import { LANGUAGE_OPTIONS, setLanguageId, useLanguageId } from '@/preferences/language'
 import { THEME_OPTIONS, setThemeId, useThemeId } from '@/preferences/theme'
+import { useSwitchWorldVersion } from '@/hooks/useSwitchWorldVersion'
 import ConfirmDialog from './ConfirmDialog'
 import { useCurrentTopNavConfig } from './topNavConfig'
 import Skeleton from './Skeleton'
@@ -15,6 +16,14 @@ import Skeleton from './Skeleton'
 interface World {
   id: number
   name: string
+  current_version_id?: number | null
+}
+
+interface WorldVersionListItem {
+  id: number
+  name: string | null
+  number: number
+  created_at: number
 }
 
 const themeIconByName = {
@@ -51,6 +60,46 @@ export default function TopNav() {
   const mainTitle = currentWorldQuery.data?.name ?? (worldId ? '' : config.mainTitle ?? t.home)
   const secondaryTitle = config.secondaryTitle ?? ''
 
+  const versionsQuery = useQuery({
+    queryKey: ['world-versions', worldId],
+    queryFn: () => apiFetch(`/api/worlds/${worldId}/versions`) as Promise<WorldVersionListItem[]>,
+    enabled: !!worldId,
+  })
+  const currentVersionLabel = useMemo(() => {
+    const versions = versionsQuery.data
+    const currentId = currentWorldQuery.data?.current_version_id
+    if (!versions || versions.length === 0 || currentId == null) return null
+    const current = versions.find(version => version.id === currentId)
+    if (!current) return null
+    const name = current.name?.trim()
+    if (name && name.length > 0) return name
+    // Keep the common single-version case clean; only surface a bare number once branches exist.
+    return versions.length > 1 ? t.versionLabel(current.number) : null
+  }, [currentWorldQuery.data?.current_version_id, t, versionsQuery.data])
+
+  // Tapping the header title opens a quick version switcher (switch only; create/rename/delete
+  // stay on the About tab). Only offered once a world has more than one version to switch between.
+  const [versionSwitcherOpen, setVersionSwitcherOpen] = useState(false)
+  const versionSwitcherRef = useRef<HTMLDivElement>(null)
+  const versions = versionsQuery.data ?? []
+  const canSwitchVersion = !!worldId && versions.length > 1
+  const currentVersionId = currentWorldQuery.data?.current_version_id ?? null
+  const switchVersionMutation = useSwitchWorldVersion(worldId ?? undefined)
+
+  function versionTitle(version: WorldVersionListItem) {
+    const name = version.name?.trim()
+    return name && name.length > 0 ? name : t.versionLabel(version.number)
+  }
+
+  function switchVersion(versionId: number) {
+    if (versionId === currentVersionId) {
+      setVersionSwitcherOpen(false)
+      return
+    }
+    if (switchVersionMutation.isPending) return
+    switchVersionMutation.mutate(versionId, { onSuccess: () => setVersionSwitcherOpen(false) })
+  }
+
   const worldsQuery = useQuery({
     queryKey: ['worlds'],
     queryFn: () => apiFetch('/api/worlds') as Promise<World[]>,
@@ -61,6 +110,28 @@ export default function TopNav() {
   useEffect(() => {
     if (!open) setAccountMenuOpen(false)
   }, [open])
+
+  // Close the version switcher on navigation (e.g. switching worlds via the drawer).
+  useEffect(() => {
+    setVersionSwitcherOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!versionSwitcherOpen) return
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node
+      if (versionSwitcherRef.current && !versionSwitcherRef.current.contains(target)) setVersionSwitcherOpen(false)
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setVersionSwitcherOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [versionSwitcherOpen])
 
   function closeMenu() {
     menuButtonRef.current?.focus({ preventScroll: true })
@@ -123,9 +194,74 @@ export default function TopNav() {
             <span className="h-9 w-9" aria-hidden="true" />
           )}
 
-          <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-8rem)] -translate-x-1/2 truncate font-serif-zh text-[15px] italic text-ink-2">
-            {mainTitle}
-          </h1>
+          <div className="absolute left-1/2 flex max-w-[calc(100%-8rem)] -translate-x-1/2 justify-center">
+            {canSwitchVersion ? (
+              <div ref={versionSwitcherRef} className="relative flex min-w-0 justify-center">
+                <button
+                  type="button"
+                  onClick={() => setVersionSwitcherOpen(value => !value)}
+                  aria-haspopup="menu"
+                  aria-expanded={versionSwitcherOpen}
+                  className="flex min-w-0 max-w-full items-baseline justify-center gap-1.5 rounded-full px-2 py-1 font-serif-zh text-[15px] italic transition-colors active:bg-paper-2"
+                >
+                  <span className="min-w-0 truncate text-ink-2">{mainTitle}</span>
+                  <span className="flex shrink-0 items-center gap-0.5 whitespace-nowrap text-[13px] not-italic text-ink-4">
+                    ({currentVersionLabel ?? t.version})
+                    <ChevronDown aria-hidden="true" className="h-3 w-3" />
+                  </span>
+                </button>
+
+                {versionSwitcherOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-1/2 top-full z-30 mt-1.5 w-[min(18rem,calc(100vw-2.5rem))] -translate-x-1/2 overflow-hidden rounded-md border border-rose-line bg-paper/95 shadow-(--shadow-menu) backdrop-blur"
+                  >
+                    <div className="max-h-72 overflow-y-auto py-1">
+                      {versions.map(version => {
+                        const isCurrent = version.id === currentVersionId
+                        const isSwitching = switchVersionMutation.isPending && switchVersionMutation.variables === version.id
+                        return (
+                          <button
+                            key={version.id}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={isCurrent}
+                            disabled={switchVersionMutation.isPending}
+                            onClick={() => switchVersion(version.id)}
+                            className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors active:bg-rose-tint/50 disabled:cursor-default"
+                          >
+                            <span
+                              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full font-serif-zh text-[11px] italic ${isCurrent ? 'bg-rose text-white' : 'border border-rose-line bg-paper text-ink-3'
+                                }`}
+                            >
+                              v{version.number}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate font-serif-zh text-[15px] italic text-ink">
+                              {versionTitle(version)}
+                            </span>
+                            {isSwitching ? (
+                              <Loader2 aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin text-rose" />
+                            ) : isCurrent ? (
+                              <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-rose" />
+                            ) : null}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <h1 className="flex min-w-0 max-w-full items-baseline justify-center gap-1.5 font-serif-zh text-[15px] italic">
+                <span className="min-w-0 truncate text-ink-2">{mainTitle}</span>
+                {currentVersionLabel && (
+                  <span className="shrink-0 whitespace-nowrap text-[13px] not-italic text-ink-4">
+                    ({currentVersionLabel})
+                  </span>
+                )}
+              </h1>
+            )}
+          </div>
 
           <div className="ml-auto flex h-9 items-center gap-1">
             {config.rightAction}

@@ -108,7 +108,7 @@ similarRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { promptId, hint } = await c.req.json()
+  const { promptId, hint, model } = await c.req.json()
   const id = Number(promptId)
   if (!Number.isInteger(id) || id < 1) return c.json({ error: 'A prompt is required' }, 400)
 
@@ -123,8 +123,9 @@ similarRoutes.post('/', authMiddleware, async (c: any) => {
 
   const hintText = typeof hint === 'string' ? hint.trim().slice(0, MAX_HINT_CHARS) : ''
 
-  // "Similar prompts" always uses its own fixed model, not the user's story-generation choice.
-  const modelOption = getModelById(SIMILAR_MODEL_ID)
+  // The writer picks the brainstorming model (shares the story-generation choice on the client);
+  // fall back to the pinned similar-prompts model for an absent/invalid pick.
+  const modelOption = getModelById(model) ?? getModelById(SIMILAR_MODEL_ID)
   if (!modelOption) return c.json({ error: 'Similar-prompts model is not configured' }, 500)
 
   const apiKey = process.env.OPENROUTER_API_KEY

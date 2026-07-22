@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { db, prompts, pieces } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { findUserWorldId, getUserId, isValidModelId, paramInt } from '../../route-helpers'
+import { findUserWorld, getUserId, isValidModelId, paramInt } from '../../route-helpers'
 import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 import { parseStructure, serializeStructure } from '../../../src/pages/worlds/shared/pieceStructure'
@@ -13,7 +13,10 @@ const pieceRoutes = new Hono<{ Variables: Variables }>()
 pieceRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
-  if (!findUserWorldId(userId, worldId)) return c.json({ error: 'Not found' }, 404)
+  const world = findUserWorld(userId, worldId)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+  // A new prompt is tied to the world version currently checked out.
+  const worldVersionId = world.current_version_id
 
   const body = await c.req.json()
   const promptText = normalizePromptInput(body.prompt)
@@ -120,6 +123,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
         is_generated: isGenerated ? 1 : 0,
         text: promptText,
         piece_count: 1,
+        world_version_id: worldVersionId,
         created_at: now,
         updated_at: now,
       }).returning({ id: prompts.id }).get()
@@ -130,6 +134,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
         is_generated: isGenerated ? 1 : 0,
         text: promptText,
         piece_count: 1,
+        world_version_id: worldVersionId,
         created_at: now,
         updated_at: now,
       }).returning({ id: prompts.id }).get()

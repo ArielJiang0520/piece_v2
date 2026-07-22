@@ -1,6 +1,8 @@
-import type { KeyboardEvent, ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Loader2, Sparkles } from 'lucide-react'
 import { SkeletonText } from '@/components/Skeleton'
+import { setGenerationModel, useGenerationModel } from '@/preferences/generationModel'
+import ModelSelector from '../prompt/components/ModelSelector'
 
 // Shared presentation for the two brainstorming screens — "Similar prompts" (riff on one prompt) and
 // "Spark ideas" (invent from the world). They share this whole layout: a pinned context header, a
@@ -48,6 +50,9 @@ export default function PromptIdeasView({
 }: PromptIdeasViewProps) {
   const hasCandidates = candidates.length > 0
   const isBlocked = !!blockedMessage
+  // The brainstorming model, shared with the story-generation model choice.
+  const model = useGenerationModel()
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
 
   function handleSteerKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') {
@@ -61,6 +66,15 @@ export default function PromptIdeasView({
       {header}
 
       <div className="page-width min-h-[60vh] px-6 pb-32 pt-6">
+        {!isBlocked && (
+          <div className={`relative mb-5 flex items-center justify-center ${modelMenuOpen ? 'z-50' : 'z-0'}`}>
+            <ModelSelector
+              model={model}
+              onModelChange={setGenerationModel}
+              onMenuOpenChange={setModelMenuOpen}
+            />
+          </div>
+        )}
         {isBlocked ? (
           <p className="t-meta pt-16 text-center text-ink-3">{blockedMessage}</p>
         ) : isGenerating && !hasCandidates ? (

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
-import { db, pieces, promptClusters, prompts } from '../../db'
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { db, pieces, promptClusters, prompts, worldVersions } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
 import { cosineSimilarity, embedPrompt, parseEmbedding } from '../../prompt-clustering'
@@ -27,12 +27,34 @@ interface ClusterRow {
   prompt_count: number
   piece_count: number
   latest_prompt_id: number | null
+  world_version_id: number | null
   updated_at: number
+}
+
+// The world version a cluster is tagged with, as display fields. version_number/name are null when
+// the tag points at a deleted version (orphaned) or is unset. Cheap — a world has few versions.
+function versionLabelsForWorld(worldId: number) {
+  const rows = db
+    .select({ id: worldVersions.id, name: worldVersions.name, number: worldVersions.version_number })
+    .from(worldVersions)
+    .where(eq(worldVersions.world_id, worldId))
+    .all()
+  return new Map(rows.map(version => [version.id, version]))
+}
+
+function versionFields(versions: ReturnType<typeof versionLabelsForWorld>, worldVersionId: number | null) {
+  const version = worldVersionId == null ? undefined : versions.get(worldVersionId)
+  return {
+    world_version_id: worldVersionId ?? null,
+    version_number: version?.number ?? null,
+    version_name: version?.name ?? null,
+  }
 }
 
 function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow[]) {
   const clusterIds = clusterRows.map(cluster => cluster.id)
-  if (clusterIds.length === 0) return clusterRows.map(cluster => ({ ...cluster, title: 'Untitled cluster', latest_piece_at: null as number | null, similar_count: 0, is_generated: false }))
+  const versions = versionLabelsForWorld(worldId)
+  if (clusterIds.length === 0) return clusterRows.map(cluster => ({ ...cluster, ...versionFields(versions, cluster.world_version_id), title: 'Untitled cluster', latest_piece_at: null as number | null, similar_count: 0, is_generated: false }))
 
   const promptRows = db
     .select({
@@ -123,6 +145,7 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
     const latestPrompt = clusterPrompts[0]
     return {
       ...cluster,
+      ...versionFields(versions, cluster.world_version_id),
       latest_prompt_id: latestPrompt?.id ?? cluster.latest_prompt_id,
       title: latestPrompt?.text ?? 'Untitled cluster',
       latest_piece_at: latestPieceByCluster.get(cluster.id) ?? null,
@@ -132,12 +155,21 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
   })
 }
 
+// The prompt list defaults to the checked-out world version: show clusters tagged with that
+// version, plus version-orphaned clusters (their version was deleted → null so they never
+// vanish). "All versions" (or a world with no HEAD) drops the filter entirely.
+function clusterVersionFilter(currentVersionId: number | null, allVersions: boolean) {
+  if (allVersions || currentVersionId == null) return undefined
+  return or(eq(promptClusters.world_version_id, currentVersionId), isNull(promptClusters.world_version_id))
+}
+
 const SEARCH_LIMIT = 50
 
 clusterRoutes.get('/search', authMiddleware, async (c: any) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
-  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
+  const world = findUserWorld(userId, worldId)
+  if (!world) return c.json({ error: 'Not found' }, 404)
 
   const query = (c.req.query('q') ?? '').trim()
   if (!query) return c.json({ items: [], total: 0, query, hasMore: false })
@@ -145,6 +177,8 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
   const queryEmbedding = await embedPrompt(query)
   if (!queryEmbedding) return c.json({ error: 'Embedding failed' }, 503)
 
+  const allVersions = c.req.query('allVersions') === '1'
+  const versionFilter = clusterVersionFilter(world.current_version_id, allVersions)
   const clusters = db
     .select({
       id: promptClusters.id,
@@ -152,6 +186,7 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
       prompt_count: promptClusters.prompt_count,
       piece_count: promptClusters.piece_count,
       latest_prompt_id: promptClusters.latest_prompt_id,
+      world_version_id: promptClusters.world_version_id,
       updated_at: promptClusters.updated_at,
     })
     .from(promptClusters)
@@ -159,6 +194,7 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
       eq(promptClusters.user_id, userId),
       eq(promptClusters.world_id, worldId),
       isNotNull(promptClusters.average_embedding),
+      versionFilter,
     ))
     .all()
 
@@ -172,6 +208,7 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
         prompt_count: cluster.prompt_count,
         piece_count: cluster.piece_count,
         latest_prompt_id: cluster.latest_prompt_id,
+        world_version_id: cluster.world_version_id,
         updated_at: cluster.updated_at,
       },
       score: cosineSimilarity(queryEmbedding, embedding),
@@ -189,7 +226,11 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
 clusterRoutes.get('/', authMiddleware, (c: any) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
-  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
+  const world = findUserWorld(userId, worldId)
+  if (!world) return c.json({ error: 'Not found' }, 404)
+
+  const allVersions = c.req.query('allVersions') === '1'
+  const versionFilter = clusterVersionFilter(world.current_version_id, allVersions)
 
   const { page, limit, offset } = pagination(c)
   const sortParam = c.req.query('sort') as string | undefined
@@ -197,12 +238,12 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
   const total = db
     .select({ value: sql<number>`count(*)` })
     .from(promptClusters)
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter))
     .get()?.value ?? 0
   const totalPieces = db
     .select({ value: sql<number>`coalesce(sum(${promptClusters.piece_count}), 0)` })
     .from(promptClusters)
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter))
     .get()?.value ?? 0
   const rows = db
     .select({
@@ -210,6 +251,7 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
       prompt_count: promptClusters.prompt_count,
       piece_count: promptClusters.piece_count,
       latest_prompt_id: promptClusters.latest_prompt_id,
+      world_version_id: promptClusters.world_version_id,
       updated_at: promptClusters.updated_at,
     })
     .from(promptClusters)
@@ -223,12 +265,13 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
       eq(pieces.world_id, worldId),
       eq(pieces.user_id, userId),
     ))
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter))
     .groupBy(
       promptClusters.id,
       promptClusters.prompt_count,
       promptClusters.piece_count,
       promptClusters.latest_prompt_id,
+      promptClusters.world_version_id,
       promptClusters.updated_at,
     )
     .orderBy(...SORT_ORDERS[sortKey])
@@ -254,6 +297,7 @@ clusterRoutes.get('/:clusterId', authMiddleware, (c: any) => {
       prompt_count: promptClusters.prompt_count,
       piece_count: promptClusters.piece_count,
       latest_prompt_id: promptClusters.latest_prompt_id,
+      world_version_id: promptClusters.world_version_id,
       created_at: promptClusters.created_at,
       updated_at: promptClusters.updated_at,
     })
@@ -282,6 +326,7 @@ clusterRoutes.get('/:clusterId', authMiddleware, (c: any) => {
   return c.json({
     cluster: {
       ...cluster,
+      ...versionFields(versionLabelsForWorld(worldId), cluster.world_version_id),
       latest_prompt_id: promptRows[promptRows.length - 1]?.id ?? cluster.latest_prompt_id,
       title: promptRows[promptRows.length - 1]?.text ?? 'Untitled cluster',
     },

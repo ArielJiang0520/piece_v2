@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ChevronRight, GitBranch, Heart, Search, Plus, X, Lightbulb } from 'lucide-react'
+import { ArrowUp, ChevronRight, GitBranch, Heart, History, Layers, Search, Plus, X, Lightbulb } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -13,6 +13,7 @@ import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import TextField from '@/components/TextField'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { useLanguageId } from '@/preferences/language'
+import { setTasteProfileEnabled, useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
 import WorldSortMenu from '../shared/WorldSortMenu'
 import WorldTabs from '../shared/WorldTabs'
 import { useScrollTopButton } from '../shared/useScrollTopButton'
@@ -26,6 +27,9 @@ interface ClusterGroup {
   latest_piece_at: number | null
   similar_count: number
   is_generated: boolean
+  world_version_id: number | null
+  version_number: number | null
+  version_name: string | null
 }
 
 interface PromptResponse {
@@ -90,6 +94,7 @@ function parseWorldReturnState(value: unknown) {
 export default function WorldPrompts() {
   const language = useLanguageId()
   const t = useUiText()
+  const tasteEnabled = useTasteProfileEnabled()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
@@ -108,6 +113,8 @@ export default function WorldPrompts() {
   const queryParam = (searchParams.get('q') ?? '').trim()
   const [searchInput, setSearchInput] = useState(queryParam)
   const isSearching = queryParam.length > 0
+  // Default the list to the checked-out version; `?v=all` shows every version's prompts.
+  const allVersions = searchParams.get('v') === 'all'
 
   useEffect(() => {
     if (searchInput.trim() === queryParam) return
@@ -129,10 +136,19 @@ export default function WorldPrompts() {
     enabled: !!id,
   })
 
+  // Only offer the version filter once a world has more than one version to scope between.
+  const versionsQuery = useQuery({
+    queryKey: ['world-versions', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}/versions`) as Promise<Array<{ id: number }>>,
+    enabled: !!id,
+  })
+  const canScopeVersion = (versionsQuery.data?.length ?? 0) > 1
+  const versionParam = allVersions ? '&allVersions=1' : ''
+
   const clustersQuery = useInfiniteQuery({
-    queryKey: ['world-clusters', id, sort],
+    queryKey: ['world-clusters', id, sort, allVersions ? 'all' : 'current'],
     queryFn: ({ pageParam }) =>
-      apiFetch(`/api/worlds/${id}/clusters?page=${pageParam}&limit=${PAGE_SIZE}&sort=${sort}`) as Promise<PromptResponse>,
+      apiFetch(`/api/worlds/${id}/clusters?page=${pageParam}&limit=${PAGE_SIZE}&sort=${sort}${versionParam}`) as Promise<PromptResponse>,
     enabled: !!id && !isSearching,
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.hasMore ? lastPage.page + 1 : undefined,
@@ -140,8 +156,8 @@ export default function WorldPrompts() {
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = clustersQuery
 
   const searchQuery = useQuery({
-    queryKey: ['world-clusters-search', id, queryParam],
-    queryFn: () => apiFetch(`/api/worlds/${id}/clusters/search?q=${encodeURIComponent(queryParam)}`) as Promise<SearchResponse>,
+    queryKey: ['world-clusters-search', id, queryParam, allVersions ? 'all' : 'current'],
+    queryFn: () => apiFetch(`/api/worlds/${id}/clusters/search?q=${encodeURIComponent(queryParam)}${versionParam}`) as Promise<SearchResponse>,
     enabled: !!id && isSearching,
   })
 
@@ -156,6 +172,18 @@ export default function WorldPrompts() {
       const params = new URLSearchParams(prev)
       if (next === 'latest') params.delete('sort')
       else params.set('sort', next)
+      return params
+    }, { replace: true })
+    clearWorldReturnState()
+    window.scrollTo({ top: 0 })
+  }
+
+  function handleVersionScopeChange(nextAllVersions: boolean) {
+    if (nextAllVersions === allVersions) return
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      if (nextAllVersions) params.set('v', 'all')
+      else params.delete('v')
       return params
     }, { replace: true })
     clearWorldReturnState()
@@ -307,6 +335,21 @@ export default function WorldPrompts() {
               <Lightbulb aria-hidden="true" className="h-4 w-4 text-rose" />
               <span>{t.sparkTitle}</span>
             </Link>
+            {canScopeVersion && (
+              <button
+                type="button"
+                onClick={() => handleVersionScopeChange(!allVersions)}
+                aria-pressed={allVersions}
+                aria-label={allVersions ? t.allVersions : t.thisVersion}
+                title={allVersions ? t.allVersions : t.thisVersion}
+                className={`grid h-12 w-12 shrink-0 place-items-center rounded-full border transition-[border-color,background-color,color,transform] duration-200 active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 ${allVersions
+                  ? 'border-rose/40 bg-rose-pale text-rose-deep'
+                  : 'border-rose-line/80 bg-paper/60 text-ink-4 active:bg-rose-tint/45'
+                  }`}
+              >
+                <Layers aria-hidden="true" className="h-4.5 w-4.5" />
+              </button>
+            )}
             <WorldSortMenu options={sortOptions} value={sort} onChange={handleSortChange} />
           </div>
         </div>
@@ -338,11 +381,11 @@ export default function WorldPrompts() {
         </Link>
 
         {!isSearching && (
-          <Link
-            to={`/worlds/${id}/taste`}
-            className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-rose-line/80 bg-paper/60 px-4 py-4 transition-colors active:bg-rose-tint/45"
-          >
-            <span className="flex min-w-0 items-center gap-3">
+          <div className="mt-6 flex items-center gap-3 rounded-2xl border border-rose-line/80 bg-paper/60 px-4 py-4">
+            <Link
+              to={`/worlds/${id}/taste`}
+              className="flex min-w-0 flex-1 items-center gap-3 transition-colors active:opacity-70"
+            >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-rose-pale text-rose-deep">
                 <Heart aria-hidden="true" className="h-4 w-4" />
               </span>
@@ -350,9 +393,27 @@ export default function WorldPrompts() {
                 <span className="block font-serif-zh text-[15px] italic text-ink">{t.tasteTitle}</span>
                 <span className="t-meta mt-0.5 block text-ink-3">{t.tasteAboutHint}</span>
               </span>
-            </span>
-            <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" />
-          </Link>
+              <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" />
+            </Link>
+            {/* Turn the profile on/off right here — same segmented control as the taste detail page,
+                so you don't have to open it just to flip generation on or off. */}
+            <div className="grid w-24 shrink-0 grid-cols-2 overflow-hidden rounded-full border border-rose-line p-0.5" aria-label={t.tasteUseProfile}>
+              {[true, false].map(value => {
+                const selected = tasteEnabled === value
+                return (
+                  <button
+                    key={String(value)}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setTasteProfileEnabled(value)}
+                    className={`grid h-7 place-items-center rounded-full font-serif-zh text-[12px] italic leading-none transition-colors ${selected ? 'bg-rose-pale text-rose-deep' : 'text-ink-3 active:text-ink'}`}
+                  >
+                    {value ? t.tasteOn : t.tasteOff}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         )}
 
         {loadingSearch ? (
@@ -397,6 +458,14 @@ export default function WorldPrompts() {
                           emptyLabel={t.noEntitiesYet(entityLabel('piece', { plural: true }, language))}
                         />
                         <div className="flex shrink-0 items-center gap-2">
+                          {/* Which world version this cluster belongs to — only worth showing while
+                              browsing across versions; redundant when scoped to one. */}
+                          {allVersions && (group.version_name?.trim() || group.version_number != null) && (
+                            <span className="inline-flex max-w-[8rem] items-center gap-1 rounded-full bg-paper-3 px-2 py-0.5 text-[11px] leading-none text-ink-3">
+                              <History aria-hidden="true" className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{group.version_name?.trim() || `v${group.version_number}`}</span>
+                            </span>
+                          )}
                           {group.is_generated && (
                             <span className="rounded-full bg-paper-3 px-2 py-0.5 text-[11px] leading-none text-ink-3">
                               {t.autoGeneratedPrompt}

@@ -73,11 +73,12 @@ ideasRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { hint } = await c.req.json().catch(() => ({}))
+  const { hint, model } = await c.req.json().catch(() => ({}))
   const hintText = typeof hint === 'string' ? hint.trim().slice(0, MAX_HINT_CHARS) : ''
 
-  // "Spark ideas" always uses its own fixed brainstorming model, not the user's story-generation choice.
-  const modelOption = getModelById(SIMILAR_MODEL_ID)
+  // The writer picks the brainstorming model (shares the story-generation choice on the client);
+  // fall back to the pinned idea model for an absent/invalid pick.
+  const modelOption = getModelById(model) ?? getModelById(SIMILAR_MODEL_ID)
   if (!modelOption) return c.json({ error: 'Idea-generation model is not configured' }, 500)
 
   const apiKey = process.env.OPENROUTER_API_KEY

@@ -80,6 +80,8 @@ export interface PieceDetail {
   provider: string | null
   used_taste: boolean
   created_at: number
+  // Equals created_at until the piece is resumed and re-saved (see PieceStripPiece).
+  updated_at: number
 }
 
 export interface OverwritePieceResponse {
@@ -91,6 +93,7 @@ export interface OverwritePieceResponse {
   provider: string | null
   used_taste: boolean
   created_at: number
+  updated_at: number
 }
 
 export interface ClusterResponse {
@@ -99,6 +102,11 @@ export interface ClusterResponse {
     prompt_count: number
     piece_count: number
     latest_prompt_id: number | null
+    // The world version this cluster belongs to (the version its latest prompt was created on).
+    // version_number/name are null when that version was deleted (orphaned) or is unset.
+    world_version_id: number | null
+    version_number: number | null
+    version_name: string | null
     created_at: number
     updated_at: number
     title: string

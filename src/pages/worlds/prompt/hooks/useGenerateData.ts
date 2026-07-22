@@ -51,11 +51,20 @@ export function useGenerateData({
     if (worldQuery.isError) navigate('/')
   }, [navigate, worldQuery.isError])
 
+  const clusterData = clusterQuery.data?.cluster
   return {
     activePrompt,
     promptPieces,
     activeClusterId,
     clusterPrompts: clusterQuery.data?.prompts ?? [],
+    // The world version this cluster belongs to, for the prompt page's version tag.
+    clusterVersion: clusterData
+      ? {
+        world_version_id: clusterData.world_version_id,
+        version_number: clusterData.version_number,
+        version_name: clusterData.version_name,
+      }
+      : null,
     clusterLoading: clusterQuery.isLoading,
     promptDetailsLoading: promptDetailsQuery.isLoading,
     promptDetailsError: promptDetailsQuery.isError,

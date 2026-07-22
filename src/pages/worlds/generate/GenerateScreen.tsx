@@ -181,6 +181,7 @@ export default function GenerateScreen() {
         provider: provider || null,
         used_taste: result.usedTaste,
         created_at: Date.now(),
+        updated_at: Date.now(),
       })
       // Prepend the new piece to the cached list so the prompt page (which remounts on
       // the stale-while-revalidate cache) already shows it as the latest and selects it
@@ -227,6 +228,7 @@ export default function GenerateScreen() {
         provider: result.provider,
         used_taste: result.used_taste,
         created_at: result.created_at,
+        updated_at: result.updated_at,
       })
       queryClient.invalidateQueries({ queryKey: ['piece', resumePieceId] })
       queryClient.invalidateQueries({ queryKey: ['prompt', id] })
@@ -781,11 +783,14 @@ function GenerateReader({
           </div>
         )}
 
+        {/* The whole-story action row (transport/Continue + discard/save) is replaced
+            entirely while a paragraph is selected — its docked controls own the bar, so
+            there's never a second control bar beneath them. */}
+        {!paragraphSelected && (
         <div className="flex items-center justify-between px-4 py-3">
-          {/* Left: speed steppers + pause while revealing, or Continue once finished.
-              Hidden while a paragraph is selected — the docked controls own the bar then. */}
+          {/* Left: speed steppers + pause while revealing, or Continue once finished. */}
           <div className="flex items-center gap-2">
-            {paragraphSelected ? null : !error && canContinue ? (
+            {!error && canContinue ? (
               // A finished read swaps the transport for Continue, which feeds the existing
               // text (plus any typed direction) back for more story.
               <button
@@ -854,6 +859,7 @@ function GenerateReader({
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>,
     document.body,
@@ -911,7 +917,7 @@ function ParagraphActionDock({
     // keyboard; blur only counts when focus actually leaves the dock, not when it moves
     // between the dock's own controls.
     <div
-      className="border-b border-rose-line/70 px-4 pb-3 pt-3"
+      className="px-4 pb-3 pt-3"
       onFocus={() => onFieldFocusChange(true)}
       onBlur={e => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onFieldFocusChange(false)

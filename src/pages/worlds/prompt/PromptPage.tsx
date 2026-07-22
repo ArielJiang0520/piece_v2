@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, Check, Copy } from 'lucide-react'
+import { ArrowRight, Check, Copy, History } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -63,6 +63,7 @@ export default function PromptPage() {
     promptPieces,
     activeClusterId,
     clusterPrompts,
+    clusterVersion,
     clusterLoading,
     promptDetailsLoading,
     promptDetailsError,
@@ -72,6 +73,20 @@ export default function PromptPage() {
     lockedMode,
     versionSourceClusterId,
   })
+
+  // Which world version this prompt's cluster belongs to. Only shown once a world actually has
+  // more than one version — otherwise it's noise. Distinct from the "Version X of Y" label above,
+  // which counts prompt variations, not world versions.
+  const worldVersionsQuery = useQuery({
+    queryKey: ['world-versions', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}/versions`) as Promise<Array<{ id: number }>>,
+    enabled: !!id,
+  })
+  const hasMultipleWorldVersions = (worldVersionsQuery.data?.length ?? 0) > 1
+  const worldVersionLabel = clusterVersion && (clusterVersion.version_name?.trim() || clusterVersion.version_number != null)
+    ? (clusterVersion.version_name?.trim() || `v${clusterVersion.version_number}`)
+    : null
+  const showWorldVersion = lockedMode && hasMultipleWorldVersions && !!worldVersionLabel
 
   const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
   // Set when this prompt was spun off another via "More like this"; FK nulls out if the parent
@@ -298,9 +313,9 @@ export default function PromptPage() {
           <div className={`${complete ? 'mb-1' : ''} bg-paper/95 pb-1`}>
             {showHeaderRow && (
               <div className="flex items-center justify-between gap-3 px-2 pt-4">
-                {headerLabel && (
+                {headerLabel || showWorldVersion ? (
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="t-meta truncate text-ink-3">{headerLabel}</span>
+                    {headerLabel && <span className="t-meta truncate text-ink-3">{headerLabel}</span>}
                     {lockedMode && hasMultipleVersions && (
                       <button
                         type="button"
@@ -310,9 +325,14 @@ export default function PromptPage() {
                         {t.seeAllVersions}
                       </button>
                     )}
+                    {showWorldVersion && (
+                      <span className="inline-flex min-w-0 max-w-[9rem] items-center gap-1 rounded-full bg-paper-2 px-2 py-0.5 text-[11px] leading-none text-ink-3 ring-1 ring-paper-3/70">
+                        <History aria-hidden="true" className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{worldVersionLabel}</span>
+                      </span>
+                    )}
                   </div>
-                )}
-                {!headerLabel && (
+                ) : (
                   <span aria-hidden="true" className="h-px flex-1 bg-paper-3/70" />
                 )}
                 <div className="flex shrink-0 items-center gap-2">

@@ -47,6 +47,10 @@ sqlite.run(`
     prompt_count INTEGER NOT NULL DEFAULT 0,
     piece_count INTEGER NOT NULL DEFAULT 0,
     latest_prompt_id INTEGER,
+    -- The world version this cluster belongs to: the version its latest prompt was created on.
+    -- Denormalized from prompts.world_version_id (maintained wherever latest_prompt_id is), so the
+    -- prompt list can filter clusters by version with a plain equality.
+    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -62,6 +66,10 @@ sqlite.run(`
     piece_count INTEGER NOT NULL DEFAULT 0,
     is_favorite INTEGER NOT NULL DEFAULT 0,
     is_generated INTEGER NOT NULL DEFAULT 0,
+    -- The world version checked out when this prompt was first created. Source of truth for the
+    -- cluster's version tag above. ON DELETE SET NULL: deleting a version orphans (not deletes)
+    -- its prompts, and the list treats a null version as always-visible.
+    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -109,6 +117,18 @@ sqlite.run(`
     profile TEXT,
     distilled_like_count INTEGER NOT NULL DEFAULT 0,
     updated_at INTEGER NOT NULL
+  );
+
+  -- One row per turn in a world's chat thread. There is exactly one thread per world (no
+  -- session list, no branching): clearing it deletes every row for that world, and editing
+  -- or regenerating a turn deletes that row and every later one.
+  CREATE TABLE IF NOT EXISTS world_chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL
   );
 
 `)
@@ -165,13 +185,14 @@ function rebuildPromptsTable() {
         piece_count INTEGER NOT NULL DEFAULT 0,
         is_favorite INTEGER NOT NULL DEFAULT 0,
         is_generated INTEGER NOT NULL DEFAULT 0,
+        world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
     `)
     sqlite.run(`
-      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, created_at, updated_at)
-      SELECT id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, created_at, updated_at FROM prompts;
+      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, world_version_id, created_at, updated_at)
+      SELECT id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, world_version_id, created_at, updated_at FROM prompts;
     `)
     sqlite.run('DROP TABLE prompts;')
     sqlite.run('ALTER TABLE prompts_new RENAME TO prompts;')
@@ -267,6 +288,10 @@ function dropColumnIfPresent(table: string, column: string) {
 addColumnIfMissing('worlds', 'is_example', 'is_example INTEGER NOT NULL DEFAULT 0')
 addColumnIfMissing('worlds', 'current_version_id', 'current_version_id INTEGER')
 addColumnIfMissing('world_versions', 'name', 'name TEXT')
+// Stable per-world version number, assigned at creation and never reused or
+// shifted by deletes (deleting v2 leaves v1 and v3 as-is). Backfilled below,
+// after the versionless-worlds INSERT, so those rows get numbered too.
+addColumnIfMissing('world_versions', 'version_number', 'version_number INTEGER NOT NULL DEFAULT 0')
 addColumnIfMissing('pieces', 'provider', 'provider TEXT')
 addColumnIfMissing('pieces', 'updated_at', 'updated_at INTEGER NOT NULL DEFAULT 0')
 // Sidecar action history (JSON). Added before the world_version_id drop below so the
@@ -343,7 +368,8 @@ if (sqlite.query(`PRAGMA table_info(taste_profile)`).all().some((r: any) => r.na
 sqlite.run('DROP INDEX IF EXISTS idx_pieces_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_prompts_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_world_versions_world_restored_from;')
-dropColumnIfPresent('prompts', 'world_version_id')
+// prompts.world_version_id is re-added and backfilled below (prompts are now tied to the world
+// version they were created on). pieces stay unversioned.
 dropColumnIfPresent('pieces', 'world_version_id')
 dropColumnIfPresent('world_versions', 'restored_from_version_id')
 dropColumnIfPresent('worlds', 'language')
@@ -357,6 +383,18 @@ sqlite.run(`
   WHERE id NOT IN (SELECT world_id FROM world_versions);
 `)
 
+// Number any unnumbered versions 1..n per world in creation order.
+sqlite.run(`
+  UPDATE world_versions
+  SET version_number = (
+    SELECT COUNT(*) FROM world_versions numbered
+    WHERE numbered.world_id = world_versions.world_id
+      AND (numbered.created_at < world_versions.created_at
+           OR (numbered.created_at = world_versions.created_at AND numbered.id <= world_versions.id))
+  )
+  WHERE version_number = 0;
+`)
+
 // Point each world's HEAD at its latest version where unset (switching moves this pointer).
 sqlite.run(`
   UPDATE worlds
@@ -368,6 +406,31 @@ sqlite.run(`
   )
   WHERE current_version_id IS NULL
      OR current_version_id NOT IN (SELECT id FROM world_versions WHERE world_id = worlds.id);
+`)
+
+// Prompts are tied to the world version they were created on; a cluster is tagged with the
+// version of its latest prompt. Backfill runs after versions exist (above): existing prompts
+// belong to their world's original (earliest) version, and each cluster inherits its latest
+// prompt's version. Guarded on NULL so it runs once and never clobbers stamped rows.
+addColumnIfMissing('prompts', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')
+addColumnIfMissing('prompt_clusters', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')
+sqlite.run(`
+  UPDATE prompts
+  SET world_version_id = (
+    SELECT wv.id FROM world_versions wv
+    WHERE wv.world_id = prompts.world_id
+    ORDER BY wv.version_number ASC, wv.created_at ASC, wv.id ASC
+    LIMIT 1
+  )
+  WHERE world_version_id IS NULL;
+`)
+sqlite.run(`
+  UPDATE prompt_clusters
+  SET world_version_id = (
+    SELECT p.world_version_id FROM prompts p
+    WHERE p.id = prompt_clusters.latest_prompt_id
+  )
+  WHERE world_version_id IS NULL;
 `)
 
 sqlite.run(`
@@ -384,6 +447,7 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_world_versions_world_created ON world_versions(world_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_taste_likes_user_created ON taste_likes(user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_world_chat_world_created ON world_chat_messages(world_id, created_at, id);
 `)
 
 sqlite.run(`
@@ -444,6 +508,7 @@ export const worldVersions = sqliteTable('world_versions', {
   world_id: integer('world_id').notNull().references(() => worlds.id),
   body: text('body').notNull(),
   name: text('name'),
+  version_number: integer('version_number').notNull().default(0),
   created_at: integer('created_at').notNull(),
 })
 
@@ -455,6 +520,7 @@ export const promptClusters = sqliteTable('prompt_clusters', {
   prompt_count: integer('prompt_count').notNull().default(0),
   piece_count: integer('piece_count').notNull().default(0),
   latest_prompt_id: integer('latest_prompt_id'),
+  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })
@@ -470,6 +536,7 @@ export const prompts = sqliteTable('prompts', {
   piece_count: integer('piece_count').notNull().default(0),
   is_favorite: integer('is_favorite').notNull().default(0),
   is_generated: integer('is_generated').notNull().default(0),
+  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })
@@ -507,4 +574,13 @@ export const tasteProfile = sqliteTable('taste_profile', {
   updated_at: integer('updated_at').notNull(),
 })
 
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, tasteLikes, tasteProfile } })
+export const worldChatMessages = sqliteTable('world_chat_messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  world_id: integer('world_id').notNull().references(() => worlds.id),
+  role: text('role').notNull(),
+  content: text('content').notNull(),
+  created_at: integer('created_at').notNull(),
+})
+
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, tasteLikes, tasteProfile, worldChatMessages } })

@@ -13,6 +13,7 @@ interface PromptForCluster {
   text: string
   embedding: string | null
   piece_count: number
+  world_version_id: number | null
   created_at: number
   updated_at: number
 }
@@ -133,6 +134,7 @@ function createCluster(prompt: PromptForCluster, embedding: number[] | null) {
     prompt_count: 1,
     piece_count: prompt.piece_count,
     latest_prompt_id: prompt.id,
+    world_version_id: prompt.world_version_id,
     created_at: now,
     updated_at: prompt.created_at,
   }).returning({ id: promptClusters.id }).get()
@@ -156,6 +158,7 @@ function bestClusterForEmbedding(userId: number, worldId: number, embedding: num
       prompt_count: promptClusters.prompt_count,
       piece_count: promptClusters.piece_count,
       latest_prompt_id: promptClusters.latest_prompt_id,
+      world_version_id: promptClusters.world_version_id,
       updated_at: promptClusters.updated_at,
     })
     .from(promptClusters)
@@ -216,6 +219,9 @@ function addPromptToCluster(prompt: PromptForCluster, cluster: ReturnType<typeof
       prompt_count: nextPromptCount,
       piece_count: cluster.piece_count + prompt.piece_count,
       latest_prompt_id: prompt.created_at >= cluster.updated_at ? prompt.id : cluster.latest_prompt_id,
+      // The cluster is tagged with its latest prompt's version, so it moves only when the
+      // incoming prompt becomes the latest.
+      world_version_id: prompt.created_at >= cluster.updated_at ? prompt.world_version_id : cluster.world_version_id,
       updated_at: Math.max(cluster.updated_at, prompt.created_at),
     })
     .where(eq(promptClusters.id, cluster.id))
@@ -243,6 +249,7 @@ export async function clusterPromptById(promptId: number, options: ClusterPrompt
       text: prompts.text,
       embedding: prompts.embedding,
       piece_count: prompts.piece_count,
+      world_version_id: prompts.world_version_id,
       created_at: prompts.created_at,
       updated_at: prompts.updated_at,
     })
@@ -285,6 +292,7 @@ export function recomputePromptCluster(clusterId: number | null | undefined) {
       id: prompts.id,
       embedding: prompts.embedding,
       piece_count: prompts.piece_count,
+      world_version_id: prompts.world_version_id,
       created_at: prompts.created_at,
       updated_at: prompts.updated_at,
     })
@@ -308,6 +316,7 @@ export function recomputePromptCluster(clusterId: number | null | undefined) {
       prompt_count: clusterPrompts.length,
       piece_count: clusterPrompts.reduce((sum, prompt) => sum + prompt.piece_count, 0),
       latest_prompt_id: clusterPrompts[0]!.id,
+      world_version_id: clusterPrompts[0]!.world_version_id,
       updated_at: clusterPrompts[0]!.created_at,
     })
     .where(eq(promptClusters.id, clusterId))

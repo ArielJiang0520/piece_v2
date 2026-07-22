@@ -18,7 +18,9 @@ if (process.env.NODE_ENV === 'production') {
 
 const defaultPort = process.env.NODE_ENV === 'production' ? '3000' : '3001'
 const port = parseInt(process.env.PORT || defaultPort, 10)
-const generationRoutePattern = /^\/api\/worlds\/[^/]+\/generate\/?$/
+// Both of these hold an SSE stream open for as long as the model keeps writing — and a chat
+// turn can additionally sit queued behind a story generation on the single OpenRouter slot.
+const generationRoutePattern = /^\/api\/worlds\/[^/]+\/(generate|chat)\/?$/
 
 export default {
   port,

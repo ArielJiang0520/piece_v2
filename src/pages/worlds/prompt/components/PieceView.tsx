@@ -199,7 +199,9 @@ export default function PieceView({
         {structure ? (
           <div>
             {annotated.map(paragraph => (
-              <div key={paragraph.index} className="mb-4 last:mb-0">
+              // The index is read off the DOM on Resume so the generate screen opens on the
+              // paragraph the reader was actually looking at.
+              <div key={paragraph.index} data-paragraph-index={paragraph.index} className="mb-4 last:mb-0">
                 {paragraph.action && paragraph.segmentIndex != null && (
                   <div className="mb-1.5">
                     <span

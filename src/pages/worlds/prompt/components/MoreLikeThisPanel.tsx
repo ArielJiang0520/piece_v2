@@ -8,6 +8,7 @@ import CountIndicator from '@/components/CountIndicator'
 import { entityLabel, formatEntityCount } from '@/config'
 import { useUiText } from '@/i18n'
 import { useLanguageId } from '@/preferences/language'
+import { useGenerationModel } from '@/preferences/generationModel'
 import { relativeTime } from '@/utils/time'
 import { estimateTokens } from '@/utils/textUnits'
 import {
@@ -49,6 +50,7 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText 
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [inspiredOpen, setInspiredOpen] = useState(false)
+  const model = useGenerationModel()
 
   const tooLong = sourceText !== '' && estimateTokens(sourceText) > MAX_SIMILAR_PROMPT_TOKENS
 
@@ -86,7 +88,7 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText 
     try {
       const res = (await apiFetch(`/api/worlds/${worldId}/similar`, {
         method: 'POST',
-        body: JSON.stringify({ promptId: sourcePromptId, hint: currentHint || undefined }),
+        body: JSON.stringify({ promptId: sourcePromptId, hint: currentHint || undefined, model }),
       })) as { candidates: string[] }
       persist({ hint: currentHint, candidates: res.candidates })
     } catch (e) {

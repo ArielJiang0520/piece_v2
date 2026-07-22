@@ -96,9 +96,9 @@ const DISTILL_SYSTEM = [
   'Write it as a short, plain profile in your own words. Same language as the passages (Chinese → Chinese, English → English). Just the profile, no preamble.',
 ].join('\n')
 
-// Call the cheap model once and return its profile prose. Returns null on any failure so
+// Call the chosen model once and return its profile prose. Returns null on any failure so
 // distillation degrades gracefully (the existing profile is left untouched by the caller).
-async function requestDistillation(prompt: string): Promise<string | null> {
+async function requestDistillation(prompt: string, modelId: string): Promise<string | null> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
     console.warn('[taste distill] OPENROUTER_API_KEY not set; skipping')
@@ -113,7 +113,7 @@ async function requestDistillation(prompt: string): Promise<string | null> {
       signal: controller.signal,
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: TASTE_MODEL_ID,
+        model: modelId,
         temperature: 0.3,
         reasoning: { effort: 'none' },
         ...(BLACKLISTED_PROVIDERS.length > 0 ? { provider: { ignore: BLACKLISTED_PROVIDERS } } : {}),
@@ -146,17 +146,17 @@ async function requestDistillation(prompt: string): Promise<string | null> {
 // Rebuild one world's profile from all of its likes. Runs the LLM call inside the generation
 // slot so it never opens a second OpenRouter session alongside a live story stream. Deduped per
 // world. Returns the new profile (persisted), or null when there was nothing to do / it failed.
-export async function distillTasteProfile(userId: number, worldId: number): Promise<string | null> {
+export async function distillTasteProfile(userId: number, worldId: number, modelId: string = TASTE_MODEL_ID): Promise<string | null> {
   if (distillingWorlds.has(worldId)) return null
   distillingWorlds.add(worldId)
   try {
-    return await runDistillation(userId, worldId)
+    return await runDistillation(userId, worldId, modelId)
   } finally {
     distillingWorlds.delete(worldId)
   }
 }
 
-async function runDistillation(userId: number, worldId: number): Promise<string | null> {
+async function runDistillation(userId: number, worldId: number, modelId: string): Promise<string | null> {
   const likes = db
     .select({ snippet: tasteLikes.snippet, context: tasteLikes.context, reasons: tasteLikes.reasons })
     .from(tasteLikes)
@@ -189,7 +189,7 @@ async function runDistillation(userId: number, worldId: number): Promise<string 
 
   const profile = await new Promise<string | null>((resolve) => {
     withGenerationSlot(async () => {
-      resolve(await requestDistillation(prompt))
+      resolve(await requestDistillation(prompt, modelId))
     }).catch(() => resolve(null))
   })
 

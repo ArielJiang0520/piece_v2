@@ -57,8 +57,13 @@ export function useSavedPiece({
   const body = selectedPiece?.body ?? ''
   const structure = selectedPiece?.structure ?? null
   const countLabel = outputCountLabel(body, language)
+  // updated_at only moves past created_at when the piece is resumed and re-saved,
+  // so the edited segment appears only on pieces that were actually continued.
+  const editedLabel = selectedPiece && selectedPiece.updated_at > selectedPiece.created_at
+    ? ` - ${t.pieceEdited(relativeTime(selectedPiece.updated_at, language))}`
+    : ''
   const metaLabel = selectedPiece
-    ? `${relativeTime(selectedPiece.created_at, language)} - ${countLabel}`
+    ? `${relativeTime(selectedPiece.created_at, language)}${editedLabel} - ${countLabel}`
     : null
   const modelLabel = selectedPiece?.model
     ? `${MODELS.find(m => m.id === selectedPiece.model)?.label ?? selectedPiece.model} (${selectedPiece.provider || 'Unknown Provider'})`

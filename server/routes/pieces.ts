@@ -20,6 +20,7 @@ const PIECE_SELECT = {
   provider: pieces.provider,
   used_taste: pieces.used_taste,
   created_at: pieces.created_at,
+  updated_at: pieces.updated_at,
 } as const
 
 pieceRoutes.get('/:id', authMiddleware, (c) => {

@@ -5,6 +5,7 @@ import { apiFetch } from '@/api'
 import { entityLabel } from '@/config'
 import { useUiText } from '@/i18n'
 import { useLanguageId } from '@/preferences/language'
+import { useGenerationModel } from '@/preferences/generationModel'
 import Skeleton from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import {
@@ -33,6 +34,7 @@ export default function WorldIdeasScreen() {
   const [hint, setHint] = useState(state.hint)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const model = useGenerationModel()
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
@@ -57,7 +59,7 @@ export default function WorldIdeasScreen() {
     try {
       const res = (await apiFetch(`/api/worlds/${id}/ideas`, {
         method: 'POST',
-        body: JSON.stringify({ hint: currentHint || undefined }),
+        body: JSON.stringify({ hint: currentHint || undefined, model }),
       })) as { candidates: string[] }
       persist({ hint: currentHint, candidates: res.candidates })
     } catch (e) {
