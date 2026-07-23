@@ -6,6 +6,7 @@ import { normalizePromptInput } from '../../prompt-text'
 import { BLACKLISTED_PROVIDERS } from '../../../src/preferences/generationModel'
 import { readServerSentEvents } from '../../../src/utils/sse'
 import { abortGeneration, clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
+import { budgeted } from '../../llm-budget'
 import { describeStreamError, parseOpenRouterError } from '../../openrouter-errors'
 import { loadTasteForGeneration } from '../../taste-profile'
 
@@ -89,11 +90,9 @@ function withContinuationDirection(direction: string): string {
   return `${CONTINUATION_INSTRUCTION}\nThe reader wants the story to go this way next: "${direction}". Steer the continuation toward it while keeping the same scene, voice, and tense.`
 }
 
-// Trim and cap the reader's optional steer. Kept short: it's a nudge, not a new prompt.
-const MAX_DIRECTION_CHARS = 500
+// The reader's optional steer, as they wrote it.
 function normalizeDirection(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return value.trim().slice(0, MAX_DIRECTION_CHARS)
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -117,34 +116,9 @@ const RETRYABLE_STATUSES = new Set([429, 502, 503])
 const MAX_GENERATION_ATTEMPTS = 3
 const MAX_RETRY_WAIT_MS = 20_000
 
-// A "continue"/"expand" turn re-sends the entire story so far as the assistant message. Real
-// pieces stay well under MAX_PRIOR_CONTEXT_CHARS and pass through unchanged. Only runaway
-// auto-continued chains (which grow to 100k+ tokens and re-bill the whole transcript on every
-// tap, since each request's input = prior input + prior output) get windowed: we keep the
-// opening (premise/characters) and the recent tail (what the model actually continues from)
-// and drop the middle it no longer reliably attends to at that length.
-const MAX_PRIOR_CONTEXT_CHARS = 28_000
-const PRIOR_CONTEXT_HEAD_CHARS = 4_000
-const PRIOR_CONTEXT_TAIL_CHARS = 22_000
-const PRIOR_CONTEXT_OMISSION = '\n\n[…]\n\n'
-
-function clampPriorContext(text: string): string {
-  if (text.length <= MAX_PRIOR_CONTEXT_CHARS) return text
-
-  // Head: cut back to the last paragraph/sentence boundary so it doesn't end mid-word.
-  let head = text.slice(0, PRIOR_CONTEXT_HEAD_CHARS)
-  const headBreak = Math.max(head.lastIndexOf('\n'), head.lastIndexOf('。'), head.lastIndexOf('. '))
-  if (headBreak > PRIOR_CONTEXT_HEAD_CHARS / 2) head = text.slice(0, headBreak + 1).trimEnd()
-
-  // Tail: keep the exact ending intact — continuation extends from the final sentence and
-  // relies on the trailing blank line — and only nudge the start forward to a clean line
-  // break so the windowed context doesn't begin mid-word.
-  let tail = text.slice(text.length - PRIOR_CONTEXT_TAIL_CHARS)
-  const firstBreak = tail.indexOf('\n')
-  if (firstBreak !== -1 && firstBreak < PRIOR_CONTEXT_TAIL_CHARS / 5) tail = tail.slice(firstBreak + 1)
-
-  return head + PRIOR_CONTEXT_OMISSION + tail
-}
+// A "continue"/"expand" turn re-sends the entire story so far as the assistant message, whole.
+// It used to be windowed — head plus tail, middle dropped — which meant a long piece silently
+// continued from a story with a hole in it. The one size limit is at the call (llm-budget.ts).
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
@@ -201,20 +175,9 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   // Continuation (whole-story "continue" and per-paragraph "regenerate") feeds the kept
   // text back as an assistant prefill, so it keeps the trailing blank line and the model
   // extends from there; expansion trims and re-instructs against the last paragraph.
-  const fullPriorValue = (mode === 'continue' || mode === 'regenerate')
+  const priorTextValue = (mode === 'continue' || mode === 'regenerate')
     ? rawPrior.replace(/^\s+/, '')
     : mode === 'expand' ? rawPrior.trim() : ''
-  // Window only when an auto-continued chain has ballooned past the ceiling; normal pieces
-  // are unchanged. Log when it bites so the cost-saving is visible in the server console.
-  const priorTextValue = clampPriorContext(fullPriorValue)
-  if (priorTextValue.length < fullPriorValue.length) {
-    console.log('[prior context clamped]', new Date().toISOString(), {
-      owner: `${userId}:${worldId}`,
-      mode: mode ?? 'fresh',
-      fromChars: fullPriorValue.length,
-      toChars: priorTextValue.length,
-    })
-  }
   const isExpansion = mode === 'expand' && priorTextValue.length > 0
   const isContinuation = (mode === 'continue' || mode === 'regenerate') && priorTextValue.length > 0
   // Only a continuation/expansion can be steered; a fresh generation ignores any direction.
@@ -257,9 +220,9 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
-      // The OpenRouter call only opens inside the slot — never more than one at a time,
-      // process-wide. While queued the client keeps showing the waiting state.
-      await withGenerationSlot(async () => {
+      // The OpenRouter call only opens inside this owner's slot — this owner's prior run
+      // is aborted and fully drained first. While queued the client shows the waiting state.
+      await withGenerationSlot(key, async () => {
         if (controller.signal.aborted) return
 
         const provider: Record<string, unknown> = {
@@ -296,14 +259,14 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
               'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
+            body: JSON.stringify(budgeted({
               model: modelOption.id,
               temperature,
               reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
               stream: true,
               provider,
               messages,
-            }),
+            }, 'story generation')),
           })
 
           if (response.ok && response.body) break

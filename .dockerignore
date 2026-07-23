@@ -4,3 +4,11 @@
 .env
 Dockerfile
 fly.toml
+dist
+*.db
+*.db.*
+*.db-*
+*.csv
+old_csv
+.claude
+.vscode

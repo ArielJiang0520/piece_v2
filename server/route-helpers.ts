@@ -33,6 +33,16 @@ export function findUserWorldId(userId: number, worldId: number) {
     .get()
 }
 
+// The world's checked-out version (HEAD). Null only for a missing world or a bug-state world
+// with no versions — never a state the version-scoped features design around.
+export function currentWorldVersionId(userId: number, worldId: number): number | null {
+  return db
+    .select({ id: worlds.current_version_id })
+    .from(worlds)
+    .where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId)))
+    .get()?.id ?? null
+}
+
 const MODELS_BY_ID = new Map<string, ModelOption>(MODELS.map(model => [model.id, model]))
 
 export function getModelById(id: unknown): ModelOption | undefined {

@@ -1,12 +1,15 @@
 // The taste "model" is just text: a freeform prose profile of what a reader responds to in a
 // given world, written by a cheap LLM from the passages they've loved there, and later fed into
 // generation FOR THAT WORLD. No training, no per-generation ML — this module owns the writing of
-// that profile and the read path generation uses. Taste is per-world: a like and the profile it
-// feeds both belong to the one world they came from and never leak into another.
+// that profile and the read path generation uses. Taste is per (world, version): versions are
+// branches, and a like and the profile it feeds both belong to the version they came from —
+// switching HEAD switches which profile generation reads, and switching back restores it.
 
-import { count, desc, eq, and } from 'drizzle-orm'
+import { count, desc, eq, and, isNull, or } from 'drizzle-orm'
 import { db, tasteLikes, tasteProfile, worlds } from './db'
+import { currentWorldVersionId } from './route-helpers'
 import { withGenerationSlot } from './generation-lock'
+import { budgeted } from './llm-budget'
 import { BLACKLISTED_PROVIDERS, TASTE_MODEL_ID } from '../src/preferences/generationModel'
 
 // The distillation model is pinned in the shared model-roles block (generationModel.ts),
@@ -14,54 +17,76 @@ import { BLACKLISTED_PROVIDERS, TASTE_MODEL_ID } from '../src/preferences/genera
 //
 // Distillation is a background job — the manual refresh no longer waits on it (see the refresh
 // route), so this timeout is a generous backstop, not a UX deadline. Its real purpose is to
-// bound how long one distill can hold the single process-wide generation slot
-// (generation-lock.ts) and keep story generation queued behind it.
+// bound how long one distill can hold its own generation slot (generation-lock.ts) — distills
+// run under their own owner key, so they never hold up story generation.
 const DISTILL_TIMEOUT_MS = 60_000
 // Re-distill in the background once this many new likes have piled up since the last run.
 const DISTILL_THRESHOLD = 3
 
-// Worlds with a distill currently in flight. Dedupes overlapping triggers (rapid refresh taps,
-// or a background re-distill overlapping a manual one) and lets a polling client see that a
-// refresh is still working (surfaced through getProfileForWorld).
-const distillingWorlds = new Set<number>()
+// (world, version) pairs with a distill in flight. Dedupes overlapping triggers (rapid refresh
+// taps, or a background re-distill overlapping a manual one) and lets a polling client see that
+// a refresh is still working (surfaced through getProfileForWorld).
+const distilling = new Set<string>()
+
+// Likes of a version, the same convention as prompts: rows stamped with it, plus
+// version-orphaned rows (their version was deleted) which fold into whatever is checked out.
+function versionLikes(userId: number, worldId: number, versionId: number) {
+  return and(
+    eq(tasteLikes.user_id, userId),
+    eq(tasteLikes.world_id, worldId),
+    or(eq(tasteLikes.world_version_id, versionId), isNull(tasteLikes.world_version_id)),
+  )
+}
 
 // The stored profile is plain prose. Read it as such, trimmed; empty when there's nothing yet.
-function readProfile(userId: number, worldId: number): string {
-  const row = db.select({ profile: tasteProfile.profile }).from(tasteProfile).where(and(eq(tasteProfile.world_id, worldId), eq(tasteProfile.user_id, userId))).get()
+function readProfile(userId: number, worldId: number, versionId: number): string {
+  const row = db
+    .select({ profile: tasteProfile.profile })
+    .from(tasteProfile)
+    .where(and(eq(tasteProfile.world_id, worldId), eq(tasteProfile.world_version_id, versionId), eq(tasteProfile.user_id, userId)))
+    .get()
   return row?.profile?.trim() ?? ''
 }
 
-// Likes for one world (taste is per-world, so distillation and the count both scope by world).
-function likeCount(userId: number, worldId: number): number {
+function likeCount(userId: number, worldId: number, versionId: number): number {
   return db
     .select({ n: count() })
     .from(tasteLikes)
-    .where(and(eq(tasteLikes.user_id, userId), eq(tasteLikes.world_id, worldId)))
+    .where(versionLikes(userId, worldId, versionId))
     .get()?.n ?? 0
 }
 
-// The generation read path: this world's taste profile, as prose (or '' when there is none).
+// The generation read path: the checked-out version's taste profile, as prose (or '' when there
+// is none). Resolves the version internally so callers stay version-unaware.
 export function loadTasteForGeneration(userId: number, worldId: number): string {
-  return readProfile(userId, worldId)
+  const versionId = currentWorldVersionId(userId, worldId)
+  if (versionId == null) return ''
+  return readProfile(userId, worldId, versionId)
 }
 
 // Whether the reader's taste would actually shape a generation for this world — i.e. there is a
 // non-empty profile. Used at save time to record the truth (toggle on but no profile injects
 // nothing) on the piece.
 export function tasteApplies(userId: number, worldId: number): boolean {
-  return readProfile(userId, worldId).length > 0
+  return loadTasteForGeneration(userId, worldId).length > 0
 }
 
 // `updatedAt` is the completion signal a polling client watches: distillTasteProfile stamps it
 // on every successful (re)build, so a value newer than the pre-refresh one means the background
 // distill finished. `distilling` reports whether one is in flight right now.
 export function getProfileForWorld(userId: number, worldId: number): { profile: string; likeCount: number; updatedAt: number; distilling: boolean } {
-  const row = db.select({ profile: tasteProfile.profile, updated_at: tasteProfile.updated_at }).from(tasteProfile).where(and(eq(tasteProfile.world_id, worldId), eq(tasteProfile.user_id, userId))).get()
+  const versionId = currentWorldVersionId(userId, worldId)
+  if (versionId == null) return { profile: '', likeCount: 0, updatedAt: 0, distilling: false }
+  const row = db
+    .select({ profile: tasteProfile.profile, updated_at: tasteProfile.updated_at })
+    .from(tasteProfile)
+    .where(and(eq(tasteProfile.world_id, worldId), eq(tasteProfile.world_version_id, versionId), eq(tasteProfile.user_id, userId)))
+    .get()
   return {
     profile: row?.profile?.trim() ?? '',
-    likeCount: likeCount(userId, worldId),
+    likeCount: likeCount(userId, worldId, versionId),
     updatedAt: row?.updated_at ?? 0,
-    distilling: distillingWorlds.has(worldId),
+    distilling: distilling.has(`${worldId}:${versionId}`),
   }
 }
 
@@ -112,19 +137,16 @@ async function requestDistillation(prompt: string, modelId: string): Promise<str
       method: 'POST',
       signal: controller.signal,
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: JSON.stringify(budgeted({
         model: modelId,
         temperature: 0.3,
         reasoning: { effort: 'none' },
         ...(BLACKLISTED_PROVIDERS.length > 0 ? { provider: { ignore: BLACKLISTED_PROVIDERS } } : {}),
-        // A hard ceiling so a misbehaving provider can never generate without end; a profile is
-        // a short paragraph or two, so this is far more than enough.
-        max_tokens: 1500,
         messages: [
           { role: 'system', content: DISTILL_SYSTEM },
           { role: 'user', content: prompt },
         ],
-      }),
+      }, 'taste distill')),
     })
     if (!response.ok) {
       console.warn(`[taste distill] OpenRouter ${response.status} ${response.statusText}`)
@@ -143,34 +165,38 @@ async function requestDistillation(prompt: string, modelId: string): Promise<str
   }
 }
 
-// Rebuild one world's profile from all of its likes. Runs the LLM call inside the generation
-// slot so it never opens a second OpenRouter session alongside a live story stream. Deduped per
-// world. Returns the new profile (persisted), or null when there was nothing to do / it failed.
+// Rebuild the checked-out version's profile from all of its likes. Runs the LLM call inside its
+// own generation slot (`distill:` owner key) so overlapping distills for a world serialize while
+// a live story stream is unaffected. Deduped per (world, version). Returns the new profile
+// (persisted), or null when there was nothing to do / it failed.
 export async function distillTasteProfile(userId: number, worldId: number, modelId: string = TASTE_MODEL_ID): Promise<string | null> {
-  if (distillingWorlds.has(worldId)) return null
-  distillingWorlds.add(worldId)
+  const versionId = currentWorldVersionId(userId, worldId)
+  if (versionId == null) return null
+  const key = `${worldId}:${versionId}`
+  if (distilling.has(key)) return null
+  distilling.add(key)
   try {
-    return await runDistillation(userId, worldId, modelId)
+    return await runDistillation(userId, worldId, versionId, modelId)
   } finally {
-    distillingWorlds.delete(worldId)
+    distilling.delete(key)
   }
 }
 
-async function runDistillation(userId: number, worldId: number, modelId: string): Promise<string | null> {
+async function runDistillation(userId: number, worldId: number, versionId: number, modelId: string): Promise<string | null> {
   const likes = db
     .select({ snippet: tasteLikes.snippet, context: tasteLikes.context, reasons: tasteLikes.reasons })
     .from(tasteLikes)
-    .where(and(eq(tasteLikes.user_id, userId), eq(tasteLikes.world_id, worldId)))
+    .where(versionLikes(userId, worldId, versionId))
     .orderBy(desc(tasteLikes.created_at))
     .all()
 
   const total = likes.length
   if (total === 0) {
-    // No likes: clear the profile so a world whose likes were all deleted shows an empty slate.
+    // No likes: clear the profile so a version whose likes were all deleted shows an empty slate.
     const now = Date.now()
     db.insert(tasteProfile)
-      .values({ world_id: worldId, user_id: userId, profile: '', distilled_like_count: 0, updated_at: now })
-      .onConflictDoUpdate({ target: tasteProfile.world_id, set: { profile: '', distilled_like_count: 0, updated_at: now } })
+      .values({ world_id: worldId, world_version_id: versionId, user_id: userId, profile: '', distilled_like_count: 0, updated_at: now })
+      .onConflictDoUpdate({ target: [tasteProfile.world_id, tasteProfile.world_version_id], set: { profile: '', distilled_like_count: 0, updated_at: now } })
       .run()
     return ''
   }
@@ -188,7 +214,7 @@ async function runDistillation(userId: number, worldId: number, modelId: string)
   const prompt = parts.join('\n\n')
 
   const profile = await new Promise<string | null>((resolve) => {
-    withGenerationSlot(async () => {
+    withGenerationSlot(`distill:${userId}:${worldId}`, async () => {
       resolve(await requestDistillation(prompt, modelId))
     }).catch(() => resolve(null))
   })
@@ -197,20 +223,25 @@ async function runDistillation(userId: number, worldId: number, modelId: string)
 
   const now = Date.now()
   db.insert(tasteProfile)
-    .values({ world_id: worldId, user_id: userId, profile, distilled_like_count: total, updated_at: now })
-    .onConflictDoUpdate({ target: tasteProfile.world_id, set: { profile, distilled_like_count: total, updated_at: now } })
+    .values({ world_id: worldId, world_version_id: versionId, user_id: userId, profile, distilled_like_count: total, updated_at: now })
+    .onConflictDoUpdate({ target: [tasteProfile.world_id, tasteProfile.world_version_id], set: { profile, distilled_like_count: total, updated_at: now } })
     .run()
 
   return profile
 }
 
 // Fire a background re-distill after a like is saved, but only once enough new likes have
-// accumulated for this world since the last run — so we don't spend a call on every single
+// accumulated for this version since the last run — so we don't spend a call on every single
 // like. Never awaited by the request; failures are swallowed.
 export function maybeDistillAfterLike(userId: number, worldId: number): void {
-  const row = db.select({ distilled_like_count: tasteProfile.distilled_like_count }).from(tasteProfile).where(eq(tasteProfile.world_id, worldId)).get()
-  const distilled = row?.distilled_like_count ?? 0
-  if (likeCount(userId, worldId) - distilled < DISTILL_THRESHOLD) return
+  const versionId = currentWorldVersionId(userId, worldId)
+  if (versionId == null) return
+  const distilled = db
+    .select({ n: tasteProfile.distilled_like_count })
+    .from(tasteProfile)
+    .where(and(eq(tasteProfile.world_id, worldId), eq(tasteProfile.world_version_id, versionId), eq(tasteProfile.user_id, userId)))
+    .get()?.n ?? 0
+  if (likeCount(userId, worldId, versionId) - distilled < DISTILL_THRESHOLD) return
   void distillTasteProfile(userId, worldId).catch(err =>
     console.warn(`[taste distill] background run failed: ${err instanceof Error ? err.message : 'unknown error'}`))
 }

@@ -7,6 +7,7 @@ import { findUserWorld, getModelById, getUserId, paramInt } from '../../route-he
 import { BLACKLISTED_PROVIDERS, SIMILAR_MODEL_ID } from '../../../src/preferences/generationModel'
 import { readServerSentEvents } from '../../../src/utils/sse'
 import { clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
+import { budgeted } from '../../llm-budget'
 import { describeStreamError, parseOpenRouterError } from '../../openrouter-errors'
 
 const chatRoutes = new Hono<{ Variables: Variables }>()
@@ -17,10 +18,8 @@ function ownerKey(userId: number, worldId: number) {
   return `${userId}:${worldId}`
 }
 
-// The world is the whole point of this chat, so it gets a generous slice — but still capped
-// so a sprawling setting can't blow the budget on every turn.
-const MAX_WORLD_REFERENCE_CHARS = 12000
-const MAX_MESSAGE_CHARS = 2000
+// The world is the whole point of this chat, and it goes in whole — the one size limit lives at
+// the call itself (llm-budget.ts). The thread is capped by turns, which is a count, not a knife.
 // How much of the thread the model sees. Older turns simply fall off; no summarization.
 const HISTORY_TURNS = 20
 const CHAT_TEMPERATURE = 0.7
@@ -29,17 +28,11 @@ const RETRYABLE_STATUSES = new Set([429, 502, 503])
 const MAX_ATTEMPTS = 3
 const MAX_RETRY_WAIT_MS = 20_000
 
-function truncateWorldReference(worldBody: string): string {
-  const trimmed = worldBody.trim()
-  if (trimmed.length <= MAX_WORLD_REFERENCE_CHARS) return trimmed
-  return `${trimmed.slice(0, MAX_WORLD_REFERENCE_CHARS).trimEnd()}…`
-}
-
 // Deliberately minimal: the world, and the language rule. No role, no task, no rules about
 // how to answer — the writer asks their own questions and steers the conversation themselves.
 function buildSystemPrompt(worldBody: string): string {
   const sections: string[] = []
-  const worldReference = truncateWorldReference(worldBody)
+  const worldReference = worldBody.trim()
   if (worldReference) {
     sections.push(`# World setting\n${worldReference}`)
   }
@@ -103,7 +96,7 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
   if (!world) return c.json({ error: 'Not found' }, 404)
 
   const { message, model: requestedModel, replace_from_id: replaceFromId } = await c.req.json().catch(() => ({}))
-  const messageText = typeof message === 'string' ? message.trim().slice(0, MAX_MESSAGE_CHARS) : ''
+  const messageText = typeof message === 'string' ? message.trim() : ''
   if (!messageText) return c.json({ error: 'Message required' }, 400)
 
   // Editing a sent message and regenerating a reply are the same operation: drop the named
@@ -165,7 +158,7 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
-      await withGenerationSlot(async () => {
+      await withGenerationSlot(key, async () => {
         if (controller.signal.aborted) return
 
         const provider: Record<string, unknown> = {
@@ -198,14 +191,14 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
               'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
+            body: JSON.stringify(budgeted({
               model: modelOption.id,
               temperature: CHAT_TEMPERATURE,
               reasoning: { effort: 'none' },
               stream: true,
               provider,
               messages,
-            }),
+            }, 'world chat')),
           })
 
           if (response.ok && response.body) break

@@ -10,6 +10,8 @@ A mobile-only web app for writing interactive fiction. A user defines a **world*
 
 Bun is the runtime for both server and tooling (not Node). There is **no test suite and no lint config** — type-checking is the verification gate.
 
+**Never live-test anything.** Do not start the server or client, hit API endpoints, make LLM calls, open or modify the database, drive the UI, or run one-off scripts to verify a change. The only verification ever run is the static check: `bunx tsc --noEmit`. If a change cannot be verified that way, say so and stop — the user does the live testing themselves.
+
 ```bash
 bun run dev          # server (:3001) + Vite client (:5173) concurrently
 bun run dev:server   # Hono API only, hot-reloaded, :3001
@@ -21,7 +23,7 @@ bun run start        # production: NODE_ENV=production, serves dist/ + API on :3
 
 One-off data scripts (operate on the live SQLite DB): `bun run migrate:prompt-clusters`, `bun run cluster:prompts`, `bun run regroup:prompts`.
 
-Requires `OPENROUTER_API_KEY` in the environment for generation and embeddings. DB path is `./piece.db` (override with `DB_PATH`).
+Requires `OPENROUTER_API_KEY` in the environment for generation and embeddings. The code's default DB path is `./piece.db` (override with `DB_PATH`), but **the dev database is `migrated.db`** — the `piece.db` file in the repo is neither dev nor prod, so inspecting it tells you nothing.
 
 ## Architecture
 
@@ -33,7 +35,7 @@ Requires `OPENROUTER_API_KEY` in the environment for generation and embeddings. 
 
 **Generation flow (the core feature)** is server-sent-events end to end:
 - Client `src/hooks/useGeneration.ts` is a reducer-based state machine (`idle → waiting_provider → thinking → writing`). It POSTs to `/api/worlds/:id/generate`, reads the SSE stream via `src/utils/sse.ts`, and appends `chunk` events into an `output` buffer. Each run gets a client-generated `generationId` and its own `AbortController`; a replacing run (e.g. "expand") aborts the prior one and stays silent.
-- Server `server/routes/worlds/generate.ts` builds the system prompt from the world body, proxies to OpenRouter's streaming chat completions, and re-emits typed SSE events (`status`, `provider`, `thinking`, `chunk`, `error`, `done`). **`server/generation-lock.ts` is the hard guarantee that only ONE OpenRouter session runs at a time, process-wide** — the account allows a single concurrent session and overlap gets the whole key 429'd. `withGenerationSlot` is a promise-chain mutex (call N+1 never opens its socket until N has drained, plus a settle delay for OpenRouter to free its slot); `registerGeneration`/`abortGeneration` key runs by owner (`userId:worldId`) so a user's new action (or `POST /generate/stop`, or a client disconnect) aborts and drains their prior run first. The `/generate` route gets an unbounded server timeout (set in `index.ts`). No token/cost/usage data is collected.
+- Server `server/routes/worlds/generate.ts` builds the system prompt from the world body, proxies to OpenRouter's streaming chat completions, and re-emits typed SSE events (`status`, `provider`, `thinking`, `chunk`, `error`, `done`). **`server/generation-lock.ts` serializes OpenRouter calls per owner, not globally.** `withGenerationSlot(ownerKey, task)` is a promise-chain mutex per owner key (call N+1 for that owner never opens its socket until N has drained, plus a settle delay), and `registerGeneration`/`abortGeneration` key runs by the same owner (`userId:worldId` for streams; prefixed keys like `ideas:`/`similar:`/`distill:`/`discover:` for background jobs), so a user's new action (or `POST /generate/stop`, or a client disconnect) aborts and drains their prior run first while background work runs alongside a live stream. A global `MIN_REQUEST_INTERVAL_MS` spaces request *starts* only. The `/generate` route gets an unbounded server timeout (set in `index.ts`). No token/cost/usage data is collected.
 - "Expand" mode resends prior text as an assistant turn plus an expansion instruction to elaborate the last paragraph.
 
 **Pieces & saving** — generated text is held in the client until the user saves it (`useGeneratePieceSession.ts`). Saving POSTs to `/api/worlds/:id/pieces`, which optimistically updates the TanStack Query cache. "Resume" reopens a saved piece, continues it, and PATCHes in place.

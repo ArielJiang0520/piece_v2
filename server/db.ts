@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
-import { integer, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
+import { integer, primaryKey, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 const dbPath = process.env.DB_PATH || process.env.DEV_DB_PATH || './piece.db';
 const sqlite = new Database(dbPath);
@@ -107,16 +107,20 @@ sqlite.run(`
     created_at INTEGER NOT NULL
   );
 
-  -- One row per world: the distilled taste profile for that world. profile is a single freeform
-  -- prose profile of what the reader responds to, injected into that world's generation.
-  -- distilled_like_count is how many of the world's likes existed at the last distill, so the
-  -- background trigger knows when enough new likes have accumulated to re-distill.
+  -- One row per (world, version): the distilled taste profile for that version of the world.
+  -- profile is a single freeform prose profile of what the reader responds to, injected into
+  -- generation for that version. distilled_like_count is how many of the version's likes existed
+  -- at the last distill, so the background trigger knows when enough new ones have accumulated.
+  -- Versions are branches: switching HEAD switches which profile row is live, and deleting a
+  -- version deletes its profile with it.
   CREATE TABLE IF NOT EXISTS taste_profile (
-    world_id INTEGER PRIMARY KEY REFERENCES worlds(id) ON DELETE CASCADE,
+    world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    world_version_id INTEGER NOT NULL REFERENCES world_versions(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     profile TEXT,
     distilled_like_count INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (world_id, world_version_id)
   );
 
   -- One row per turn in a world's chat thread. There is exactly one thread per world (no
@@ -131,16 +135,35 @@ sqlite.run(`
     created_at INTEGER NOT NULL
   );
 
+  -- Discover's own rolling summary, mirroring taste_profile but about *premises* (which story
+  -- ideas this reader picks up) rather than prose the reader loved. Per (world, version), like
+  -- taste_profile. distilled_signal_count is how many prompt rows the version had at the last
+  -- distill, so the refill-time trigger knows when enough new ones have accumulated.
+  CREATE TABLE IF NOT EXISTS discover_profile (
+    world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    world_version_id INTEGER NOT NULL REFERENCES world_versions(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    profile TEXT,
+    distilled_signal_count INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (world_id, world_version_id)
+  );
+
 `)
 
 // Model usage/metadata tracking was removed; drop the table if an older DB still has it.
 sqlite.run('DROP TABLE IF EXISTS model_usage;')
+// The Discover candidate/telemetry log was removed with the bandit idea: nothing reads it — the
+// feed's only evidence is the prompts table.
+sqlite.run('DROP TABLE IF EXISTS discover_events;')
 
-function addColumnIfMissing(table: string, column: string, ddl: string) {
+function addColumnIfMissing(table: string, column: string, ddl: string): boolean {
   const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   if (!rows.some(row => row.name === column)) {
     sqlite.run(`ALTER TABLE ${table} ADD COLUMN ${ddl};`)
+    return true
   }
+  return false
 }
 
 function rebuildWorldsTable() {
@@ -408,6 +431,58 @@ sqlite.run(`
      OR current_version_id NOT IN (SELECT id FROM world_versions WHERE world_id = worlds.id);
 `)
 
+// Both profile tables went from one row per world to one per (world, version). Rebuild each
+// old-shape table (guarded on the missing version column, so it runs once), stamping existing
+// rows to their world's checked-out version — that is the version they learned on. Runs after
+// the current_version_id backfill above so every world has a HEAD to stamp with.
+// resetCount: discover_profile's old count was on a different scale (likes + edits + saved
+// pieces) than the new signal (prompt rows), so carrying it over would leave the re-distill
+// trigger unreachable; zeroing it makes the next refill rebuild the profile from clean inputs.
+// taste_profile's count kept its meaning (likes) and is copied as-is.
+function rebuildProfileTablePerVersion(table: string, countColumn: string, resetCount: boolean) {
+  const columns = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (columns.length === 0 || columns.some(row => row.name === 'world_version_id')) return
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run(`DROP TABLE IF EXISTS ${table}_new;`)
+    sqlite.run(`
+      CREATE TABLE ${table}_new (
+        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+        world_version_id INTEGER NOT NULL REFERENCES world_versions(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        profile TEXT,
+        ${countColumn} INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (world_id, world_version_id)
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO ${table}_new (world_id, world_version_id, user_id, profile, ${countColumn}, updated_at)
+      SELECT t.world_id, w.current_version_id, t.user_id, t.profile, ${resetCount ? '0' : `t.${countColumn}`}, t.updated_at
+      FROM ${table} t
+      JOIN worlds w ON w.id = t.world_id
+      WHERE w.current_version_id IS NOT NULL;
+    `)
+    sqlite.run(`DROP TABLE ${table};`)
+    sqlite.run(`ALTER TABLE ${table}_new RENAME TO ${table};`)
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
+  }
+}
+rebuildProfileTablePerVersion('taste_profile', 'distilled_like_count', false)
+rebuildProfileTablePerVersion('discover_profile', 'distilled_signal_count', true)
+
+// Likes are stamped with the version that was checked out when they were recorded, the same way
+// prompts are. Backfill only when the column is first added — rows whose version is later
+// deleted go NULL (orphans that fold into whatever is checked out) and must stay NULL.
+if (addColumnIfMissing('taste_likes', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')) {
+  sqlite.run(`
+    UPDATE taste_likes
+    SET world_version_id = (SELECT current_version_id FROM worlds WHERE worlds.id = taste_likes.world_id)
+    WHERE world_version_id IS NULL;
+  `)
+}
+
 // Prompts are tied to the world version they were created on; a cluster is tagged with the
 // version of its latest prompt. Backfill runs after versions exist (above): existing prompts
 // belong to their world's original (earliest) version, and each cluster inherits its latest
@@ -563,16 +638,20 @@ export const tasteLikes = sqliteTable('taste_likes', {
   snippet: text('snippet').notNull(),
   context: text('context'),
   reasons: text('reasons'),
+  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   created_at: integer('created_at').notNull(),
 })
 
 export const tasteProfile = sqliteTable('taste_profile', {
-  world_id: integer('world_id').primaryKey().references(() => worlds.id),
+  world_id: integer('world_id').notNull().references(() => worlds.id),
+  world_version_id: integer('world_version_id').notNull().references(() => worldVersions.id),
   user_id: integer('user_id').notNull().references(() => users.id),
   profile: text('profile'),
   distilled_like_count: integer('distilled_like_count').notNull().default(0),
   updated_at: integer('updated_at').notNull(),
-})
+}, table => ({
+  pk: primaryKey({ columns: [table.world_id, table.world_version_id] }),
+}))
 
 export const worldChatMessages = sqliteTable('world_chat_messages', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -583,4 +662,15 @@ export const worldChatMessages = sqliteTable('world_chat_messages', {
   created_at: integer('created_at').notNull(),
 })
 
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, tasteLikes, tasteProfile, worldChatMessages } })
+export const discoverProfile = sqliteTable('discover_profile', {
+  world_id: integer('world_id').notNull().references(() => worlds.id),
+  world_version_id: integer('world_version_id').notNull().references(() => worldVersions.id),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  profile: text('profile'),
+  distilled_signal_count: integer('distilled_signal_count').notNull().default(0),
+  updated_at: integer('updated_at').notNull(),
+}, table => ({
+  pk: primaryKey({ columns: [table.world_id, table.world_version_id] }),
+}))
+
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, tasteLikes, tasteProfile, worldChatMessages, discoverProfile } })

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { and, desc, eq } from 'drizzle-orm'
 import { db, pieces, tasteLikes } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
+import { currentWorldVersionId, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { distillTasteProfile, getProfileForWorld, maybeDistillAfterLike } from '../../taste-profile'
 import { TASTE_MODEL_ID } from '../../../src/preferences/generationModel'
 
@@ -10,9 +10,9 @@ import { TASTE_MODEL_ID } from '../../../src/preferences/generationModel'
 // every handler scopes by (userId, worldId) so one world's likes/profile never touch another.
 const tasteRoutes = new Hono<{ Variables: Variables }>()
 
-const MAX_SNIPPET_CHARS = 4000
-const MAX_CONTEXT_CHARS = 8000
-const MAX_REASONS_CHARS = 600
+// A like is stored as the reader sent it — the passage, its surrounding window, and their own
+// words about it, none of them shortened. The one size limit is at the model call itself
+// (llm-budget.ts), where it belongs.
 
 // Record a liked paragraph in this world. The piece is soft-validated for ownership — a bad
 // or foreign id is dropped (piece_id → null) rather than 400, mirroring pieces.ts, so a like
@@ -24,12 +24,12 @@ tasteRoutes.post('/likes', authMiddleware, async (c) => {
 
   const body = await c.req.json().catch(() => ({}))
 
-  const snippet = typeof body.snippet === 'string' ? body.snippet.trim().slice(0, MAX_SNIPPET_CHARS) : ''
+  const snippet = typeof body.snippet === 'string' ? body.snippet.trim() : ''
   if (!snippet) return c.json({ error: 'Snippet required' }, 400)
 
   // The surrounding paragraphs, kept for the distiller. Fall back to the snippet alone when
   // the client didn't send a window (or sent one narrower than the paragraph itself).
-  const contextRaw = typeof body.context === 'string' ? body.context.trim().slice(0, MAX_CONTEXT_CHARS) : ''
+  const contextRaw = typeof body.context === 'string' ? body.context.trim() : ''
   const context = contextRaw.length >= snippet.length ? contextRaw : snippet
 
   let pieceId: number | null = null
@@ -46,7 +46,7 @@ tasteRoutes.post('/likes', authMiddleware, async (c) => {
   }
 
   // The reader's optional free-form "why" — a raw feeling or half-sentence, or nothing at all.
-  const reasons = typeof body.reasons === 'string' ? body.reasons.trim().slice(0, MAX_REASONS_CHARS) : ''
+  const reasons = typeof body.reasons === 'string' ? body.reasons.trim() : ''
 
   const like = db.insert(tasteLikes).values({
     user_id: userId,
@@ -55,6 +55,8 @@ tasteRoutes.post('/likes', authMiddleware, async (c) => {
     snippet,
     context,
     reasons: reasons || null,
+    // Stamped with the version checked out when the like was recorded, the same way prompts are.
+    world_version_id: currentWorldVersionId(userId, worldId),
     created_at: Date.now(),
   }).returning({ id: tasteLikes.id }).get()
 
@@ -103,7 +105,7 @@ tasteRoutes.patch('/likes/:likeId', authMiddleware, async (c) => {
   const likeId = paramInt(c, 'likeId')
 
   const body = await c.req.json().catch(() => ({}))
-  const reasons = typeof body.reasons === 'string' ? body.reasons.trim().slice(0, MAX_REASONS_CHARS) : ''
+  const reasons = typeof body.reasons === 'string' ? body.reasons.trim() : ''
 
   db.update(tasteLikes)
     .set({ reasons: reasons || null })

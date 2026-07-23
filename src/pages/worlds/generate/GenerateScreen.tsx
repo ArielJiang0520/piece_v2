@@ -60,7 +60,7 @@ export default function GenerateScreen() {
   const readingFontSize = useReadingFontSize()
 
   const lockedMode = !!promptId
-  const routeState = location.state as { prompt?: unknown; versionDraft?: unknown; similarToPromptId?: unknown; generated?: unknown } | null
+  const routeState = location.state as { prompt?: unknown; versionDraft?: unknown; similarToPromptId?: unknown; generated?: unknown; returnTo?: unknown } | null
   const versionDraft = parseVersionDraft(routeState?.versionDraft)
   const statePrompt = typeof routeState?.prompt === 'string' ? routeState.prompt : ''
   const versionSourcePromptId = !lockedMode ? versionDraft?.sourcePromptId ?? null : null
@@ -81,10 +81,14 @@ export default function GenerateScreen() {
       ? Number(resumeAtParam)
       : null
 
-  const backHref = lockedMode ? `/worlds/${id}/prompt/${promptId}` : `/worlds/${id}/prompt/new`
+  // Some screens hand the premise straight to Generate without going through the draft page
+  // (Discover). Discarding there belongs back on the screen the reader came from, not on a
+  // prompt draft they never opened.
+  const returnTo = !lockedMode && typeof routeState?.returnTo === 'string' ? routeState.returnTo : null
+  const backHref = returnTo ?? (lockedMode ? `/worlds/${id}/prompt/${promptId}` : `/worlds/${id}/prompt/new`)
   // Returning to a fresh/version draft restores what the user typed (not the original
   // source text), so the draft page comes back exactly as they left it.
-  const exitState = lockedMode
+  const exitState = lockedMode || returnTo
     ? undefined
     : {
       draftPrompt: statePrompt,

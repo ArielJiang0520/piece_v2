@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ChevronRight, GitBranch, Heart, History, Layers, Search, Plus, X, Lightbulb } from 'lucide-react'
+import { ArrowUp, ChevronRight, Compass, GitBranch, Heart, History, Layers, Search, Plus, X, Lightbulb } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -17,6 +17,7 @@ import { setTasteProfileEnabled, useTasteProfileEnabled } from '@/preferences/ta
 import WorldSortMenu from '../shared/WorldSortMenu'
 import WorldTabs from '../shared/WorldTabs'
 import { useScrollTopButton } from '../shared/useScrollTopButton'
+import { useDiscoverSession } from '../discover/discoverSession'
 
 interface ClusterGroup {
   id: number
@@ -132,9 +133,24 @@ export default function WorldPrompts() {
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
-    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string; is_example: boolean }>,
+    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string; body: string; is_example: boolean; current_version_id: number | null }>,
     enabled: !!id,
   })
+
+  // Premises dealt but not yet read — what the compass button advertises. Nothing here fetches:
+  // the deck fills only on the Discover screen itself, and persists across launches. Decks are
+  // per (world, version); until the world loads there is no version and the badge shows nothing.
+  const discoverVersionId = worldQuery.data?.current_version_id ?? 0
+  const discoverSession = useDiscoverSession(Number(id), discoverVersionId)
+  const discoverWaiting = discoverSession.cards.filter(card => !card.shown).length
+  // Nothing dealt yet for this world's checked-out version — a brand-new world, or a version the
+  // reader has never opened Discover on. There's no count to advertise, so the button wears a dot
+  // instead: an invitation to go look. A world with no setting has no feed, so it stays quiet.
+  const discoverUnopened =
+    discoverWaiting === 0 &&
+    discoverSession.cards.length === 0 &&
+    discoverVersionId > 0 &&
+    (worldQuery.data?.body ?? '').trim().length > 0
 
   // Only offer the version filter once a world has more than one version to scope between.
   const versionsQuery = useQuery({
@@ -262,18 +278,10 @@ export default function WorldPrompts() {
     })
   }
 
-  const firstPage = pages[0]
-  const totalClusters = firstPage?.total ?? 0
   const searchTotal = searchQuery.data?.items.length ?? 0
   const worldTabs = useMemo(
-    () => (
-      <WorldTabs
-        active="prompts"
-        worldId={id}
-        promptCount={clustersQuery.data ? totalClusters : undefined}
-      />
-    ),
-    [clustersQuery.data, id, totalClusters],
+    () => <WorldTabs active="prompts" worldId={id} />,
+    [id],
   )
   useTopNavConfig({ backHref: '/worlds', bottomSlot: worldTabs })
 
@@ -326,14 +334,29 @@ export default function WorldPrompts() {
                 )}
               />
             </div>
+            {/* Discover lives here rather than in the tab row: it's a way into this world's
+                prompts, not a third place to be. */}
             <Link
-              to={`/worlds/${id}/ideas`}
-              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-rose-line/80 bg-paper/60 pl-3 pr-4 font-serif-zh text-[14px] italic leading-none text-ink-2 shadow-[inset_0_0_24px_rgba(205,83,106,0.03)] transition-transform duration-200 active:translate-y-px active:bg-rose-tint/45"
-              aria-label={t.sparkTitle}
-              title={t.sparkTitle}
+              to={`/worlds/${id}/discover`}
+              aria-label={t.discoverTab}
+              title={t.discoverTab}
+              className={`relative grid h-12 w-12 shrink-0 place-items-center rounded-full border transition-[border-color,background-color,color,transform] duration-200 active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 ${discoverWaiting > 0
+                ? 'border-rose/40 bg-rose-pale text-rose-deep'
+                : 'border-rose-line/80 bg-paper/60 text-ink-4 active:bg-rose-tint/45'
+                }`}
             >
-              <Lightbulb aria-hidden="true" className="h-4 w-4 text-rose" />
-              <span>{t.sparkTitle}</span>
+              <Compass aria-hidden="true" className="h-4.5 w-4.5" />
+              {discoverUnopened && (
+                <span aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose/60" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose ring-2 ring-paper" />
+                </span>
+              )}
+              {discoverWaiting > 0 && (
+                <span className="absolute -right-1 -top-1 inline-flex min-w-4.5 items-center justify-center rounded-full bg-rose px-1 py-0.5 font-sans text-[10px] font-semibold leading-none text-white ring-2 ring-paper">
+                  {discoverWaiting}
+                </span>
+              )}
             </Link>
             {canScopeVersion && (
               <button

@@ -4,7 +4,7 @@ import { db, prompts } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { SIMILAR_MODEL_ID } from '../../../src/preferences/generationModel'
-import { requestPromptCandidates } from './prompt-candidates'
+import { candidateFormatInstruction, requestPromptCandidates } from './prompt-candidates'
 
 const similarRoutes = new Hono<{ Variables: Variables }>()
 
@@ -13,17 +13,8 @@ const SIMILAR_TIMEOUT_MS = 60000
 // Lower than story generation: the muse must stay anchored to the writer's prompt. At 1.0 it
 // drifts into generic premises spun from the world setting instead of riffing on the prompt.
 const SIMILAR_TEMPERATURE = 0.7
-// A long, evocative world easily out-masses a one-sentence prompt and starts dominating the
-// output. Cap the reference so it can keep names/facts straight without becoming the main source.
-const MAX_WORLD_REFERENCE_CHARS = 1200
-// The optional hint is a nudge, not a fresh brief — cap it so it can't swamp the source prompt.
-const MAX_HINT_CHARS = 400
-
-function truncateWorldReference(worldBody: string): string {
-  const trimmed = worldBody.trim()
-  if (trimmed.length <= MAX_WORLD_REFERENCE_CHARS) return trimmed
-  return `${trimmed.slice(0, MAX_WORLD_REFERENCE_CHARS).trimEnd()}…`
-}
+// Nothing here is capped by length. Keeping the world from dominating the riffs is the prompt's
+// job — it says so in as many words below — not a job for cutting the writer's setting in half.
 
 // A muse, not a story writer. The writer's OWN prompt is the raw material — the goal is a set of
 // fresh variations that stay recognizably similar to it, not new ideas spun out of the world. The
@@ -51,7 +42,7 @@ function buildSimilarSystemPrompt(worldBody: string): string {
     ].join('\n'),
   )
 
-  const worldReference = truncateWorldReference(worldBody)
+  const worldReference = worldBody.trim()
   if (worldReference) {
     sections.push(
       [
@@ -63,9 +54,7 @@ function buildSimilarSystemPrompt(worldBody: string): string {
     )
   }
 
-  sections.push(
-    `# Output\nRespond with ONLY a JSON object of the form {"prompts": ["...", "..."]} containing exactly ${CANDIDATE_COUNT} prompt strings. No commentary, no markdown.`,
-  )
+  sections.push(candidateFormatInstruction(CANDIDATE_COUNT))
 
   sections.push(
     `# Language\nRegardless of the language of these instructions, always write the new prompts in the same language as the prompt the writer provides.`,
@@ -121,7 +110,7 @@ similarRoutes.post('/', authMiddleware, async (c: any) => {
   const sourceText = source?.text.trim()
   if (!sourceText) return c.json({ error: 'Prompt not found' }, 404)
 
-  const hintText = typeof hint === 'string' ? hint.trim().slice(0, MAX_HINT_CHARS) : ''
+  const hintText = typeof hint === 'string' ? hint.trim() : ''
 
   // The writer picks the brainstorming model (shares the story-generation choice on the client);
   // fall back to the pinned similar-prompts model for an absent/invalid pick.
@@ -156,6 +145,7 @@ similarRoutes.post('/', authMiddleware, async (c: any) => {
     temperature: SIMILAR_TEMPERATURE,
     count: CANDIDATE_COUNT,
     timeoutMs: SIMILAR_TIMEOUT_MS,
+    ownerKey: `similar:${userId}:${worldId}`,
   })
 
   if (failure) return c.json({ error: failure.message }, failure.status as any)
