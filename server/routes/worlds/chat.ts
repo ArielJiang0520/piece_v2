@@ -158,7 +158,7 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
-      await withGenerationSlot(key, async () => {
+      await withGenerationSlot(async () => {
         if (controller.signal.aborted) return
 
         const provider: Record<string, unknown> = {

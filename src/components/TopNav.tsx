@@ -78,11 +78,19 @@ export default function TopNav() {
   }, [currentWorldQuery.data?.current_version_id, t, versionsQuery.data])
 
   // Tapping the header title opens a quick version switcher (switch only; create/rename/delete
-  // stay on the About tab). Only offered once a world has more than one version to switch between.
+  // stay on the About tab). Only offered once a world has more than one version to switch between,
+  // and only on the world's own two tabs — the prompt list and About, which show a whole version's
+  // contents. Deeper screens are looking at one thing *inside* a version (a cluster, a piece, a
+  // generation); switching under them would leave the screen showing another version's item while
+  // every action on it wrote against the new one.
+  const onWorldTabRoute = useMemo(
+    () => /^\/worlds\/\d+(\/about)?\/?$/.test(location.pathname),
+    [location.pathname],
+  )
   const [versionSwitcherOpen, setVersionSwitcherOpen] = useState(false)
   const versionSwitcherRef = useRef<HTMLDivElement>(null)
   const versions = versionsQuery.data ?? []
-  const canSwitchVersion = !!worldId && versions.length > 1
+  const canSwitchVersion = !!worldId && versions.length > 1 && onWorldTabRoute
   const currentVersionId = currentWorldQuery.data?.current_version_id ?? null
   const switchVersionMutation = useSwitchWorldVersion(worldId ?? undefined)
 

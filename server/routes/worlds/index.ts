@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, and, desc, inArray, ne, sql } from 'drizzle-orm'
-import { db, pieces, promptClusters, worldVersions, worlds } from '../../db'
+import { db, pieces, promptClusters, prompts, worldVersions, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, findUserWorldId, getUserId, paramInt } from '../../route-helpers'
 import promptRoutes from './prompts'
@@ -53,6 +53,10 @@ worldRoutes.get('/', authMiddleware, (c) => {
   const worldIds = worldRows.map(world => world.id)
   if (worldIds.length === 0) return c.json([])
 
+  // Both counts are for the world's checked-out version only, so a card never promises prompts or
+  // pieces that opening the world won't show. A piece reaches its version the long way — through
+  // its prompt's cluster — because that is the only place a version is recorded.
+  const currentVersion = eq(promptClusters.world_version_id, worlds.current_version_id)
   const pieceStats = db
     .select({
       world_id: pieces.world_id,
@@ -60,7 +64,10 @@ worldRoutes.get('/', authMiddleware, (c) => {
       latest_piece_at: sql<number | null>`max(${pieces.updated_at})`,
     })
     .from(pieces)
-    .where(and(eq(pieces.user_id, userId), inArray(pieces.world_id, worldIds)))
+    .innerJoin(prompts, eq(prompts.id, pieces.prompt_id))
+    .innerJoin(promptClusters, eq(promptClusters.id, prompts.cluster_id))
+    .innerJoin(worlds, eq(worlds.id, pieces.world_id))
+    .where(and(eq(pieces.user_id, userId), inArray(pieces.world_id, worldIds), currentVersion))
     .groupBy(pieces.world_id)
     .all()
   const clusterStats = db
@@ -69,7 +76,8 @@ worldRoutes.get('/', authMiddleware, (c) => {
       prompt_cluster_count: sql<number>`count(*)`,
     })
     .from(promptClusters)
-    .where(and(eq(promptClusters.user_id, userId), inArray(promptClusters.world_id, worldIds)))
+    .innerJoin(worlds, eq(worlds.id, promptClusters.world_id))
+    .where(and(eq(promptClusters.user_id, userId), inArray(promptClusters.world_id, worldIds), currentVersion))
     .groupBy(promptClusters.world_id)
     .all()
 

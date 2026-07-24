@@ -220,9 +220,9 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
     try {
       await stream.writeSSE({ data: JSON.stringify({ type: 'status', status: 'waiting_provider' }) })
 
-      // The OpenRouter call only opens inside this owner's slot — this owner's prior run
-      // is aborted and fully drained first. While queued the client shows the waiting state.
-      await withGenerationSlot(key, async () => {
+      // The OpenRouter call only opens inside the slot — never more than one at a time,
+      // process-wide. While queued the client keeps showing the waiting state.
+      await withGenerationSlot(async () => {
         if (controller.signal.aborted) return
 
         const provider: Record<string, unknown> = {

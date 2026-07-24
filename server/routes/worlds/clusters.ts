@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db, pieces, promptClusters, prompts, worldVersions } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
-import { cosineSimilarity, embedPrompt, parseEmbedding } from '../../prompt-clustering'
+import { cosineSimilarity, embedPrompt, parseEmbedding, recomputePromptCluster } from '../../prompt-clustering'
 
 const clusterRoutes = new Hono<{ Variables: Variables }>()
 
@@ -155,12 +155,12 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
   })
 }
 
-// The prompt list defaults to the checked-out world version: show clusters tagged with that
-// version, plus version-orphaned clusters (their version was deleted → null so they never
-// vanish). "All versions" (or a world with no HEAD) drops the filter entirely.
-function clusterVersionFilter(currentVersionId: number | null, allVersions: boolean) {
-  if (allVersions || currentVersionId == null) return undefined
-  return or(eq(promptClusters.world_version_id, currentVersionId), isNull(promptClusters.world_version_id))
+// The prompt list shows the checked-out world version and only that version — versions are
+// branches, and you no more see another branch's prompts here than another branch's files. There
+// is no orphan case to allow for: deleting a version deletes its clusters outright.
+function clusterVersionFilter(currentVersionId: number | null) {
+  if (currentVersionId == null) return undefined
+  return eq(promptClusters.world_version_id, currentVersionId)
 }
 
 const SEARCH_LIMIT = 50
@@ -177,12 +177,14 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
   const queryEmbedding = await embedPrompt(query)
   if (!queryEmbedding) return c.json({ error: 'Embedding failed' }, 503)
 
-  const allVersions = c.req.query('allVersions') === '1'
-  const versionFilter = clusterVersionFilter(world.current_version_id, allVersions)
+  // A cluster is represented by its latest prompt — that is its current text, and so it is what
+  // a text search should match against. Clusters whose latest prompt hasn't been embedded yet
+  // (the fetch runs in the background after saving, and can fail) simply don't match.
+  const versionFilter = clusterVersionFilter(world.current_version_id)
   const clusters = db
     .select({
       id: promptClusters.id,
-      average_embedding: promptClusters.average_embedding,
+      latest_embedding: prompts.embedding,
       prompt_count: promptClusters.prompt_count,
       piece_count: promptClusters.piece_count,
       latest_prompt_id: promptClusters.latest_prompt_id,
@@ -190,17 +192,18 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
       updated_at: promptClusters.updated_at,
     })
     .from(promptClusters)
+    .innerJoin(prompts, eq(prompts.id, promptClusters.latest_prompt_id))
     .where(and(
       eq(promptClusters.user_id, userId),
       eq(promptClusters.world_id, worldId),
-      isNotNull(promptClusters.average_embedding),
+      isNotNull(prompts.embedding),
       versionFilter,
     ))
     .all()
 
   const scored: { cluster: ClusterRow; score: number }[] = []
   for (const cluster of clusters) {
-    const embedding = parseEmbedding(cluster.average_embedding)
+    const embedding = parseEmbedding(cluster.latest_embedding)
     if (!embedding) continue
     scored.push({
       cluster: {
@@ -229,8 +232,7 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const allVersions = c.req.query('allVersions') === '1'
-  const versionFilter = clusterVersionFilter(world.current_version_id, allVersions)
+  const versionFilter = clusterVersionFilter(world.current_version_id)
 
   const { page, limit, offset } = pagination(c)
   const sortParam = c.req.query('sort') as string | undefined
@@ -332,6 +334,62 @@ clusterRoutes.get('/:clusterId', authMiddleware, (c: any) => {
     },
     prompts: promptRows,
   })
+})
+
+// Delete a whole cluster: every prompt variation in it and every piece written from them.
+// The cluster row itself goes away via recomputePromptCluster once its last prompt is gone.
+clusterRoutes.delete('/:clusterId', authMiddleware, (c: any) => {
+  const userId = getUserId(c)
+  const worldId = paramInt(c, 'id')
+  const clusterId = paramInt(c, 'clusterId')
+  if (!findUserWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
+
+  const cluster = db
+    .select({ id: promptClusters.id })
+    .from(promptClusters)
+    .where(and(
+      eq(promptClusters.id, clusterId),
+      eq(promptClusters.world_id, worldId),
+      eq(promptClusters.user_id, userId),
+    ))
+    .get()
+  if (!cluster) return c.json({ error: 'Cluster not found' }, 404)
+
+  const promptIds = db
+    .select({ id: prompts.id })
+    .from(prompts)
+    .where(and(eq(prompts.cluster_id, clusterId), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+    .all()
+    .map(prompt => prompt.id)
+
+  const pieceCount = promptIds.length === 0 ? 0 : Number(db
+    .select({ count: sql<number>`count(*)` })
+    .from(pieces)
+    .where(and(inArray(pieces.prompt_id, promptIds), eq(pieces.world_id, worldId), eq(pieces.user_id, userId)))
+    .get()?.count ?? 0)
+
+  db.transaction(tx => {
+    if (promptIds.length > 0) {
+      tx.delete(pieces)
+        .where(and(inArray(pieces.prompt_id, promptIds), eq(pieces.world_id, worldId), eq(pieces.user_id, userId)))
+        .run()
+      tx.delete(prompts)
+        .where(and(inArray(prompts.id, promptIds), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+        .run()
+    }
+  })
+
+  recomputePromptCluster(clusterId)
+  // Belt and braces: a cluster with no prompts at all leaves recompute nothing to delete.
+  db.delete(promptClusters)
+    .where(and(
+      eq(promptClusters.id, clusterId),
+      eq(promptClusters.world_id, worldId),
+      eq(promptClusters.user_id, userId),
+    ))
+    .run()
+
+  return c.json({ ok: true, deletedPrompts: promptIds.length, deletedPieces: pieceCount })
 })
 
 export default clusterRoutes

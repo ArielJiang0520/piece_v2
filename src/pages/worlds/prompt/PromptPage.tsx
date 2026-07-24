@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, Check, Copy, History } from 'lucide-react'
+import { ArrowRight, Check, Copy, History, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
+import ConfirmDialog from '@/components/ConfirmDialog'
 import { useTopNavConfig } from '@/components/topNavConfig'
-import { entityLabel } from '@/config'
+import { entityLabel, formatEntityCount } from '@/config'
 import { useUiText } from '@/i18n'
 import { setGenerationModel, useGenerationModel } from '@/preferences/generationModel'
 import { useLanguageId } from '@/preferences/language'
@@ -88,6 +89,24 @@ export default function PromptPage() {
     : null
   const showWorldVersion = lockedMode && hasMultipleWorldVersions && !!worldVersionLabel
 
+  // A cluster lives in exactly one world version. The header's version switcher isn't offered on
+  // this screen, but history can still land here from before a switch — a back navigation, a
+  // restored return state, a second tab. The prompt on screen would then belong to a version the
+  // world has moved off, and every action on it would write against the new one, so leave.
+  const currentWorldQuery = useQuery({
+    queryKey: ['world', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ current_version_id: number | null }>,
+    enabled: !!id,
+  })
+  const currentWorldVersionId = currentWorldQuery.data?.current_version_id ?? null
+  const clusterIsForeign = lockedMode
+    && clusterVersion?.world_version_id != null
+    && currentWorldVersionId != null
+    && clusterVersion.world_version_id !== currentWorldVersionId
+  useEffect(() => {
+    if (clusterIsForeign) navigate(backHref, { replace: true })
+  }, [clusterIsForeign, navigate, backHref])
+
   const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
   // Set when this prompt was spun off another via "More like this"; FK nulls out if the parent
   // is deleted, so a non-null value is a live prompt we can redirect to.
@@ -130,6 +149,49 @@ export default function PromptPage() {
   const inspiredCount = inspiredCountQuery.data?.children.length ?? 0
   const visibleActiveTab: GenerateTab =
     activeTab === 'similar' && !showSimilarTab ? 'prompt' : activeTab
+
+  // Deleting the cluster from here removes the whole prompt — every version and every piece —
+  // not just the version currently on screen (that lives in the versions sheet).
+  const queryClient = useQueryClient()
+  const [confirmDeleteCluster, setConfirmDeleteCluster] = useState(false)
+  const [deleteClusterError, setDeleteClusterError] = useState('')
+  const canDeleteCluster = lockedMode && activeClusterId != null
+  const clusterPieceCount = clusterPrompts.reduce((total, p) => total + (p.piece_count ?? 0), 0)
+  const deleteClusterMutation = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/worlds/${id}/clusters/${activeClusterId}`, { method: 'DELETE' }) as Promise<{ ok: true }>,
+    onSuccess: () => {
+      setConfirmDeleteCluster(false)
+      setDeleteClusterError('')
+      queryClient.invalidateQueries({ queryKey: ['worlds'] })
+      queryClient.invalidateQueries({ queryKey: ['world', id] })
+      queryClient.invalidateQueries({ queryKey: ['world-clusters', id] })
+      queryClient.invalidateQueries({ queryKey: ['world-clusters-count', id] })
+      queryClient.invalidateQueries({ queryKey: ['world-clusters-search', id] })
+      queryClient.removeQueries({ queryKey: ['cluster', id, String(activeClusterId)] })
+      if (promptId) queryClient.removeQueries({ queryKey: ['prompt', id, promptId] })
+      navigate(id ? `/worlds/${id}` : '/worlds', { replace: true })
+    },
+    onError: error => {
+      setDeleteClusterError(error instanceof Error ? error.message : t.couldNotDelete(entityLabel('prompt', {}, language)))
+    },
+  })
+  const deleteClusterAction = useMemo(() => {
+    if (!canDeleteCluster) return undefined
+    return (
+      <button
+        type="button"
+        className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition-colors active:text-signal-red"
+        aria-label={t.deleteThis(entityLabel('prompt', {}, language))}
+        onClick={() => {
+          setDeleteClusterError('')
+          setConfirmDeleteCluster(true)
+        }}
+      >
+        <Trash2 aria-hidden="true" className="h-5 w-5" />
+      </button>
+    )
+  }, [canDeleteCluster, language, t])
   const showGenerateTabs = !lockedMode || activeClusterId != null
   const needsFirstTakeScrollRoom = lockedMode && activePromptPieceCount === 0
   const showPieceStrip = lockedMode && activePromptPieceCount > 0
@@ -182,7 +244,7 @@ export default function PromptPage() {
     )
   }, [language, showGenerateTabs, showSimilarTab, showPromptTab, t, visibleActiveTab, inspiredCount])
 
-  useTopNavConfig({ backHref, bottomSlot: generateTabs })
+  useTopNavConfig({ backHref, rightAction: deleteClusterAction, bottomSlot: generateTabs })
 
   useEffect(() => {
     if (promptId) return
@@ -462,6 +524,30 @@ export default function PromptPage() {
         </div>,
         document.body,
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteCluster}
+        title={t.deleteThisTitle(entityLabel('prompt', {}, language))}
+        description={t.deleteClusterDescription(
+          entityLabel('prompt', {}, language),
+          t.versionCount(clusterPrompts.length),
+          formatEntityCount(clusterPieceCount, 'piece', language),
+        )}
+        confirmLabel={t.yesDelete}
+        pendingLabel={t.deleting}
+        isPending={deleteClusterMutation.isPending}
+        error={deleteClusterError}
+        onConfirm={() => {
+          if (deleteClusterMutation.isPending) return
+          setDeleteClusterError('')
+          deleteClusterMutation.mutate()
+        }}
+        onClose={() => {
+          if (deleteClusterMutation.isPending) return
+          setConfirmDeleteCluster(false)
+          setDeleteClusterError('')
+        }}
+      />
     </div>
   )
 }

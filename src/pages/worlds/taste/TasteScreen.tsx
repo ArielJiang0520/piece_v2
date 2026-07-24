@@ -34,7 +34,7 @@ interface LikeRow {
   reasons: string | null
 }
 
-// One world's taste screen (reached from its About page): the on/off toggle, the reader's
+// One world's taste screen (reached from its prompt list): the on/off toggle, the reader's
 // distilled taste profile (a piece of prose the app maintains, with a manual refresh), and the
 // raw liked passages that feed it. Everything here is scoped to this world.
 export default function TasteScreen() {
@@ -65,7 +65,7 @@ export default function TasteScreen() {
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(confirmTimerRef.current), [])
 
-  useTopNavConfig({ mainTitle: t.tasteTitle, backHref: `/worlds/${id}/about` })
+  useTopNavConfig({ mainTitle: t.tasteTitle, backHref: id ? `/worlds/${id}` : '/worlds' })
 
   const profileQuery = useQuery({
     queryKey: ['taste-profile', id],

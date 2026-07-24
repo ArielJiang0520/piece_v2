@@ -3,7 +3,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { db, pieces, tasteLikes } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { currentWorldVersionId, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
-import { distillTasteProfile, getProfileForWorld, maybeDistillAfterLike } from '../../taste-profile'
+import { distillTasteProfile, getProfileForWorld, maybeDistillAfterLike, versionLikes } from '../../taste-profile'
 import { TASTE_MODEL_ID } from '../../../src/preferences/generationModel'
 
 // Per-world taste routes, mounted under /:id/taste. The world id comes from the parent path;
@@ -65,15 +65,20 @@ tasteRoutes.post('/likes', authMiddleware, async (c) => {
   return c.json({ id: like.id })
 })
 
-// This world's likes, newest first (the "evidence" list on the taste page). An optional
-// ?pieceId= filters to one piece so the reader can see which paragraphs are liked.
+// This world VERSION's likes, newest first (the "evidence" list on the taste page). Scoped the
+// same way the profile above it is, so the list always shows the likes that actually fed the
+// profile being displayed — a version with no likes shows none, under a blank profile. An
+// optional ?pieceId= narrows to one piece so the reader can see which paragraphs are liked.
 tasteRoutes.get('/likes', authMiddleware, (c) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
   if (!findUserWorldId(userId, worldId)) return c.json({ error: 'Not found' }, 404)
   const pieceIdParam = c.req.query('pieceId')
 
-  const conditions = [eq(tasteLikes.user_id, userId), eq(tasteLikes.world_id, worldId)]
+  const versionId = currentWorldVersionId(userId, worldId)
+  if (versionId == null) return c.json([])
+
+  const conditions = [versionLikes(userId, worldId, versionId)]
   if (pieceIdParam !== undefined && Number.isInteger(Number(pieceIdParam))) {
     conditions.push(eq(tasteLikes.piece_id, Number(pieceIdParam)))
   }

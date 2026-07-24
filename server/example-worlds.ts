@@ -76,7 +76,6 @@ export function createExampleWorldsForUser(tx: any, userId: number, now = Date.n
         world_id: world.id,
         text,
         piece_count: promptPieces.length,
-        world_version_id: version.id,
         created_at: timestamp,
         updated_at: timestamp,
       }).returning({ id: prompts.id }).get()
@@ -96,7 +95,6 @@ export function createExampleWorldsForUser(tx: any, userId: number, now = Date.n
       const cluster = tx.insert(promptClusters).values({
         user_id: userId,
         world_id: world.id,
-        average_embedding: null,
         prompt_count: 1,
         piece_count: promptPieces.length,
         latest_prompt_id: prompt.id,

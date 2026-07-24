@@ -5,7 +5,7 @@
 // branches, and a like and the profile it feeds both belong to the version they came from —
 // switching HEAD switches which profile generation reads, and switching back restores it.
 
-import { count, desc, eq, and, isNull, or } from 'drizzle-orm'
+import { count, desc, eq, and } from 'drizzle-orm'
 import { db, tasteLikes, tasteProfile, worlds } from './db'
 import { currentWorldVersionId } from './route-helpers'
 import { withGenerationSlot } from './generation-lock'
@@ -17,8 +17,8 @@ import { BLACKLISTED_PROVIDERS, TASTE_MODEL_ID } from '../src/preferences/genera
 //
 // Distillation is a background job — the manual refresh no longer waits on it (see the refresh
 // route), so this timeout is a generous backstop, not a UX deadline. Its real purpose is to
-// bound how long one distill can hold its own generation slot (generation-lock.ts) — distills
-// run under their own owner key, so they never hold up story generation.
+// bound how long one distill can hold the single process-wide generation slot
+// (generation-lock.ts) and keep story generation queued behind it.
 const DISTILL_TIMEOUT_MS = 60_000
 // Re-distill in the background once this many new likes have piled up since the last run.
 const DISTILL_THRESHOLD = 3
@@ -30,11 +30,14 @@ const distilling = new Set<string>()
 
 // Likes of a version, the same convention as prompts: rows stamped with it, plus
 // version-orphaned rows (their version was deleted) which fold into whatever is checked out.
-function versionLikes(userId: number, worldId: number, versionId: number) {
+// A like belongs to the version it was recorded on, full stop. There is no "unversioned like"
+// to fold in: deleting a version deletes its likes with it, so a like that survives always
+// names a version that still exists.
+export function versionLikes(userId: number, worldId: number, versionId: number) {
   return and(
     eq(tasteLikes.user_id, userId),
     eq(tasteLikes.world_id, worldId),
-    or(eq(tasteLikes.world_version_id, versionId), isNull(tasteLikes.world_version_id)),
+    eq(tasteLikes.world_version_id, versionId),
   )
 }
 
@@ -165,10 +168,10 @@ async function requestDistillation(prompt: string, modelId: string): Promise<str
   }
 }
 
-// Rebuild the checked-out version's profile from all of its likes. Runs the LLM call inside its
-// own generation slot (`distill:` owner key) so overlapping distills for a world serialize while
-// a live story stream is unaffected. Deduped per (world, version). Returns the new profile
-// (persisted), or null when there was nothing to do / it failed.
+// Rebuild the checked-out version's profile from all of its likes. Runs the LLM call inside the
+// generation slot so it never opens a second OpenRouter session alongside a live story stream.
+// Deduped per (world, version). Returns the new profile (persisted), or null when there was
+// nothing to do / it failed.
 export async function distillTasteProfile(userId: number, worldId: number, modelId: string = TASTE_MODEL_ID): Promise<string | null> {
   const versionId = currentWorldVersionId(userId, worldId)
   if (versionId == null) return null
@@ -214,7 +217,7 @@ async function runDistillation(userId: number, worldId: number, versionId: numbe
   const prompt = parts.join('\n\n')
 
   const profile = await new Promise<string | null>((resolve) => {
-    withGenerationSlot(`distill:${userId}:${worldId}`, async () => {
+    withGenerationSlot(async () => {
       resolve(await requestDistillation(prompt, modelId))
     }).catch(() => resolve(null))
   })

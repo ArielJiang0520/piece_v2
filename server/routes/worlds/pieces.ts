@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
-import { db, prompts, pieces } from '../../db'
+import { db, prompts, pieces, promptClusters } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getUserId, isValidModelId, paramInt } from '../../route-helpers'
-import { clusterPromptById, recomputePromptCluster } from '../../prompt-clustering'
+import { createClusterForPrompt, embedPromptForSearch, recomputePromptCluster } from '../../prompt-clustering'
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 import { parseStructure, serializeStructure } from '../../../src/pages/worlds/shared/pieceStructure'
 import { tasteApplies } from '../../taste-profile'
@@ -75,6 +75,20 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     if (!sourcePrompt) return c.json({ error: 'Version source prompt not found' }, 404)
     if (sourcePrompt.cluster_id === null) return c.json({ error: 'Version source prompt has no cluster' }, 400)
 
+    // A prompt only ever gains a version inside its own world version. The UI no longer offers a
+    // route to another version's cluster, but a prompt id captured before a version switch (back
+    // navigation, a restored return state, a second tab) still can — reject it here, since the
+    // containment rule is the server's to keep, not the screen's.
+    const sourceCluster = db
+      .select({ world_version_id: promptClusters.world_version_id })
+      .from(promptClusters)
+      .where(and(eq(promptClusters.id, sourcePrompt.cluster_id), eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId)))
+      .get()
+    if (!sourceCluster) return c.json({ error: 'Version source prompt not found' }, 404)
+    if (sourceCluster.world_version_id !== worldVersionId) {
+      return c.json({ error: 'That prompt belongs to a different version of this world' }, 409)
+    }
+
     versionSourceClusterId = sourcePrompt.cluster_id
     if (sourcePrompt.text.trim() === promptText) {
       existingPromptId = sourcePrompt.id
@@ -82,13 +96,22 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     }
   }
 
+  // Reusing an existing prompt row is only ever right within the checked-out version. The same
+  // premise written against a different version of the world is a different premise, and gets its
+  // own prompt and cluster there — so both lookups below join through the cluster, which is where
+  // the version lives.
+  const sameVersion = worldVersionId == null
+    ? undefined
+    : eq(promptClusters.world_version_id, worldVersionId)
+
   if (existingPromptId === undefined && body.promptId !== undefined && body.promptId !== null) {
     const id = Number(body.promptId)
     if (!Number.isInteger(id) || id < 1) return c.json({ error: 'Invalid prompt id' }, 400)
     const existing = db
       .select({ id: prompts.id, text: prompts.text, cluster_id: prompts.cluster_id })
       .from(prompts)
-      .where(and(eq(prompts.id, id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+      .innerJoin(promptClusters, eq(promptClusters.id, prompts.cluster_id))
+      .where(and(eq(prompts.id, id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId), sameVersion))
       .get()
     if (existing && existing.text.trim() === promptText) {
       existingPromptId = existing.id
@@ -100,7 +123,13 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     const matching = db
       .select({ id: prompts.id, cluster_id: prompts.cluster_id })
       .from(prompts)
-      .where(and(promptTextMatchesNormalized(prompts.text, promptText), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
+      .innerJoin(promptClusters, eq(promptClusters.id, prompts.cluster_id))
+      .where(and(
+        promptTextMatchesNormalized(prompts.text, promptText),
+        eq(prompts.world_id, worldId),
+        eq(prompts.user_id, userId),
+        sameVersion,
+      ))
       .orderBy(desc(prompts.updated_at), desc(prompts.id))
       .get()
 
@@ -113,9 +142,13 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   const now = Date.now()
   const isNewPrompt = existingPromptId === undefined
 
+  // A new prompt and its cluster are born together, in one transaction and with no network call
+  // between them, so a prompt is never left without a cluster — and therefore never without a
+  // version. An explicit "new version of this prompt" joins the source cluster instead; that is
+  // the only way a cluster ever gains a second prompt.
   const promptRow = isNewPrompt
-    ? versionSourceClusterId !== null
-      ? db.insert(prompts).values({
+    ? db.transaction(tx => {
+      const row = tx.insert(prompts).values({
         user_id: userId,
         world_id: worldId,
         cluster_id: versionSourceClusterId,
@@ -123,22 +156,14 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
         is_generated: isGenerated ? 1 : 0,
         text: promptText,
         piece_count: 1,
-        world_version_id: worldVersionId,
         created_at: now,
         updated_at: now,
       }).returning({ id: prompts.id }).get()
-      : db.insert(prompts).values({
-        user_id: userId,
-        world_id: worldId,
-        similar_to_prompt_id: similarToPromptId,
-        is_generated: isGenerated ? 1 : 0,
-        text: promptText,
-        piece_count: 1,
-        world_version_id: worldVersionId,
-        created_at: now,
-        updated_at: now,
-      }).returning({ id: prompts.id }).get()
-    : { id: existingPromptId! }
+      const cluster_id = versionSourceClusterId
+        ?? createClusterForPrompt({ id: row.id, user_id: userId, world_id: worldId, piece_count: 1, created_at: now }, worldVersionId)
+      return { id: row.id, cluster_id }
+    })
+    : { id: existingPromptId!, cluster_id: existingPromptClusterId }
 
   const piece = db.insert(pieces).values({
     user_id: userId,
@@ -153,16 +178,16 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     updated_at: now,
   }).returning({ id: pieces.id }).get()
 
-  let clusterId = existingPromptClusterId
+  const clusterId = promptRow.cluster_id
 
   if (isNewPrompt) {
-    if (versionSourceClusterId !== null) {
-      // Manual versions deliberately inherit the chosen source cluster instead of reclustering.
-      clusterId = versionSourceClusterId
-      recomputePromptCluster(clusterId)
-    } else {
-      clusterId = await clusterPromptById(promptRow.id)
-    }
+    // A freshly created cluster already carries this prompt's rollups; a joined one needs them
+    // re-derived, which also moves its representative to this newest prompt.
+    if (versionSourceClusterId !== null) recomputePromptCluster(clusterId)
+    // Search-only, and slow: fetch the embedding after the save has been answered. A failure
+    // leaves the prompt unfindable by fuzzy search and nothing else.
+    void embedPromptForSearch(promptRow.id, promptText).catch(err =>
+      console.warn(`[prompt embedding] failed: ${err instanceof Error ? err.message : 'unknown error'}`))
   } else {
     db.update(prompts)
       .set({
@@ -171,11 +196,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
       })
       .where(and(eq(prompts.id, promptRow.id), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
       .run()
-    if (existingPromptClusterId === null) {
-      clusterId = await clusterPromptById(promptRow.id)
-    } else {
-      recomputePromptCluster(existingPromptClusterId)
-    }
+    recomputePromptCluster(clusterId)
   }
 
   const savedPrompt = db

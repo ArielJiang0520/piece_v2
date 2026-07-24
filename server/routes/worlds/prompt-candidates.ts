@@ -2,10 +2,10 @@ import { BLACKLISTED_PROVIDERS, type ModelOption } from '../../../src/preference
 import { withGenerationSlot } from '../../generation-lock'
 import { budgeted } from '../../llm-budget'
 
-// Shared brainstorming path for the prompt-generation features ("similar prompts", Discover).
+// Shared brainstorming path for the prompt-generation features ("similar prompts", "spark ideas").
 // Both ask a fixed model for a handful of short prompt strings; they differ only in the system
-// prompt and temperature. Each feature passes its own owner key, so it serializes with itself but
-// runs alongside a live story stream rather than queueing behind it.
+// prompt and temperature. Keeping the OpenRouter call in one place means it shares the
+// single-session slot, so overlapping either feature with story generation can't 429 the account.
 //
 // The wire format is one premise per line, NOT JSON. A premise is prose full of quotes, commas,
 // em-dashes and (in Chinese) full-width punctuation — exactly the things that make a model's JSON
@@ -82,9 +82,6 @@ export interface CandidateRequest {
   temperature: number
   count: number
   timeoutMs: number
-  // Serialization scope: this feature's own key (e.g. `ideas:${userId}:${worldId}`), so two
-  // taps of the same feature queue but a story stream for the same world is untouched.
-  ownerKey: string
 }
 
 export interface CandidateResult {
@@ -99,7 +96,6 @@ export async function requestPromptCandidates({
   temperature,
   count,
   timeoutMs,
-  ownerKey,
 }: CandidateRequest): Promise<CandidateResult> {
   const provider: Record<string, unknown> = { sort: 'latency', require_parameters: true }
   if (model.preferredProviders.length > 0) provider.only = model.preferredProviders
@@ -109,7 +105,9 @@ export async function requestPromptCandidates({
   // narrowing (a plain `let` would be narrowed back to its initial value after the await).
   const out: CandidateResult = { candidates: [], failure: null }
 
-  await withGenerationSlot(ownerKey, async () => {
+  // Same OpenRouter chat endpoint as story generation, so it shares the single-session slot —
+  // overlapping the two would 429 the whole account.
+  await withGenerationSlot(async () => {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
     try {

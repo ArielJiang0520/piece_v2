@@ -145,7 +145,6 @@ similarRoutes.post('/', authMiddleware, async (c: any) => {
     temperature: SIMILAR_TEMPERATURE,
     count: CANDIDATE_COUNT,
     timeoutMs: SIMILAR_TIMEOUT_MS,
-    ownerKey: `similar:${userId}:${worldId}`,
   })
 
   if (failure) return c.json({ error: failure.message }, failure.status as any)

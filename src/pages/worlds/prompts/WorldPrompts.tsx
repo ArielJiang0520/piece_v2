@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ChevronRight, GitBranch, Heart, History, Layers, Search, Plus, X, Lightbulb } from 'lucide-react'
+import { ArrowUp, ChevronRight, GitBranch, Heart, Search, Plus, X, Lightbulb } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -27,9 +27,6 @@ interface ClusterGroup {
   latest_piece_at: number | null
   similar_count: number
   is_generated: boolean
-  world_version_id: number | null
-  version_number: number | null
-  version_name: string | null
 }
 
 interface PromptResponse {
@@ -113,8 +110,6 @@ export default function WorldPrompts() {
   const queryParam = (searchParams.get('q') ?? '').trim()
   const [searchInput, setSearchInput] = useState(queryParam)
   const isSearching = queryParam.length > 0
-  // Default the list to the checked-out version; `?v=all` shows every version's prompts.
-  const allVersions = searchParams.get('v') === 'all'
 
   useEffect(() => {
     if (searchInput.trim() === queryParam) return
@@ -136,19 +131,12 @@ export default function WorldPrompts() {
     enabled: !!id,
   })
 
-  // Only offer the version filter once a world has more than one version to scope between.
-  const versionsQuery = useQuery({
-    queryKey: ['world-versions', id],
-    queryFn: () => apiFetch(`/api/worlds/${id}/versions`) as Promise<Array<{ id: number }>>,
-    enabled: !!id,
-  })
-  const canScopeVersion = (versionsQuery.data?.length ?? 0) > 1
-  const versionParam = allVersions ? '&allVersions=1' : ''
-
+  // The list is always the checked-out version's prompts — a version is a branch, and its prompts
+  // are reached by switching to it, not by browsing across from another one.
   const clustersQuery = useInfiniteQuery({
-    queryKey: ['world-clusters', id, sort, allVersions ? 'all' : 'current'],
+    queryKey: ['world-clusters', id, sort],
     queryFn: ({ pageParam }) =>
-      apiFetch(`/api/worlds/${id}/clusters?page=${pageParam}&limit=${PAGE_SIZE}&sort=${sort}${versionParam}`) as Promise<PromptResponse>,
+      apiFetch(`/api/worlds/${id}/clusters?page=${pageParam}&limit=${PAGE_SIZE}&sort=${sort}`) as Promise<PromptResponse>,
     enabled: !!id && !isSearching,
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.hasMore ? lastPage.page + 1 : undefined,
@@ -156,8 +144,8 @@ export default function WorldPrompts() {
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = clustersQuery
 
   const searchQuery = useQuery({
-    queryKey: ['world-clusters-search', id, queryParam, allVersions ? 'all' : 'current'],
-    queryFn: () => apiFetch(`/api/worlds/${id}/clusters/search?q=${encodeURIComponent(queryParam)}${versionParam}`) as Promise<SearchResponse>,
+    queryKey: ['world-clusters-search', id, queryParam],
+    queryFn: () => apiFetch(`/api/worlds/${id}/clusters/search?q=${encodeURIComponent(queryParam)}`) as Promise<SearchResponse>,
     enabled: !!id && isSearching,
   })
 
@@ -172,18 +160,6 @@ export default function WorldPrompts() {
       const params = new URLSearchParams(prev)
       if (next === 'latest') params.delete('sort')
       else params.set('sort', next)
-      return params
-    }, { replace: true })
-    clearWorldReturnState()
-    window.scrollTo({ top: 0 })
-  }
-
-  function handleVersionScopeChange(nextAllVersions: boolean) {
-    if (nextAllVersions === allVersions) return
-    setSearchParams(prev => {
-      const params = new URLSearchParams(prev)
-      if (nextAllVersions) params.set('v', 'all')
-      else params.delete('v')
       return params
     }, { replace: true })
     clearWorldReturnState()
@@ -335,21 +311,6 @@ export default function WorldPrompts() {
               <Lightbulb aria-hidden="true" className="h-4 w-4 text-rose" />
               <span>{t.sparkTitle}</span>
             </Link>
-            {canScopeVersion && (
-              <button
-                type="button"
-                onClick={() => handleVersionScopeChange(!allVersions)}
-                aria-pressed={allVersions}
-                aria-label={allVersions ? t.allVersions : t.thisVersion}
-                title={allVersions ? t.allVersions : t.thisVersion}
-                className={`grid h-12 w-12 shrink-0 place-items-center rounded-full border transition-[border-color,background-color,color,transform] duration-200 active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 ${allVersions
-                  ? 'border-rose/40 bg-rose-pale text-rose-deep'
-                  : 'border-rose-line/80 bg-paper/60 text-ink-4 active:bg-rose-tint/45'
-                  }`}
-              >
-                <Layers aria-hidden="true" className="h-4.5 w-4.5" />
-              </button>
-            )}
             <WorldSortMenu options={sortOptions} value={sort} onChange={handleSortChange} />
           </div>
         </div>
@@ -451,28 +412,11 @@ export default function WorldPrompts() {
                       onClick={event => saveClusterReturnState(group.id, event)}
                       className="block py-7 transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
                     >
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <RelativeTimeStatus
-                          className=""
-                          timestamp={group.latest_piece_at}
-                          emptyLabel={t.noEntitiesYet(entityLabel('piece', { plural: true }, language))}
-                        />
-                        <div className="flex shrink-0 items-center gap-2">
-                          {/* Which world version this cluster belongs to — only worth showing while
-                              browsing across versions; redundant when scoped to one. */}
-                          {allVersions && (group.version_name?.trim() || group.version_number != null) && (
-                            <span className="inline-flex max-w-[8rem] items-center gap-1 rounded-full bg-paper-3 px-2 py-0.5 text-[11px] leading-none text-ink-3">
-                              <History aria-hidden="true" className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{group.version_name?.trim() || `v${group.version_number}`}</span>
-                            </span>
-                          )}
-                          {group.is_generated && (
-                            <span className="rounded-full bg-paper-3 px-2 py-0.5 text-[11px] leading-none text-ink-3">
-                              {t.autoGeneratedPrompt}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <RelativeTimeStatus
+                        className="mb-3 block"
+                        timestamp={group.latest_piece_at}
+                        emptyLabel={t.noEntitiesYet(entityLabel('piece', { plural: true }, language))}
+                      />
                       <p className="font-serif-zh text-[16px] leading-7 text-ink-2 line-clamp-4">
                         {group.title}
                       </p>

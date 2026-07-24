@@ -43,14 +43,14 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-    average_embedding TEXT,
     prompt_count INTEGER NOT NULL DEFAULT 0,
     piece_count INTEGER NOT NULL DEFAULT 0,
     latest_prompt_id INTEGER,
-    -- The world version this cluster belongs to: the version its latest prompt was created on.
-    -- Denormalized from prompts.world_version_id (maintained wherever latest_prompt_id is), so the
-    -- prompt list can filter clusters by version with a plain equality.
-    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
+    -- The world version this cluster belongs to, fixed when the cluster is created. This is the
+    -- ONLY place a version is recorded below the world: prompts, pieces and piece-attached likes
+    -- all derive theirs by walking up to here. Deleting a version deletes its clusters, and with
+    -- them their prompts, those prompts' pieces, and those pieces' likes.
+    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE CASCADE,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -59,17 +59,17 @@ sqlite.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-    cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE SET NULL,
+    -- Every prompt is born into a cluster in the same transaction, so this is never null in
+    -- practice. CASCADE: deleting a cluster takes its prompt variations with it.
+    cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE CASCADE,
     similar_to_prompt_id INTEGER REFERENCES prompts(id) ON DELETE SET NULL,
     text TEXT NOT NULL,
+    -- Search index only: the prompt's own embedding, fetched in the background after saving.
+    -- Null means "not findable by fuzzy search yet", never anything about grouping.
     embedding TEXT,
     piece_count INTEGER NOT NULL DEFAULT 0,
     is_favorite INTEGER NOT NULL DEFAULT 0,
     is_generated INTEGER NOT NULL DEFAULT 0,
-    -- The world version checked out when this prompt was first created. Source of truth for the
-    -- cluster's version tag above. ON DELETE SET NULL: deleting a version orphans (not deletes)
-    -- its prompts, and the list treats a null version as always-visible.
-    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -135,27 +135,10 @@ sqlite.run(`
     created_at INTEGER NOT NULL
   );
 
-  -- Discover's own rolling summary, mirroring taste_profile but about *premises* (which story
-  -- ideas this reader picks up) rather than prose the reader loved. Per (world, version), like
-  -- taste_profile. distilled_signal_count is how many prompt rows the version had at the last
-  -- distill, so the refill-time trigger knows when enough new ones have accumulated.
-  CREATE TABLE IF NOT EXISTS discover_profile (
-    world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-    world_version_id INTEGER NOT NULL REFERENCES world_versions(id) ON DELETE CASCADE,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    profile TEXT,
-    distilled_signal_count INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY (world_id, world_version_id)
-  );
-
 `)
 
 // Model usage/metadata tracking was removed; drop the table if an older DB still has it.
 sqlite.run('DROP TABLE IF EXISTS model_usage;')
-// The Discover candidate/telemetry log was removed with the bandit idea: nothing reads it — the
-// feed's only evidence is the prompts table.
-sqlite.run('DROP TABLE IF EXISTS discover_events;')
 
 function addColumnIfMissing(table: string, column: string, ddl: string): boolean {
   const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
@@ -187,38 +170,6 @@ function rebuildWorldsTable() {
     `)
     sqlite.run('DROP TABLE worlds;')
     sqlite.run('ALTER TABLE worlds_new RENAME TO worlds;')
-  } finally {
-    sqlite.run('PRAGMA foreign_keys = ON;')
-  }
-}
-
-function rebuildPromptsTable() {
-  sqlite.run('PRAGMA foreign_keys = OFF;')
-  try {
-    sqlite.run('DROP TABLE IF EXISTS prompts_new;')
-    sqlite.run(`
-      CREATE TABLE IF NOT EXISTS prompts_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-        cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE SET NULL,
-        similar_to_prompt_id INTEGER REFERENCES prompts(id) ON DELETE SET NULL,
-        text TEXT NOT NULL,
-        embedding TEXT,
-        piece_count INTEGER NOT NULL DEFAULT 0,
-        is_favorite INTEGER NOT NULL DEFAULT 0,
-        is_generated INTEGER NOT NULL DEFAULT 0,
-        world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-    `)
-    sqlite.run(`
-      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, world_version_id, created_at, updated_at)
-      SELECT id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, world_version_id, created_at, updated_at FROM prompts;
-    `)
-    sqlite.run('DROP TABLE prompts;')
-    sqlite.run('ALTER TABLE prompts_new RENAME TO prompts;')
   } finally {
     sqlite.run('PRAGMA foreign_keys = ON;')
   }
@@ -281,6 +232,145 @@ function rebuildTasteLikesTable() {
   }
 }
 
+function hasColumn(table: string, column: string) {
+  const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  return rows.some(row => row.name === column)
+}
+
+// The ON DELETE action currently declared for a column's foreign key, or null when it has none.
+// SQLite can't ALTER a foreign key, so this is how the rebuilds below know whether they've
+// already run: the declared action IS the migration marker.
+function foreignKeyOnDelete(table: string, column: string) {
+  const rows = sqlite.query(`PRAGMA foreign_key_list(${table})`).all() as Array<{ from: string; on_delete: string }>
+  return rows.find(row => row.from === column)?.on_delete ?? null
+}
+
+// Version ownership moved onto the cluster alone: drop average_embedding (clusters are no longer
+// formed by embedding similarity) and make the version FK cascade.
+function rebuildPromptClustersTable() {
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run('DROP TABLE IF EXISTS prompt_clusters_new;')
+    sqlite.run(`
+      CREATE TABLE prompt_clusters_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+        prompt_count INTEGER NOT NULL DEFAULT 0,
+        piece_count INTEGER NOT NULL DEFAULT 0,
+        latest_prompt_id INTEGER,
+        world_version_id INTEGER REFERENCES world_versions(id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO prompt_clusters_new (id, user_id, world_id, prompt_count, piece_count, latest_prompt_id, world_version_id, created_at, updated_at)
+      SELECT id, user_id, world_id, prompt_count, piece_count, latest_prompt_id, world_version_id, created_at, updated_at FROM prompt_clusters;
+    `)
+    sqlite.run('DROP TABLE prompt_clusters;')
+    sqlite.run('ALTER TABLE prompt_clusters_new RENAME TO prompt_clusters;')
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
+  }
+}
+
+// Drop prompts.world_version_id (the cluster holds it now) and make cluster_id cascade, so
+// deleting a cluster takes its variations rather than orphaning them.
+function rebuildPromptsTableWithoutVersion() {
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run('DROP TABLE IF EXISTS prompts_new;')
+    sqlite.run(`
+      CREATE TABLE prompts_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+        cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE CASCADE,
+        similar_to_prompt_id INTEGER REFERENCES prompts(id) ON DELETE SET NULL,
+        text TEXT NOT NULL,
+        embedding TEXT,
+        piece_count INTEGER NOT NULL DEFAULT 0,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        is_generated INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, created_at, updated_at)
+      SELECT id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, created_at, updated_at FROM prompts;
+    `)
+    sqlite.run('DROP TABLE prompts;')
+    sqlite.run('ALTER TABLE prompts_new RENAME TO prompts;')
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
+  }
+}
+
+// A like stamped with a version belongs to that version outright: deleting the version deletes
+// it, rather than leaving a versionless like that silently feeds whatever is checked out next.
+function rebuildTasteLikesTableWithVersionCascade() {
+  sqlite.run('PRAGMA foreign_keys = OFF;')
+  try {
+    sqlite.run('DROP TABLE IF EXISTS taste_likes_new;')
+    sqlite.run(`
+      CREATE TABLE taste_likes_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+        piece_id INTEGER REFERENCES pieces(id) ON DELETE CASCADE,
+        snippet TEXT NOT NULL,
+        context TEXT,
+        reasons TEXT,
+        world_version_id INTEGER REFERENCES world_versions(id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL
+      );
+    `)
+    sqlite.run(`
+      INSERT INTO taste_likes_new (id, user_id, world_id, piece_id, snippet, context, reasons, world_version_id, created_at)
+      SELECT id, user_id, world_id, piece_id, snippet, context, reasons, world_version_id, created_at FROM taste_likes;
+    `)
+    sqlite.run('DROP TABLE taste_likes;')
+    sqlite.run('ALTER TABLE taste_likes_new RENAME TO taste_likes;')
+  } finally {
+    sqlite.run('PRAGMA foreign_keys = ON;')
+  }
+}
+
+// One cluster used to be able to hold prompts from several versions (membership was decided by
+// embedding similarity, which ignored versions entirely). Split those apart before the version
+// stamp is dropped from prompts: each foreign version's prompts move to a new cluster of their
+// own on that version. Runs only while prompts still carry a version, so it runs once.
+function splitClustersSpanningVersions() {
+  const groups = sqlite.query(`
+    SELECT p.cluster_id AS cluster_id, p.world_version_id AS version_id
+    FROM prompts p
+    JOIN prompt_clusters c ON c.id = p.cluster_id
+    WHERE p.world_version_id IS NOT NULL
+      AND c.world_version_id IS NOT NULL
+      AND p.world_version_id != c.world_version_id
+    GROUP BY p.cluster_id, p.world_version_id
+  `).all() as Array<{ cluster_id: number; version_id: number }>
+
+  for (const group of groups) {
+    const now = Date.now()
+    const created = sqlite.run(
+      `INSERT INTO prompt_clusters (user_id, world_id, prompt_count, piece_count, latest_prompt_id, world_version_id, created_at, updated_at)
+       SELECT user_id, world_id, 0, 0, NULL, ?, ?, ? FROM prompt_clusters WHERE id = ?;`,
+      [group.version_id, now, now, group.cluster_id],
+    )
+    sqlite.run(
+      'UPDATE prompts SET cluster_id = ? WHERE cluster_id = ? AND world_version_id = ?;',
+      [Number(created.lastInsertRowid), group.cluster_id, group.version_id],
+    )
+  }
+
+  if (groups.length > 0) {
+    console.log(`[migration] split ${groups.length} cross-version prompt cluster group(s)`)
+  }
+}
+
 function dropColumnIfPresent(table: string, column: string) {
   const rows = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   if (rows.some(row => row.name === column)) {
@@ -289,10 +379,6 @@ function dropColumnIfPresent(table: string, column: string) {
     } catch (error) {
       if (table === 'worlds' && ['summary', 'origin', 'register_id'].includes(column)) {
         rebuildWorldsTable()
-        return
-      }
-      if (table === 'prompts' && column === 'world_version_id') {
-        rebuildPromptsTable()
         return
       }
       if (table === 'pieces' && column === 'world_version_id') {
@@ -391,8 +477,8 @@ if (sqlite.query(`PRAGMA table_info(taste_profile)`).all().some((r: any) => r.na
 sqlite.run('DROP INDEX IF EXISTS idx_pieces_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_prompts_world_version;')
 sqlite.run('DROP INDEX IF EXISTS idx_world_versions_world_restored_from;')
-// prompts.world_version_id is re-added and backfilled below (prompts are now tied to the world
-// version they were created on). pieces stay unversioned.
+// Pieces hold no version of their own: a piece belongs to a prompt, a prompt to a cluster, and
+// the cluster is what names the version.
 dropColumnIfPresent('pieces', 'world_version_id')
 dropColumnIfPresent('world_versions', 'restored_from_version_id')
 dropColumnIfPresent('worlds', 'language')
@@ -431,82 +517,107 @@ sqlite.run(`
      OR current_version_id NOT IN (SELECT id FROM world_versions WHERE world_id = worlds.id);
 `)
 
-// Both profile tables went from one row per world to one per (world, version). Rebuild each
-// old-shape table (guarded on the missing version column, so it runs once), stamping existing
-// rows to their world's checked-out version — that is the version they learned on. Runs after
-// the current_version_id backfill above so every world has a HEAD to stamp with.
-// resetCount: discover_profile's old count was on a different scale (likes + edits + saved
-// pieces) than the new signal (prompt rows), so carrying it over would leave the re-distill
-// trigger unreachable; zeroing it makes the next refill rebuild the profile from clean inputs.
-// taste_profile's count kept its meaning (likes) and is copied as-is.
-function rebuildProfileTablePerVersion(table: string, countColumn: string, resetCount: boolean) {
-  const columns = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+// taste_profile went from one row per world to one per (world, version). Rebuild the old-shape
+// table (guarded on the missing version column, so it runs once), stamping existing rows to
+// their world's checked-out version — that is the version they learned on. Runs after the
+// current_version_id backfill above so every world has a HEAD to stamp with. The like count
+// kept its meaning across the change and is copied as-is.
+function rebuildTasteProfileTablePerVersion() {
+  const columns = sqlite.query(`PRAGMA table_info(taste_profile)`).all() as Array<{ name: string }>
   if (columns.length === 0 || columns.some(row => row.name === 'world_version_id')) return
   sqlite.run('PRAGMA foreign_keys = OFF;')
   try {
-    sqlite.run(`DROP TABLE IF EXISTS ${table}_new;`)
+    sqlite.run(`DROP TABLE IF EXISTS taste_profile_new;`)
     sqlite.run(`
-      CREATE TABLE ${table}_new (
+      CREATE TABLE taste_profile_new (
         world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
         world_version_id INTEGER NOT NULL REFERENCES world_versions(id) ON DELETE CASCADE,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         profile TEXT,
-        ${countColumn} INTEGER NOT NULL DEFAULT 0,
+        distilled_like_count INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (world_id, world_version_id)
       );
     `)
     sqlite.run(`
-      INSERT INTO ${table}_new (world_id, world_version_id, user_id, profile, ${countColumn}, updated_at)
-      SELECT t.world_id, w.current_version_id, t.user_id, t.profile, ${resetCount ? '0' : `t.${countColumn}`}, t.updated_at
-      FROM ${table} t
+      INSERT INTO taste_profile_new (world_id, world_version_id, user_id, profile, distilled_like_count, updated_at)
+      SELECT t.world_id, w.current_version_id, t.user_id, t.profile, t.distilled_like_count, t.updated_at
+      FROM taste_profile t
       JOIN worlds w ON w.id = t.world_id
       WHERE w.current_version_id IS NOT NULL;
     `)
-    sqlite.run(`DROP TABLE ${table};`)
-    sqlite.run(`ALTER TABLE ${table}_new RENAME TO ${table};`)
+    sqlite.run(`DROP TABLE taste_profile;`)
+    sqlite.run(`ALTER TABLE taste_profile_new RENAME TO taste_profile;`)
   } finally {
     sqlite.run('PRAGMA foreign_keys = ON;')
   }
 }
-rebuildProfileTablePerVersion('taste_profile', 'distilled_like_count', false)
-rebuildProfileTablePerVersion('discover_profile', 'distilled_signal_count', true)
+rebuildTasteProfileTablePerVersion()
 
 // Likes are stamped with the version that was checked out when they were recorded, the same way
 // prompts are. Backfill only when the column is first added — rows whose version is later
 // deleted go NULL (orphans that fold into whatever is checked out) and must stay NULL.
-if (addColumnIfMissing('taste_likes', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')) {
+if (addColumnIfMissing('taste_likes', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE CASCADE')) {
   sqlite.run(`
     UPDATE taste_likes
     SET world_version_id = (SELECT current_version_id FROM worlds WHERE worlds.id = taste_likes.world_id)
     WHERE world_version_id IS NULL;
   `)
 }
+if (foreignKeyOnDelete('taste_likes', 'world_version_id') !== 'CASCADE') {
+  rebuildTasteLikesTableWithVersionCascade()
+}
 
-// Prompts are tied to the world version they were created on; a cluster is tagged with the
-// version of its latest prompt. Backfill runs after versions exist (above): existing prompts
-// belong to their world's original (earliest) version, and each cluster inherits its latest
-// prompt's version. Guarded on NULL so it runs once and never clobbers stamped rows.
-addColumnIfMissing('prompts', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')
-addColumnIfMissing('prompt_clusters', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE SET NULL')
-sqlite.run(`
-  UPDATE prompts
-  SET world_version_id = (
-    SELECT wv.id FROM world_versions wv
-    WHERE wv.world_id = prompts.world_id
-    ORDER BY wv.version_number ASC, wv.created_at ASC, wv.id ASC
-    LIMIT 1
-  )
-  WHERE world_version_id IS NULL;
-`)
-sqlite.run(`
-  UPDATE prompt_clusters
-  SET world_version_id = (
-    SELECT p.world_version_id FROM prompts p
-    WHERE p.id = prompt_clusters.latest_prompt_id
-  )
-  WHERE world_version_id IS NULL;
-`)
+// The cluster is the sole holder of a world version below the world; prompts, pieces and
+// piece-attached likes all derive theirs by walking up to it. Older databases also stamped every
+// prompt, and formed clusters by embedding similarity — which ignored versions and so let one
+// cluster span several. Migrate in order while the old stamp is still there: backfill it, derive
+// each cluster's version from its latest prompt, split anything that spans versions, and only
+// then drop the column (below). Guarded on the column existing, so the sequence runs once.
+addColumnIfMissing('prompt_clusters', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE CASCADE')
+if (hasColumn('prompts', 'world_version_id')) {
+  sqlite.run(`
+    UPDATE prompts
+    SET world_version_id = (
+      SELECT wv.id FROM world_versions wv
+      WHERE wv.world_id = prompts.world_id
+      ORDER BY wv.version_number ASC, wv.created_at ASC, wv.id ASC
+      LIMIT 1
+    )
+    WHERE world_version_id IS NULL;
+  `)
+  sqlite.run(`
+    UPDATE prompt_clusters
+    SET world_version_id = (
+      SELECT p.world_version_id FROM prompts p
+      WHERE p.id = prompt_clusters.latest_prompt_id
+    )
+    WHERE world_version_id IS NULL;
+  `)
+  // A cluster with no usable latest prompt still needs a version, or it would be deleted by the
+  // cascade rebuild below without ever having belonged anywhere. Fall back to the world's first.
+  sqlite.run(`
+    UPDATE prompt_clusters
+    SET world_version_id = (
+      SELECT wv.id FROM world_versions wv
+      WHERE wv.world_id = prompt_clusters.world_id
+      ORDER BY wv.version_number ASC, wv.created_at ASC, wv.id ASC
+      LIMIT 1
+    )
+    WHERE world_version_id IS NULL;
+  `)
+  splitClustersSpanningVersions()
+}
+
+// Rebuilds for the foreign keys the containment rule needs. SQLite can't ALTER a foreign key, so
+// each is guarded on what it changes: an obsolete column, or an ON DELETE action that isn't
+// CASCADE yet. Clusters first — prompts reference them.
+if (hasColumn('prompt_clusters', 'average_embedding') || foreignKeyOnDelete('prompt_clusters', 'world_version_id') !== 'CASCADE') {
+  rebuildPromptClustersTable()
+}
+if (hasColumn('prompts', 'world_version_id') || foreignKeyOnDelete('prompts', 'cluster_id') !== 'CASCADE') {
+  rebuildPromptsTableWithoutVersion()
+}
 
 sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
@@ -518,6 +629,8 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_updated ON prompt_clusters(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_pieces ON prompt_clusters(user_id, world_id, piece_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_variations ON prompt_clusters(user_id, world_id, prompt_count DESC, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_version ON prompt_clusters(user_id, world_id, world_version_id);
+  CREATE INDEX IF NOT EXISTS idx_taste_likes_world_version ON taste_likes(user_id, world_id, world_version_id);
   CREATE INDEX IF NOT EXISTS idx_worlds_user_updated ON worlds(user_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_world_versions_world_created ON world_versions(world_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -525,11 +638,16 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_world_chat_world_created ON world_chat_messages(world_id, created_at, id);
 `)
 
-sqlite.run(`
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_prompts_user_world_normalized_text_unique
-  ON prompts(user_id, world_id, rtrim(text, ' ' || char(9) || char(10) || char(13)));
-`)
+// Prompt text is unique per world VERSION now, not per world: the same premise written against
+// version 2 is a different premise from the one written against version 1, and each needs its own
+// cluster. That can't be a unique index on prompts, which no longer carries a version — the
+// version lives one level up on the cluster. Enforcement moved to the version-scoped text match
+// in routes/worlds/pieces.ts, which runs before every prompt insert.
+sqlite.run('DROP INDEX IF EXISTS idx_prompts_user_world_normalized_text_unique;')
 
+// Re-derive every cluster's rollups from the prompts it actually holds. The representative is
+// always the latest created prompt. This also settles the clusters the cross-version split above
+// created and the ones it emptied out, so neither is left with counts from before the split.
 sqlite.run(`
   UPDATE prompt_clusters
   SET
@@ -539,6 +657,12 @@ sqlite.run(`
       WHERE prompts.cluster_id = prompt_clusters.id
       ORDER BY prompts.created_at DESC, prompts.id DESC
       LIMIT 1
+    ),
+    prompt_count = (
+      SELECT COUNT(*) FROM prompts WHERE prompts.cluster_id = prompt_clusters.id
+    ),
+    piece_count = (
+      SELECT COALESCE(SUM(prompts.piece_count), 0) FROM prompts WHERE prompts.cluster_id = prompt_clusters.id
     ),
     updated_at = coalesce((
       SELECT prompts.created_at
@@ -552,6 +676,13 @@ sqlite.run(`
     FROM prompts
     WHERE prompts.cluster_id = prompt_clusters.id
   );
+`)
+
+// A cluster the split left with no prompts of its own has nothing to represent; drop it, the way
+// deleting a cluster's last prompt does at runtime.
+sqlite.run(`
+  DELETE FROM prompt_clusters
+  WHERE NOT EXISTS (SELECT 1 FROM prompts WHERE prompts.cluster_id = prompt_clusters.id);
 `)
 
 export const users = sqliteTable('users', {
@@ -591,7 +722,6 @@ export const promptClusters = sqliteTable('prompt_clusters', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
-  average_embedding: text('average_embedding'),
   prompt_count: integer('prompt_count').notNull().default(0),
   piece_count: integer('piece_count').notNull().default(0),
   latest_prompt_id: integer('latest_prompt_id'),
@@ -611,7 +741,6 @@ export const prompts = sqliteTable('prompts', {
   piece_count: integer('piece_count').notNull().default(0),
   is_favorite: integer('is_favorite').notNull().default(0),
   is_generated: integer('is_generated').notNull().default(0),
-  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })
@@ -662,15 +791,4 @@ export const worldChatMessages = sqliteTable('world_chat_messages', {
   created_at: integer('created_at').notNull(),
 })
 
-export const discoverProfile = sqliteTable('discover_profile', {
-  world_id: integer('world_id').notNull().references(() => worlds.id),
-  world_version_id: integer('world_version_id').notNull().references(() => worldVersions.id),
-  user_id: integer('user_id').notNull().references(() => users.id),
-  profile: text('profile'),
-  distilled_signal_count: integer('distilled_signal_count').notNull().default(0),
-  updated_at: integer('updated_at').notNull(),
-}, table => ({
-  pk: primaryKey({ columns: [table.world_id, table.world_version_id] }),
-}))
-
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, tasteLikes, tasteProfile, worldChatMessages, discoverProfile } })
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, tasteLikes, tasteProfile, worldChatMessages } })

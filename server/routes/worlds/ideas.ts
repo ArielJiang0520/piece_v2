@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { SIMILAR_MODEL_ID } from '../../../src/preferences/generationModel'
-import { requestPromptCandidates } from './prompt-candidates'
+import { candidateFormatInstruction, requestPromptCandidates } from './prompt-candidates'
 
 const ideasRoutes = new Hono<{ Variables: Variables }>()
 
@@ -11,17 +11,8 @@ const IDEAS_TIMEOUT_MS = 60000
 // Higher than "similar prompts": here the whole point is to spin fresh premises out of the world
 // setting, so we WANT the model to range widely across it rather than stay anchored to one seed.
 const IDEAS_TEMPERATURE = 0.9
-// The world is the source of ideas here (not a demoted reference), so give the model a generous slice
-// of it — but still cap so a sprawling world can't blow the budget.
-const MAX_WORLD_REFERENCE_CHARS = 4000
-// The optional hint is a nudge, not a fresh brief — cap it so it can't swamp the world.
-const MAX_HINT_CHARS = 400
-
-function truncateWorldReference(worldBody: string): string {
-  const trimmed = worldBody.trim()
-  if (trimmed.length <= MAX_WORLD_REFERENCE_CHARS) return trimmed
-  return `${trimmed.slice(0, MAX_WORLD_REFERENCE_CHARS).trimEnd()}…`
-}
+// The world is the source of ideas here, and it goes in whole — the one size limit lives at the
+// call itself (llm-budget.ts), not in a slice taken out of the writer's setting.
 
 // A muse for a blank page: invent fresh story prompts grounded in the world. Unlike "similar
 // prompts", there is no seed prompt — the world setting IS the raw material, and each idea should
@@ -48,7 +39,7 @@ function buildIdeasSystemPrompt(worldBody: string): string {
     ].join('\n'),
   )
 
-  const worldReference = truncateWorldReference(worldBody)
+  const worldReference = worldBody.trim()
   sections.push(
     [
       '# World setting (the source of ideas)',
@@ -56,9 +47,7 @@ function buildIdeasSystemPrompt(worldBody: string): string {
     ].join('\n'),
   )
 
-  sections.push(
-    `# Output\nRespond with ONLY a JSON object of the form {"prompts": ["...", "..."]} containing exactly ${CANDIDATE_COUNT} prompt strings. No commentary, no markdown.`,
-  )
+  sections.push(candidateFormatInstruction(CANDIDATE_COUNT))
 
   sections.push(
     `# Language\nRegardless of the language of these instructions, always write the prompts in the same language as the world setting above.`,
@@ -74,7 +63,7 @@ ideasRoutes.post('/', authMiddleware, async (c: any) => {
   if (!world) return c.json({ error: 'Not found' }, 404)
 
   const { hint, model } = await c.req.json().catch(() => ({}))
-  const hintText = typeof hint === 'string' ? hint.trim().slice(0, MAX_HINT_CHARS) : ''
+  const hintText = typeof hint === 'string' ? hint.trim() : ''
 
   // The writer picks the brainstorming model (shares the story-generation choice on the client);
   // fall back to the pinned idea model for an absent/invalid pick.
