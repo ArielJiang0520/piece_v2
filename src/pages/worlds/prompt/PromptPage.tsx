@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, Check, Copy, History, Trash2 } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, Copy, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import CountIndicator from '@/components/CountIndicator'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel, formatEntityCount } from '@/config'
 import { useUiText } from '@/i18n'
 import { setGenerationModel, useGenerationModel } from '@/preferences/generationModel'
 import { useLanguageId } from '@/preferences/language'
+import { relativeTime } from '@/utils/time'
 import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
 import PromptCard from './components/PromptCard'
@@ -51,6 +53,7 @@ export default function PromptPage() {
   const versionSourceClusterId = !lockedMode ? versionDraft?.sourceClusterId ?? null : null
   const [activeTab, setActiveTab] = useState<GenerateTab>('prompt')
   const [versionsOpen, setVersionsOpen] = useState(false)
+  const [inspiredOpen, setInspiredOpen] = useState(false)
   const [showVersionDiff, setShowVersionDiff] = useState(false)
   const [prompt, setPrompt] = useState(draftPrompt)
   const normalizedPrompt = prompt.trim()
@@ -74,20 +77,6 @@ export default function PromptPage() {
     lockedMode,
     versionSourceClusterId,
   })
-
-  // Which world version this prompt's cluster belongs to. Only shown once a world actually has
-  // more than one version — otherwise it's noise. Distinct from the "Version X of Y" label above,
-  // which counts prompt variations, not world versions.
-  const worldVersionsQuery = useQuery({
-    queryKey: ['world-versions', id],
-    queryFn: () => apiFetch(`/api/worlds/${id}/versions`) as Promise<Array<{ id: number }>>,
-    enabled: !!id,
-  })
-  const hasMultipleWorldVersions = (worldVersionsQuery.data?.length ?? 0) > 1
-  const worldVersionLabel = clusterVersion && (clusterVersion.version_name?.trim() || clusterVersion.version_number != null)
-    ? (clusterVersion.version_name?.trim() || `v${clusterVersion.version_number}`)
-    : null
-  const showWorldVersion = lockedMode && hasMultipleWorldVersions && !!worldVersionLabel
 
   // A cluster lives in exactly one world version. The header's version switcher isn't offered on
   // this screen, but history can still land here from before a switch — a back navigation, a
@@ -146,7 +135,11 @@ export default function PromptPage() {
       apiFetch(`/api/worlds/${id}/similar/${Number(promptId)}/children`) as Promise<{ children: ClusterPrompt[] }>,
     enabled: showSimilarTab && !!id,
   })
-  const inspiredCount = inspiredCountQuery.data?.children.length ?? 0
+  const inspired = inspiredCountQuery.data?.children ?? []
+  const inspiredCount = inspired.length
+  // The bar that opens the inspired-prompts sheet lives on the prompt tab, so it only makes sense
+  // once this prompt has actually spun something off.
+  const showInspiredBar = showSimilarTab && inspiredCount > 0
   const visibleActiveTab: GenerateTab =
     activeTab === 'similar' && !showSimilarTab ? 'prompt' : activeTab
 
@@ -274,6 +267,14 @@ export default function PromptPage() {
     return () => { document.body.style.overflow = previous }
   }, [versionsOpen])
 
+  // Lock background scroll while the inspired-prompts sheet is open.
+  useEffect(() => {
+    if (!inspiredOpen) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previous }
+  }, [inspiredOpen])
+
   const promptError = promptDetailsError ? t.couldNotLoad(entityLabel('prompt', {}, language)) : ''
   const generateDisabled = promptDetailsLoading || !normalizedPrompt
 
@@ -356,11 +357,22 @@ export default function PromptPage() {
   }
 
   return (
-    <div className={`page-fade-in min-h-screen page-width px-4 ${visibleActiveTab === 'prompt' ? 'pt-6' : 'pt-0'} ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}`}>
+    <div className={`page-fade-in min-h-screen page-width px-4 ${visibleActiveTab === 'prompt' ? `pt-6 ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}` : 'pt-0'}`}>
       {visibleActiveTab === 'prompt' ? (
         <>
+          {showInspiredBar && (
+            <button
+              type="button"
+              onClick={() => setInspiredOpen(true)}
+              className="-mx-4 -mt-6 mb-1 flex w-[calc(100%+2rem)] items-center justify-center gap-1.5 border-b border-rose-line/70 bg-paper-2/40 px-4 py-4 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-colors active:text-ink"
+            >
+              <span>{t.inspiredPromptsLabel(formatEntityCount(inspiredCount, 'prompt', language), entityLabel('prompt', {}, language))}</span>
+              <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            </button>
+          )}
+
           {parentPromptId != null && (
-            <div className="-mx-4 -mt-6 mb-1 flex w-[calc(100%+2rem)] justify-center border-b border-rose-line/70 bg-paper-2/40 px-4 py-4">
+            <div className={`-mx-4 ${showInspiredBar ? '' : '-mt-6'} mb-1 flex w-[calc(100%+2rem)] justify-center border-b border-rose-line/70 bg-paper-2/40 px-4 py-4`}>
               <button
                 type="button"
                 onClick={() => navigate(`/worlds/${id}/prompt/${parentPromptId}`)}
@@ -375,7 +387,7 @@ export default function PromptPage() {
           <div className={`${complete ? 'mb-1' : ''} bg-paper/95 pb-1`}>
             {showHeaderRow && (
               <div className="flex items-center justify-between gap-3 px-2 pt-4">
-                {headerLabel || showWorldVersion ? (
+                {headerLabel ? (
                   <div className="flex min-w-0 items-center gap-2">
                     {headerLabel && <span className="t-meta truncate text-ink-3">{headerLabel}</span>}
                     {lockedMode && hasMultipleVersions && (
@@ -386,12 +398,6 @@ export default function PromptPage() {
                       >
                         {t.seeAllVersions}
                       </button>
-                    )}
-                    {showWorldVersion && (
-                      <span className="inline-flex min-w-0 max-w-[9rem] items-center gap-1 rounded-full bg-paper-2 px-2 py-0.5 text-[11px] leading-none text-ink-3 ring-1 ring-paper-3/70">
-                        <History aria-hidden="true" className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{worldVersionLabel}</span>
-                      </span>
                     )}
                   </div>
                 ) : (
@@ -485,6 +491,7 @@ export default function PromptPage() {
             worldId={id}
             sourcePromptId={Number(promptId)}
             sourceText={activePrompt?.text ?? prompt}
+            worldVersionId={currentWorldVersionId}
           />
         </div>
       )}
@@ -519,6 +526,53 @@ export default function PromptPage() {
                 onShowDiffChange={setShowVersionDiff}
                 onViewPrompt={() => setVersionsOpen(false)}
               />
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {inspiredOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={t.inspiredPrompts}>
+          <button
+            type="button"
+            aria-label={t.close}
+            className="sheet-backdrop-in absolute inset-0 bg-ink/35"
+            onClick={() => setInspiredOpen(false)}
+          />
+          <div className="sheet-slide-up relative flex h-[85vh] flex-col rounded-t-2xl border-t border-rose-line bg-paper shadow-[0_-24px_70px_rgba(26,18,16,0.22)]">
+            <div className="flex items-center justify-between gap-3 border-b border-rose-line/70 px-5 pb-3 pt-4">
+              <div className="flex items-center gap-2">
+                <span className="t-eyebrow">{t.inspiredPrompts}</span>
+                <span className="inline-flex min-w-5 justify-center rounded-full bg-paper-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none tracking-normal text-ink-3 ring-1 ring-paper-3/70">
+                  {inspiredCount}
+                </span>
+              </div>
+              <button type="button" className={headerTextActionClass} onClick={() => setInspiredOpen(false)}>
+                {t.close}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+              <ul className="hairline-list flex flex-col">
+                {inspired.map(child => (
+                  <li key={child.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspiredOpen(false)
+                        navigate(`/worlds/${id}/prompt/${child.id}`)
+                      }}
+                      className="block w-full py-6 text-left transition-transform duration-150 active:scale-[0.99]"
+                    >
+                      <div className="t-meta flex items-center justify-between gap-3">
+                        <span className="truncate not-italic text-ink-3">{relativeTime(child.updated_at, language)}</span>
+                        <CountIndicator count={child.piece_count} className="shrink-0 justify-end gap-x-2" />
+                      </div>
+                      <p className="mt-3 whitespace-pre-wrap font-serif-zh text-[16px] leading-7 text-ink-2">{child.text}</p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>,

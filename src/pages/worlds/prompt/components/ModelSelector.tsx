@@ -7,12 +7,16 @@ interface ModelSelectorProps {
   model: string
   onModelChange: (model: string) => void
   onMenuOpenChange: (open: boolean) => void
+  // Where the dropdown hangs from its trigger. Centered by default (the trigger sits mid-row);
+  // 'end' right-aligns it so a trigger parked at the right edge doesn't push the menu off-screen.
+  align?: 'center' | 'end'
 }
 
 export default function ModelSelector({
   model,
   onModelChange,
   onMenuOpenChange,
+  align = 'center',
 }: ModelSelectorProps) {
   const t = useUiText()
   const modelButtonId = useId()
@@ -51,7 +55,7 @@ export default function ModelSelector({
   }
 
   return (
-    <div ref={modelMenuRef} className="relative flex min-w-0 justify-center">
+    <div ref={modelMenuRef} className={`relative flex min-w-0 ${align === 'end' ? 'justify-end' : 'justify-center'}`}>
       <button
         id={modelButtonId}
         type="button"
@@ -74,7 +78,7 @@ export default function ModelSelector({
       {menuOpen && (
         <div
           id={modelListboxId}
-          className="absolute left-1/2 top-full z-40 mt-2 w-[min(15rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-sm border border-rose-line bg-paper p-0.5 shadow-(--shadow-menu)"
+          className={`absolute top-full z-40 mt-2 w-[min(15rem,calc(100vw-2rem))] overflow-hidden rounded-sm border border-rose-line bg-paper p-0.5 shadow-(--shadow-menu) ${align === 'end' ? 'right-0' : 'left-1/2 -translate-x-1/2'}`}
           role="listbox"
           aria-labelledby={modelButtonId}
         >

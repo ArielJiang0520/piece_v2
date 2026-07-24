@@ -1,22 +1,22 @@
 import { createPreference } from './createPreference'
+import { EMPTY_PROMPT_SESSION, parsePromptSession, type PromptSession } from './promptSession'
 
-// Persisted so the Spark Ideas screen feels like a browser tab: the user can wander off to read a
-// piece and come back to their candidates and hint. Scoped to a single world — `worldId` lets the
-// screen ignore another world's leftover state.
+// Persisted so the Ideas screen feels like a browser tab: the writer can wander off to read a
+// piece and come back mid-session, with the board, the marks and the trail intact.
+//
+// Scoped to a world AND to the version checked out when the session started. A world version owns
+// everything below it, and the setting the candidates were spun out of is the version's — so a
+// session carried across a version switch would be built on a world that is no longer on screen.
 export interface WorldIdeasState {
   worldId: number | null
-  hint: string
-  candidates: string[]
+  worldVersionId: number | null
+  session: PromptSession
 }
 
 export const EMPTY_WORLD_IDEAS_STATE: WorldIdeasState = {
   worldId: null,
-  hint: '',
-  candidates: [],
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+  worldVersionId: null,
+  session: EMPTY_PROMPT_SESSION,
 }
 
 const worldIdeasPreference = createPreference<WorldIdeasState>({
@@ -28,8 +28,8 @@ const worldIdeasPreference = createPreference<WorldIdeasState>({
       const parsed = JSON.parse(raw)
       return {
         worldId: typeof parsed?.worldId === 'number' ? parsed.worldId : null,
-        hint: typeof parsed?.hint === 'string' ? parsed.hint : '',
-        candidates: stringArray(parsed?.candidates),
+        worldVersionId: typeof parsed?.worldVersionId === 'number' ? parsed.worldVersionId : null,
+        session: parsePromptSession(parsed?.session),
       }
     } catch {
       return EMPTY_WORLD_IDEAS_STATE

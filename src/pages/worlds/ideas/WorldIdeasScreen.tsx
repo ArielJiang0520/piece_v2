@@ -6,13 +6,15 @@ import { entityLabel } from '@/config'
 import { useUiText } from '@/i18n'
 import { useLanguageId } from '@/preferences/language'
 import { useGenerationModel } from '@/preferences/generationModel'
-import Skeleton from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import {
-  EMPTY_WORLD_IDEAS_STATE,
-  setWorldIdeasState,
-  useWorldIdeasState,
-} from '@/preferences/worldIdeasState'
+  EMPTY_PROMPT_SESSION,
+  nextRound,
+  toggleKept,
+  trailWith,
+  type PromptSession,
+} from '@/preferences/promptSession'
+import { setWorldIdeasState, useWorldIdeasState } from '@/preferences/worldIdeasState'
 import PromptIdeasView from '../shared/PromptIdeasView'
 
 export default function WorldIdeasScreen() {
@@ -26,42 +28,42 @@ export default function WorldIdeasScreen() {
 
   useTopNavConfig({ backHref: id ? `/worlds/${id}` : '/worlds' })
 
-  // The persisted store may hold another world's leftovers; treat those as empty here.
-  const persisted = useWorldIdeasState()
-  const state = persisted.worldId === worldId ? persisted : EMPTY_WORLD_IDEAS_STATE
-  const { candidates } = state
-
-  const [hint, setHint] = useState(state.hint)
+  const [note, setNote] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const model = useGenerationModel()
 
   const worldQuery = useQuery({
     queryKey: ['world', id],
-    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string }>,
+    queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<{ name: string; current_version_id: number | null }>,
     enabled: !!id,
   })
-  const worldName = worldQuery.data?.name ?? ''
+  const worldVersionId = worldQuery.data?.current_version_id ?? null
 
-  function persist(next: { hint?: string; candidates?: string[] }) {
-    setWorldIdeasState({
-      worldId,
-      hint: next.hint ?? hint,
-      candidates: next.candidates ?? candidates,
-    })
+  // The persisted store may hold another world's leftovers, or a session built on a version the
+  // world has since moved off — the candidates there were spun out of a setting that is no longer
+  // the one on screen. Either way, treat it as empty here.
+  const persisted = useWorldIdeasState()
+  const isForeign = persisted.worldId !== worldId
+    || (persisted.worldVersionId != null && worldVersionId != null && persisted.worldVersionId !== worldVersionId)
+  const session = isForeign ? EMPTY_PROMPT_SESSION : persisted.session
+
+  function persist(next: PromptSession) {
+    setWorldIdeasState({ worldId, worldVersionId, session: next })
   }
 
   async function runGenerate() {
-    if (!id || isGenerating) return
+    if (!id || isGenerating || !worldQuery.isSuccess) return
     setError(null)
     setIsGenerating(true)
-    const currentHint = hint.trim()
+    const trail = trailWith(session, note)
     try {
       const res = (await apiFetch(`/api/worlds/${id}/ideas`, {
         method: 'POST',
-        body: JSON.stringify({ hint: currentHint || undefined, model }),
+        body: JSON.stringify({ notes: trail, kept: session.kept, model }),
       })) as { candidates: string[] }
-      persist({ hint: currentHint, candidates: res.candidates })
+      persist(nextRound(session, trail, res.candidates))
+      setNote('')
     } catch (e) {
       setError(e instanceof Error ? e.message : t.sparkError(entityPlural))
     } finally {
@@ -69,40 +71,36 @@ export default function WorldIdeasScreen() {
     }
   }
 
-  function pick(text: string) {
+  function write(text: string) {
     // World-native ideas: no source prompt, so no ancestry to carry forward — but still an
-    // AI-generated prompt, so mark it so it earns the "Generated" tag once saved.
+    // AI-generated prompt, so mark it so it earns the "Generated" tag once saved. The session is
+    // left standing: writing one candidate is not a verdict on the rest, and the writer can come
+    // straight back to the board it came from.
     navigate(`/worlds/${id}/prompt/new`, { state: { draftPrompt: text, generated: true } })
   }
 
   return (
     <PromptIdeasView
-      header={
-        // Pinned context: which world these ideas are drawn from.
-        <div className="sticky top-12 z-10 border-b border-rose-line bg-paper/95 backdrop-blur">
-          <div className="page-width px-6 py-4">
-            <p className="t-eyebrow">{t.sparkTitle}</p>
-            {worldQuery.isLoading ? (
-              <Skeleton className="mt-2 h-5 w-40" />
-            ) : (
-              <p className="mt-2 font-serif-zh text-[15px] leading-7 text-ink-2 line-clamp-2">{worldName}</p>
-            )}
-          </div>
-        </div>
-      }
-      candidates={candidates}
+      title={t.sparkTitle}
+      header={null}
+      session={session}
       isGenerating={isGenerating}
       error={error}
-      hint={hint}
-      onHintChange={setHint}
+      note={note}
+      onNoteChange={setNote}
+      onToggleKeep={text => persist(toggleKept(session, text))}
       onGenerate={runGenerate}
-      onPick={pick}
-      canGenerate={!isGenerating}
+      onWrite={write}
+      onClear={() => {
+        persist(EMPTY_PROMPT_SESSION)
+        setNote('')
+      }}
+      canGenerate={!isGenerating && worldQuery.isSuccess}
       copy={{
-        resultsLabel: count => t.sparkResultsLabel(count, entityPlural),
-        tapToWrite: t.sparkTapToWrite,
+        tapToKeep: t.sparkTapToKeep,
         emptyHint: t.sparkEmptyHint(entityPlural),
-        steerPlaceholder: t.sparkSteerPlaceholder,
+        seedPlaceholder: t.sparkSeedPlaceholder,
+        notePlaceholder: t.sparkNotePlaceholder,
         generate: t.sparkGenerate,
         again: t.sparkAgain,
         generating: t.sparkGenerating,

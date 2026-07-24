@@ -23,6 +23,7 @@ export function candidateFormatInstruction(count: number): string {
   return [
     '# Output',
     `Write exactly ${count} of them, one per line, in plain text.`,
+    'Keep each one a single sharp premise — not a detailed description, just an opening a writer would want to pick up and run with.',
     '',
     '- One per line. Never break one across two lines, and leave no blank lines between them.',
     '- The line is the text itself: no numbering, no bullets, no quotation marks around it, no labels.',
@@ -73,6 +74,62 @@ export function extractCandidates(content: string): string[] {
   }
 
   return out
+}
+
+// --- The iterative session, shared by both brainstorming features ---------------------------
+//
+// A session is a trail of what the writer has told the model plus the candidates they marked on
+// the board in front of them. The two have deliberately different lifetimes, and the prompt below
+// says so in as many words:
+//
+//   - `notes` accumulate over the whole session. The last one is the freshest instruction.
+//   - `kept` is only ever the CURRENT board's marks. The client clears every mark when a new round
+//     arrives, so an earlier round's keeps are never replayed here — a keep is a vote about what
+//     was on screen at the time, not a standing preference.
+//
+// Nothing negative is ever sent. A candidate the writer left unmarked is simply absent from
+// `kept`; it is never described to the model as rejected, because not tapping something isn't a
+// rejection. The model only ever hears what the writer asked for and what they liked.
+
+export interface SessionInput {
+  notes: string[]
+  kept: string[]
+}
+
+export function parseSessionInput(body: any): SessionInput {
+  const strings = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean)
+      : []
+  return { notes: strings(body?.notes), kept: strings(body?.kept) }
+}
+
+export function sessionInstructionLines({ notes, kept }: SessionInput, count: number): string[] {
+  const lines: string[] = []
+
+  if (notes.length > 0) {
+    lines.push('', 'What I have asked for so far, in order:')
+    notes.forEach((note, index) => lines.push(`${index + 1}. ${note}`))
+    lines.push('The last one is the most recent — weigh it heaviest, but do not drop the earlier ones.')
+  }
+
+  if (kept.length > 0) {
+    lines.push('', 'From your last batch, these are the ones I liked:')
+    kept.forEach(text => lines.push(`- ${text}`))
+    lines.push(
+      '',
+      `I am keeping those, so do NOT repeat or rephrase them. Write ${count} DIFFERENT new ones that go FURTHER in the direction they point to.`,
+    )
+  }
+
+  return lines
+}
+
+// The writer's kept candidates stay on their board, so a new one that merely echoes a kept one
+// wastes a slot. Dropped rather than regenerated — the round ships with the ones that survived.
+export function withoutKept(candidates: string[], kept: string[]): string[] {
+  const seen = new Set(kept.map(text => text.trim().toLowerCase()))
+  return candidates.filter(text => !seen.has(text.trim().toLowerCase()))
 }
 
 export interface CandidateRequest {

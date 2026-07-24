@@ -1,22 +1,21 @@
 import { createPreference } from './createPreference'
+import { EMPTY_PROMPT_SESSION, parsePromptSession, type PromptSession } from './promptSession'
 
-// Persisted so the Similar Prompts screen feels like a browser tab: the user can wander off to
-// read a piece and come back to their candidates and hint. Scoped to a single source prompt —
-// `promptId` lets the screen ignore another prompt's leftover state.
+// Persisted so the "More like this" tab feels like a browser tab: the writer can wander off to
+// read a piece and come back mid-session, with the board, the marks and the trail intact.
+//
+// Scoped to the source prompt AND to the world version checked out when the session started —
+// same reason as the Ideas screen: the world setting behind the candidates belongs to a version.
 export interface SimilarPromptsState {
   promptId: number | null
-  hint: string
-  candidates: string[]
+  worldVersionId: number | null
+  session: PromptSession
 }
 
 export const EMPTY_SIMILAR_STATE: SimilarPromptsState = {
   promptId: null,
-  hint: '',
-  candidates: [],
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+  worldVersionId: null,
+  session: EMPTY_PROMPT_SESSION,
 }
 
 const similarPromptsPreference = createPreference<SimilarPromptsState>({
@@ -28,8 +27,8 @@ const similarPromptsPreference = createPreference<SimilarPromptsState>({
       const parsed = JSON.parse(raw)
       return {
         promptId: typeof parsed?.promptId === 'number' ? parsed.promptId : null,
-        hint: typeof parsed?.hint === 'string' ? parsed.hint : '',
-        candidates: stringArray(parsed?.candidates),
+        worldVersionId: typeof parsed?.worldVersionId === 'number' ? parsed.worldVersionId : null,
+        session: parsePromptSession(parsed?.session),
       }
     } catch {
       return EMPTY_SIMILAR_STATE
