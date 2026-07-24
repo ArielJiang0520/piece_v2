@@ -8,9 +8,9 @@ import generateRoutes from './generate'
 import clusterRoutes from './clusters'
 import pieceRoutes from './pieces'
 import similarRoutes from './similar'
+import ideasRoutes from './ideas'
 import tasteRoutes from './taste'
 import chatRoutes from './chat'
-import discoverRoutes from './discover'
 
 const worldRoutes = new Hono<{ Variables: Variables }>()
 
@@ -374,8 +374,8 @@ worldRoutes.route('/:id/clusters', clusterRoutes)
 worldRoutes.route('/:id/generate', generateRoutes)
 worldRoutes.route('/:id/pieces', pieceRoutes)
 worldRoutes.route('/:id/similar', similarRoutes)
+worldRoutes.route('/:id/ideas', ideasRoutes)
 worldRoutes.route('/:id/taste', tasteRoutes)
 worldRoutes.route('/:id/chat', chatRoutes)
-worldRoutes.route('/:id/discover', discoverRoutes)
 
 export default worldRoutes

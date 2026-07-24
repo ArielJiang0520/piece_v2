@@ -10,10 +10,10 @@ import WorldPrompts from './pages/worlds/prompts/WorldPrompts'
 import WorldAbout from './pages/worlds/about/WorldAbout'
 import WorldEditor from './pages/worlds/editor/WorldEditor'
 import PromptPage from './pages/worlds/prompt/PromptPage'
+import WorldIdeasScreen from './pages/worlds/ideas/WorldIdeasScreen'
 import GenerateScreen from './pages/worlds/generate/GenerateScreen'
 import TasteScreen from './pages/worlds/taste/TasteScreen'
 import WorldChatScreen from './pages/worlds/chat/WorldChatScreen'
-import DiscoverScreen from './pages/worlds/discover/DiscoverScreen'
 
 function RootLayout() {
   return (
@@ -51,8 +51,8 @@ const router = createBrowserRouter([
           { path: '/worlds', element: <WorldList /> },
           { path: '/worlds/new', element: <WorldEditor /> },
           { path: '/worlds/:id', element: <WorldPrompts /> },
+          { path: '/worlds/:id/ideas', element: <WorldIdeasScreen /> },
           { path: '/worlds/:id/about', element: <WorldAbout /> },
-          { path: '/worlds/:id/discover', element: <DiscoverScreen /> },
           { path: '/worlds/:id/taste', element: <TasteScreen /> },
           { path: '/worlds/:id/chat', element: <WorldChatScreen /> },
           { path: '/worlds/:id/prompt/new', element: <PromptPage /> },

@@ -32,6 +32,14 @@ interface WorldVersionListItem {
   created_at: number
 }
 
+interface PromptCountResponse {
+  total: number
+}
+
+interface CachedPromptPages {
+  pages?: Array<{ total?: number }>
+}
+
 export default function WorldAbout() {
   const language = useLanguageId()
   const t = useUiText()
@@ -56,6 +64,20 @@ export default function WorldAbout() {
     queryKey: ['world', id],
     queryFn: () => apiFetch(`/api/worlds/${id}`) as Promise<World>,
     enabled: !!id,
+  })
+
+  const promptCountQuery = useQuery({
+    queryKey: ['world-clusters-count', id],
+    queryFn: () => apiFetch(`/api/worlds/${id}/clusters?page=1&limit=1`) as Promise<PromptCountResponse>,
+    enabled: !!id,
+    placeholderData: () => {
+      const cachedEntries = queryClient.getQueriesData<CachedPromptPages>({ queryKey: ['world-clusters', id] })
+      for (const [, data] of cachedEntries) {
+        const total = data?.pages?.[0]?.total
+        if (typeof total === 'number') return { total }
+      }
+      return undefined
+    },
   })
 
   const versionsQuery = useQuery({
@@ -162,6 +184,7 @@ export default function WorldAbout() {
   }, [versionMenuOpen])
 
   const world = worldQuery.data
+  const promptCount = promptCountQuery.data?.total
 
   const versions = versionsQuery.data ?? []
   const currentVersionId = world?.current_version_id ?? null
@@ -235,8 +258,8 @@ export default function WorldAbout() {
     : ''
 
   const worldTabs = useMemo(
-    () => <WorldTabs active="about" worldId={id} />,
-    [id],
+    () => <WorldTabs active="about" worldId={id} promptCount={promptCount} />,
+    [id, promptCount],
   )
 
   const editActions = useMemo(() => (
