@@ -8,6 +8,7 @@ import generateRoutes from './generate'
 import clusterRoutes from './clusters'
 import pieceRoutes from './pieces'
 import similarRoutes from './similar'
+import reworkRoutes from './rework'
 import ideasRoutes from './ideas'
 import tasteRoutes from './taste'
 import chatRoutes from './chat'
@@ -382,6 +383,7 @@ worldRoutes.route('/:id/clusters', clusterRoutes)
 worldRoutes.route('/:id/generate', generateRoutes)
 worldRoutes.route('/:id/pieces', pieceRoutes)
 worldRoutes.route('/:id/similar', similarRoutes)
+worldRoutes.route('/:id/rework', reworkRoutes)
 worldRoutes.route('/:id/ideas', ideasRoutes)
 worldRoutes.route('/:id/taste', tasteRoutes)
 worldRoutes.route('/:id/chat', chatRoutes)

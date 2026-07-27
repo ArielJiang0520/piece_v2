@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, Check, ChevronDown, Copy, Trash2 } from 'lucide-react'
+import { ArrowRight, ChevronDown, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -20,6 +20,7 @@ import PieceView from './components/PieceView'
 import GenerateControls from './components/GenerateControls'
 import GenerateVersionsPanel from './components/VersionsPanel'
 import MoreLikeThisPanel from './components/MoreLikeThisPanel'
+import ReworkSheet from './components/ReworkSheet'
 import { useGenerateData } from './hooks/useGenerateData'
 import { useSavedPiece } from './hooks/useSavedPiece'
 import { parseVersionDraft, type ClusterPrompt } from '../shared/types'
@@ -55,7 +56,12 @@ export default function PromptPage() {
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [inspiredOpen, setInspiredOpen] = useState(false)
   const [showVersionDiff, setShowVersionDiff] = useState(false)
+  const [reworkOpen, setReworkOpen] = useState(false)
   const [prompt, setPrompt] = useState(draftPrompt)
+  // What the prompt said before each rework pass, newest last. Emptied the moment the writer types,
+  // so a step back never takes their own words with it — it only ever undoes a pass that nothing
+  // has happened since.
+  const [revertStack, setRevertStack] = useState<string[]>([])
   const normalizedPrompt = prompt.trim()
   const readingFont = useReadingFont()
   const readingFontSize = useReadingFontSize()
@@ -254,6 +260,14 @@ export default function PromptPage() {
     else if (activeTab === 'similar' && !showSimilarTab) setActiveTab('prompt')
   }, [activeTab, showGenerateTabs, showSimilarTab])
 
+  // Rework acts on the prompt in the editor, so it only exists where that editor is: the prompt
+  // tab, unlocked. Switch tabs, or leave the edit for the saved prompt, and the text it was working
+  // on is no longer on screen — the sheet closes rather than hanging over whatever replaced it.
+  useEffect(() => {
+    if (lockedMode || visibleActiveTab !== 'prompt') setReworkOpen(false)
+  }, [lockedMode, visibleActiveTab])
+  const reworkVisible = reworkOpen && !lockedMode && visibleActiveTab === 'prompt'
+
   // Close the versions sheet if there's nothing left to show (e.g. after deleting versions).
   useEffect(() => {
     if (!hasMultipleVersions) setVersionsOpen(false)
@@ -330,34 +344,35 @@ export default function PromptPage() {
     navigate(`/worlds/${id}/prompt/${versionDraft.sourcePromptId}`, { replace: true })
   }
 
-  const [promptCopied, setPromptCopied] = useState(false)
-  const promptCopyResetRef = useRef<number | null>(null)
-  useEffect(() => () => {
-    if (promptCopyResetRef.current != null) window.clearTimeout(promptCopyResetRef.current)
-  }, [])
+  // AI help on the prompt being edited — the counterpart to "More like this", which builds a
+  // separate prompt instead. It is a sheet over this screen rather than a screen of its own: the
+  // text being worked on stays in view, and a pass is written into the editor here.
+  function handlePromptEdited(value: string) {
+    setPrompt(value)
+    if (revertStack.length > 0) setRevertStack([])
+  }
 
-  async function handleCopyPrompt() {
-    if (!prompt) return
-    try {
-      await navigator.clipboard.writeText(prompt)
-    } catch {
-      const fallback = document.createElement('textarea')
-      fallback.value = prompt
-      fallback.setAttribute('readonly', '')
-      fallback.style.position = 'fixed'
-      fallback.style.opacity = '0'
-      document.body.appendChild(fallback)
-      fallback.select()
-      try { document.execCommand('copy') } catch { /* noop */ }
-      document.body.removeChild(fallback)
-    }
-    setPromptCopied(true)
-    if (promptCopyResetRef.current != null) window.clearTimeout(promptCopyResetRef.current)
-    promptCopyResetRef.current = window.setTimeout(() => setPromptCopied(false), 1500)
+  function handleReworkPass(draft: string) {
+    setRevertStack(stack => [...stack, prompt])
+    setPrompt(draft)
+  }
+
+  // The same ask run again stands in place of the pass it repeats, so the two are one step back.
+  function handleReworkTryAgain(draft: string) {
+    setPrompt(draft)
+  }
+
+  function handleRevert() {
+    const previous = revertStack[revertStack.length - 1]
+    if (previous === undefined) return
+    setPrompt(previous)
+    setRevertStack(stack => stack.slice(0, -1))
   }
 
   return (
-    <div className={`page-fade-in min-h-screen page-width px-4 ${visibleActiveTab === 'prompt' ? `pt-6 ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}` : 'pt-0'}`}>
+    // The rework sheet is docked to the bottom rather than floating over the page, so the page
+    // makes room for it instead of letting it sit on top of the generate controls.
+    <div className={`page-fade-in min-h-screen page-width px-4 ${visibleActiveTab === 'prompt' ? `pt-6 ${reworkVisible ? 'pb-[22rem]' : needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}` : 'pt-0'}`}>
       {visibleActiveTab === 'prompt' ? (
         <>
           {showInspiredBar && (
@@ -385,11 +400,14 @@ export default function PromptPage() {
           )}
 
           <div className={`${complete ? 'mb-1' : ''} bg-paper/95 pb-1`}>
+            {/* One row: what you're editing on the left, what you can do with it on the right. The
+                label is kept short enough to share the line — on a phone, splitting the two apart
+                just leaves two half-empty rows. */}
             {showHeaderRow && (
               <div className="flex items-center justify-between gap-3 px-2 pt-4">
                 {headerLabel ? (
                   <div className="flex min-w-0 items-center gap-2">
-                    {headerLabel && <span className="t-meta truncate text-ink-3">{headerLabel}</span>}
+                    <span className="t-meta truncate text-ink-3">{headerLabel}</span>
                     {lockedMode && hasMultipleVersions && (
                       <button
                         type="button"
@@ -403,18 +421,7 @@ export default function PromptPage() {
                 ) : (
                   <span aria-hidden="true" className="h-px flex-1 bg-paper-3/70" />
                 )}
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    aria-label={promptCopied ? t.copied : t.copy}
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-ink-3 transition-opacity active:text-ink active:opacity-70 disabled:pointer-events-none disabled:opacity-40"
-                    onClick={handleCopyPrompt}
-                    disabled={!prompt}
-                  >
-                    {promptCopied
-                      ? <Check aria-hidden="true" className="h-4 w-4" />
-                      : <Copy aria-hidden="true" className="h-4 w-4" />}
-                  </button>
+                <div className="flex shrink-0 items-center gap-3">
                   {lockedMode ? (
                     <button
                       type="button"
@@ -425,13 +432,33 @@ export default function PromptPage() {
                       {t.edit}
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      className={headerTextActionClass}
-                      onClick={handleCancelVersionDraft}
-                    >
-                      {t.cancel}
-                    </button>
+                    <>
+                      {revertStack.length > 0 && (
+                        <button
+                          type="button"
+                          className={headerTextActionClass}
+                          onClick={handleRevert}
+                        >
+                          {t.revert}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        aria-pressed={reworkOpen}
+                        className={`${headerTextActionClass} ${reworkOpen ? 'text-ink! decoration-ink-3!' : ''}`}
+                        onClick={() => setReworkOpen(open => !open)}
+                        disabled={!normalizedPrompt}
+                      >
+                        {t.rework}
+                      </button>
+                      <button
+                        type="button"
+                        className={headerTextActionClass}
+                        onClick={handleCancelVersionDraft}
+                      >
+                        {t.cancel}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -439,7 +466,7 @@ export default function PromptPage() {
 
             <PromptCard
               prompt={prompt}
-              onPromptChange={setPrompt}
+              onPromptChange={handlePromptEdited}
               loading={promptDetailsLoading}
               error={promptError}
               locked={lockedMode}
@@ -494,6 +521,16 @@ export default function PromptPage() {
             worldVersionId={currentWorldVersionId}
           />
         </div>
+      )}
+
+      {reworkVisible && (
+        <ReworkSheet
+          worldId={id}
+          text={prompt}
+          onPass={handleReworkPass}
+          onTryAgain={handleReworkTryAgain}
+          onClose={() => setReworkOpen(false)}
+        />
       )}
 
       {versionsOpen && createPortal(

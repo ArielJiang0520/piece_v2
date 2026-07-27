@@ -5,8 +5,6 @@ import ConfirmDialog from '@/components/ConfirmDialog'
 import { SkeletonText } from '@/components/Skeleton'
 import { useUiText } from '@/i18n'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
-import { setGenerationModel, useGenerationModel } from '@/preferences/generationModel'
-import ModelSelector from '../prompt/components/ModelSelector'
 import { useWorldChat } from './useWorldChat'
 
 const MAX_COMPOSER_HEIGHT = 140
@@ -20,12 +18,10 @@ export default function WorldChatScreen() {
   const t = useUiText()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const model = useGenerationModel()
   const [draft, setDraft] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [confirmClear, setConfirmClear] = useState(false)
-  const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   // Auto-scrolling is only ever welcome when the reader is already following the tail. Scroll
@@ -101,7 +97,7 @@ export default function WorldChatScreen() {
         height: viewport ? `${viewport.height}px` : '100dvh',
       }}
     >
-      <header className={`flex shrink-0 items-center gap-2 border-b border-rose-line/80 px-2 py-2 ${modelMenuOpen ? 'relative z-50' : ''}`}>
+      <header className="flex shrink-0 items-center gap-2 border-b border-rose-line/80 px-2 py-2">
         <button
           type="button"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-3 transition-colors active:bg-paper-2 active:text-ink"
@@ -111,13 +107,7 @@ export default function WorldChatScreen() {
           <ArrowLeft aria-hidden="true" className="h-5 w-5" />
         </button>
         <span className="t-eyebrow shrink-0 leading-none">{t.chatTitle}</span>
-        <div className="min-w-0 flex-1">
-          <ModelSelector
-            model={model}
-            onModelChange={setGenerationModel}
-            onMenuOpenChange={setModelMenuOpen}
-          />
-        </div>
+        <div className="min-w-0 flex-1" />
         <button
           type="button"
           className="shrink-0 rounded-full px-2.5 py-1.5 font-serif-zh text-[14px] italic leading-none text-ink-3 transition-colors active:bg-paper-2 active:text-ink disabled:opacity-40"

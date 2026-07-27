@@ -4,7 +4,8 @@ import { and, asc, eq, gte } from 'drizzle-orm'
 import { db, worldChatMessages } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getModelById, getUserId, paramInt } from '../../route-helpers'
-import { BLACKLISTED_PROVIDERS, SIMILAR_MODEL_ID } from '../../../src/preferences/generationModel'
+import { CHAT_MODEL_ID } from '../../../src/preferences/generationModel'
+import { openRouterProvider } from '../../openrouter-provider'
 import { readServerSentEvents } from '../../../src/utils/sse'
 import { clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
 import { budgeted } from '../../llm-budget'
@@ -95,7 +96,7 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { message, model: requestedModel, replace_from_id: replaceFromId } = await c.req.json().catch(() => ({}))
+  const { message, replace_from_id: replaceFromId } = await c.req.json().catch(() => ({}))
   const messageText = typeof message === 'string' ? message.trim() : ''
   if (!messageText) return c.json({ error: 'Message required' }, 400)
 
@@ -123,9 +124,9 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
     }
   }
 
-  // The writer picks the model (shares the story-generation choice on the client); fall back
-  // to the pinned model for an absent/invalid pick.
-  const modelOption = getModelById(requestedModel) ?? getModelById(SIMILAR_MODEL_ID)
+  // Pinned, not chosen: which model talks about a world is a fixture of the feature, and the
+  // client never sends one.
+  const modelOption = getModelById(CHAT_MODEL_ID)
   if (!modelOption) return c.json({ error: 'Chat model is not configured' }, 500)
 
   const apiKey = process.env.OPENROUTER_API_KEY
@@ -161,17 +162,7 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
       await withGenerationSlot(async () => {
         if (controller.signal.aborted) return
 
-        const provider: Record<string, unknown> = {
-          sort: 'latency',
-          require_parameters: true,
-          preferred_min_throughput: 30,
-        }
-        if (modelOption.preferredProviders.length > 0) {
-          provider.only = modelOption.preferredProviders
-        }
-        if (BLACKLISTED_PROVIDERS.length > 0) {
-          provider.ignore = BLACKLISTED_PROVIDERS
-        }
+        const provider = openRouterProvider(modelOption.preferredProviders)
 
         let response: Response | null = null
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {

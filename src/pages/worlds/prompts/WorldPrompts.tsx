@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ChevronRight, GitBranch, Heart, Search, Plus, X, Lightbulb } from 'lucide-react'
+import { ArrowUp, ChevronRight, GitBranch, Heart, Search, Plus, X, Lightbulb, PenLine } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -264,6 +264,10 @@ export default function WorldPrompts() {
               <Skeleton className="h-11 w-28 shrink-0 rounded-full" />
               <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
             </div>
+            <div className="flex items-stretch gap-2 pb-3">
+              <Skeleton className="h-10 flex-1 rounded-full" />
+              <Skeleton className="h-10 flex-1 rounded-full" />
+            </div>
           </div>
           <div className="mt-5 flex items-center justify-between gap-4">
             <Skeleton className="h-3 w-24" />
@@ -302,16 +306,26 @@ export default function WorldPrompts() {
                 )}
               />
             </div>
+            <WorldSortMenu options={sortOptions} value={sort} onChange={handleSortChange} />
+          </div>
+          {/* The two ways to arrive at a prompt, pinned under the search field: type it yourself, or
+              have AI draft one from a word or two. They lead to the same builder — the AI screen
+              hands its draft to it — so they belong together, at different weights, not as rivals. */}
+          <div className="flex items-stretch gap-2 pb-3">
+            <Link
+              to={`/worlds/${id}/prompt/new`}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-rose font-serif-zh text-[14px] italic leading-none text-white transition-all duration-200 active:translate-y-px active:bg-rose-deep"
+            >
+              <Plus aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
+              <span>{t.newEntity(entityLabel('prompt', { capitalize: true }, language))}</span>
+            </Link>
             <Link
               to={`/worlds/${id}/ideas`}
-              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-rose-line/80 bg-paper/60 pl-3 pr-4 font-serif-zh text-[14px] italic leading-none text-ink-2 shadow-[inset_0_0_24px_rgba(205,83,106,0.03)] transition-transform duration-200 active:translate-y-px active:bg-rose-tint/45"
-              aria-label={t.sparkTitle}
-              title={t.sparkTitle}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-rose-line/80 bg-paper font-serif-zh text-[14px] italic leading-none text-ink-2 transition-transform duration-200 active:translate-y-px active:bg-rose-tint/45"
             >
-              <Lightbulb aria-hidden="true" className="h-4 w-4 text-rose" />
-              <span>{t.sparkTitle}</span>
+              <PenLine aria-hidden="true" className="h-4 w-4 text-rose" />
+              <span>{t.workshopEntry(entityLabel('prompt', {}, language))}</span>
             </Link>
-            <WorldSortMenu options={sortOptions} value={sort} onChange={handleSortChange} />
           </div>
         </div>
 
@@ -330,16 +344,20 @@ export default function WorldPrompts() {
           </div>
         )}
 
-        <Link
-          to={`/worlds/${id}/prompt/new`}
-          className="fixed bottom-[calc(1.75rem+env(safe-area-inset-bottom))] right-5 z-40 inline-flex h-11 w-auto items-center justify-center gap-1.5 rounded-full bg-rose pl-2 pr-4 font-serif-zh text-[14px] italic leading-none text-white shadow-(--shadow-cta) transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-deep hover:shadow-(--shadow-cta-hover) focus:outline-none focus-visible:ring-4 focus-visible:ring-rose/25 sm:right-7"
-          aria-label={t.newEntity(entityLabel('prompt', { capitalize: true }, language))}
-        >
-          <span className="grid h-6 w-6 place-items-center rounded-full">
-            <Plus aria-hidden="true" className="h-5 w-5 stroke-[1.8]" />
-          </span>
-          <span>{t.newEntity(entityLabel('prompt', { capitalize: true }, language))}</span>
-        </Link>
+        {/* Both entries now ride in the pinned bar, so the only thing left floating is the way back
+            up to it — centred, not parked in the right corner a left thumb has to stretch for. */}
+        {showScrollTop && (
+          <div className="fixed inset-x-0 bottom-[calc(1.75rem+env(safe-area-inset-bottom))] z-40 flex items-center justify-center px-5">
+            <button
+              type="button"
+              onClick={scrollToTop}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-transform duration-200 active:translate-y-px"
+              aria-label={t.scrollToTop}
+            >
+              <ArrowUp aria-hidden="true" className="h-5 w-5" />
+            </button>
+          </div>
+        )}
 
         {!isSearching && (
           <div className="mt-6 flex items-center gap-3 rounded-2xl border border-rose-line/80 bg-paper/60 px-4 py-4">
@@ -470,17 +488,6 @@ export default function WorldPrompts() {
         )}
       </div>
 
-      {showScrollTop && (
-        <button
-          type="button"
-          onClick={scrollToTop}
-          className="fixed bottom-7 left-1/2 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-all hover:-translate-x-1/2 hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-ink-4/20"
-          aria-label={t.scrollToTop}
-          title={t.scrollToTop}
-        >
-          <ArrowUp aria-hidden="true" className="h-6 w-6" />
-        </button>
-      )}
     </div>
   )
 }

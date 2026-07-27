@@ -1,21 +1,21 @@
 import { createPreference } from './createPreference'
-import { EMPTY_PROMPT_SESSION, parsePromptSession, type PromptSession } from './promptSession'
+import { EMPTY_PROMPT_WORKSHOP, parsePromptWorkshop, type PromptWorkshop } from './promptWorkshop'
 
 // Persisted so the "More like this" tab feels like a browser tab: the writer can wander off to
-// read a piece and come back mid-session, with the board, the marks and the trail intact.
+// read a piece and come back mid-workshop, with the draft and the trail of revisions intact.
 //
-// Scoped to the source prompt AND to the world version checked out when the session started —
-// same reason as the Ideas screen: the world setting behind the candidates belongs to a version.
+// Scoped to the source prompt AND to the world version checked out when the workshop started —
+// same reason as the Ideas screen: the world setting behind the draft belongs to a version.
 export interface SimilarPromptsState {
   promptId: number | null
   worldVersionId: number | null
-  session: PromptSession
+  workshop: PromptWorkshop
 }
 
 export const EMPTY_SIMILAR_STATE: SimilarPromptsState = {
   promptId: null,
   worldVersionId: null,
-  session: EMPTY_PROMPT_SESSION,
+  workshop: EMPTY_PROMPT_WORKSHOP,
 }
 
 const similarPromptsPreference = createPreference<SimilarPromptsState>({
@@ -28,7 +28,7 @@ const similarPromptsPreference = createPreference<SimilarPromptsState>({
       return {
         promptId: typeof parsed?.promptId === 'number' ? parsed.promptId : null,
         worldVersionId: typeof parsed?.worldVersionId === 'number' ? parsed.worldVersionId : null,
-        session: parsePromptSession(parsed?.session),
+        workshop: parsePromptWorkshop(parsed?.workshop),
       }
     } catch {
       return EMPTY_SIMILAR_STATE

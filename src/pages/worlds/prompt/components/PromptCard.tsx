@@ -35,13 +35,9 @@ export default function PromptCard({
       ) : (
         <div>
           {locked ? (
-            <>
-              <div className="flex justify-start px-4 pb-1 pt-0">
-              </div>
-              <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-4 pb-3 pt-2 font-serif-zh text-[20px] leading-[1.55] text-ink tracking-normal">
-                {prompt}
-              </p>
-            </>
+            <p id="prompt-input" className="w-full whitespace-pre-wrap bg-transparent px-4 pb-3 pt-2 font-serif-zh text-[20px] leading-[1.55] text-ink tracking-normal">
+              {prompt}
+            </p>
           ) : (
             <div className={editorFrameClass}>
               <textarea

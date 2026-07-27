@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { readServerSentEvents } from '@/utils/sse'
-import { useGenerationModel } from '@/preferences/generationModel'
 
 export interface ChatMessage {
   id: number
@@ -20,7 +19,6 @@ interface SendOptions {
 
 export function useWorldChat(worldId: string | undefined) {
   const queryClient = useQueryClient()
-  const model = useGenerationModel()
   const controllerRef = useRef<AbortController | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
@@ -69,7 +67,7 @@ export function useWorldChat(worldId: string | undefined) {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({ message, model, replace_from_id: options.replaceFromId }),
+        body: JSON.stringify({ message, replace_from_id: options.replaceFromId }),
       })
 
       if (!response.ok || !response.body) {
@@ -117,7 +115,7 @@ export function useWorldChat(worldId: string | undefined) {
       // ids that edit/regenerate need).
       setLocalThread(null)
     }
-  }, [model, queryClient, worldId])
+  }, [queryClient, worldId])
 
   const stop = useCallback(() => {
     controllerRef.current?.abort()

@@ -52,8 +52,18 @@ export const MODELS: ModelOption[] = [
 
 export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
-export const SIMILAR_MODEL_ID = 'deepseek/deepseek-v4-pro'
+// The three prompt-working flows — the workshop (Ideas / More like this) and Rework — are not a
+// model choice. They write one short prompt, not a story: which model does it is a fixture of the
+// feature, so it is pinned here and never shown.
+export const PROMPT_WORKSHOP_MODEL_ID = 'z-ai/glm-5.2'
 
+// Talking about a world is its own job too, and its own pin — a chat model is chosen for how it
+// converses, which has nothing to do with what writes prompts or reads likes. Never shown.
+export const CHAT_MODEL_ID = 'z-ai/glm-5.2'
+
+// Distilling a taste profile is its own job with its own demands, so it holds its own pin rather
+// than riding along with the workshop's — the two happen to name the same model today, and either
+// can be re-pointed without touching the other. Also never shown or chosen.
 export const TASTE_MODEL_ID = 'z-ai/glm-5.2'
 
 export const BLACKLISTED_PROVIDERS: string[] = ['alibaba', 'together']

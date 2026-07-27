@@ -10,7 +10,8 @@ import { db, tasteLikes, tasteProfile, worlds } from './db'
 import { currentWorldVersionId } from './route-helpers'
 import { withGenerationSlot } from './generation-lock'
 import { budgeted } from './llm-budget'
-import { BLACKLISTED_PROVIDERS, TASTE_MODEL_ID } from '../src/preferences/generationModel'
+import { TASTE_MODEL_ID } from '../src/preferences/generationModel'
+import { openRouterProvider } from './openrouter-provider'
 
 // The distillation model is pinned in the shared model-roles block (generationModel.ts),
 // alongside the piece-gen and similar/ideas models, so all three are tuned in one place.
@@ -144,7 +145,7 @@ async function requestDistillation(prompt: string, modelId: string): Promise<str
         model: modelId,
         temperature: 0.3,
         reasoning: { effort: 'none' },
-        ...(BLACKLISTED_PROVIDERS.length > 0 ? { provider: { ignore: BLACKLISTED_PROVIDERS } } : {}),
+        provider: openRouterProvider(),
         messages: [
           { role: 'system', content: DISTILL_SYSTEM },
           { role: 'user', content: prompt },
@@ -172,20 +173,20 @@ async function requestDistillation(prompt: string, modelId: string): Promise<str
 // generation slot so it never opens a second OpenRouter session alongside a live story stream.
 // Deduped per (world, version). Returns the new profile (persisted), or null when there was
 // nothing to do / it failed.
-export async function distillTasteProfile(userId: number, worldId: number, modelId: string = TASTE_MODEL_ID): Promise<string | null> {
+export async function distillTasteProfile(userId: number, worldId: number): Promise<string | null> {
   const versionId = currentWorldVersionId(userId, worldId)
   if (versionId == null) return null
   const key = `${worldId}:${versionId}`
   if (distilling.has(key)) return null
   distilling.add(key)
   try {
-    return await runDistillation(userId, worldId, versionId, modelId)
+    return await runDistillation(userId, worldId, versionId)
   } finally {
     distilling.delete(key)
   }
 }
 
-async function runDistillation(userId: number, worldId: number, versionId: number, modelId: string): Promise<string | null> {
+async function runDistillation(userId: number, worldId: number, versionId: number): Promise<string | null> {
   const likes = db
     .select({ snippet: tasteLikes.snippet, context: tasteLikes.context, reasons: tasteLikes.reasons })
     .from(tasteLikes)
@@ -218,7 +219,7 @@ async function runDistillation(userId: number, worldId: number, versionId: numbe
 
   const profile = await new Promise<string | null>((resolve) => {
     withGenerationSlot(async () => {
-      resolve(await requestDistillation(prompt, modelId))
+      resolve(await requestDistillation(prompt, TASTE_MODEL_ID))
     }).catch(() => resolve(null))
   })
 

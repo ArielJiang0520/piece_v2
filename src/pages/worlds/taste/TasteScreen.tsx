@@ -7,8 +7,6 @@ import { useUiText } from '@/i18n'
 import Skeleton from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { setTasteProfileEnabled, useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
-import { setGenerationModel, useGenerationModel } from '@/preferences/generationModel'
-import ModelSelector from '../prompt/components/ModelSelector'
 
 interface ProfileResponse {
   // The reader's taste profile for this world, as freeform prose ('' when there's none yet).
@@ -42,8 +40,6 @@ export default function TasteScreen() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
   const enabled = useTasteProfileEnabled()
-  const model = useGenerationModel()
-  const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   // The last refresh outcome, shown inline so a manual refresh is never a silent no-op:
   // distillation often re-derives the same profile, and a failure leaves it untouched — either
@@ -95,10 +91,7 @@ export default function TasteScreen() {
     setRefreshNote({ text: t.tasteRefreshing, error: false })
     setRefreshing(true)
     try {
-      await apiFetch(`/api/worlds/${id}/taste/profile/refresh`, {
-        method: 'POST',
-        body: JSON.stringify({ model }),
-      })
+      await apiFetch(`/api/worlds/${id}/taste/profile/refresh`, { method: 'POST' })
     } catch {
       // Only the trigger itself failed (e.g. auth/network) — that's a real error worth showing.
       // A slow distill is NOT this path; it succeeds here and resolves via polling below.
@@ -222,15 +215,6 @@ export default function TasteScreen() {
           <RotateCw aria-hidden="true" className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
           {t.tasteRefresh}
         </button>
-      </div>
-
-      {/* The model a manual refresh distills with — shares the story-generation model choice. */}
-      <div className={`relative mb-3 flex items-center justify-center ${modelMenuOpen ? 'z-50' : 'z-0'}`}>
-        <ModelSelector
-          model={model}
-          onModelChange={setGenerationModel}
-          onMenuOpenChange={setModelMenuOpen}
-        />
       </div>
 
       {refreshNote && (

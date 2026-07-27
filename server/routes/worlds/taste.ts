@@ -2,9 +2,8 @@ import { Hono } from 'hono'
 import { and, desc, eq } from 'drizzle-orm'
 import { db, pieces, tasteLikes } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { currentWorldVersionId, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
+import { currentWorldVersionId, findUserWorldId, getUserId, paramInt } from '../../route-helpers'
 import { distillTasteProfile, getProfileForWorld, maybeDistillAfterLike, versionLikes } from '../../taste-profile'
-import { TASTE_MODEL_ID } from '../../../src/preferences/generationModel'
 
 // Per-world taste routes, mounted under /:id/taste. The world id comes from the parent path;
 // every handler scopes by (userId, worldId) so one world's likes/profile never touch another.
@@ -147,11 +146,9 @@ tasteRoutes.post('/profile/refresh', authMiddleware, async (c) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
   if (!findUserWorldId(userId, worldId)) return c.json({ error: 'Not found' }, 404)
-  // The reader can pick which model distills the profile (shares the story-generation model
-  // choice on the client); fall back to the pinned taste model for an absent/invalid pick.
-  const body = await c.req.json().catch(() => ({}))
-  const modelId = getModelById(body.model)?.id ?? TASTE_MODEL_ID
-  void distillTasteProfile(userId, worldId, modelId).catch(err =>
+  // Which model distills the profile is pinned server-side (TASTE_MODEL_ID) — not the reader's
+  // to pick, and never sent by the client.
+  void distillTasteProfile(userId, worldId).catch(err =>
     console.warn(`[taste distill] manual refresh failed: ${err instanceof Error ? err.message : 'unknown error'}`))
   return c.json({ started: true }, 202)
 })

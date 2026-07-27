@@ -1,22 +1,22 @@
 import { createPreference } from './createPreference'
-import { EMPTY_PROMPT_SESSION, parsePromptSession, type PromptSession } from './promptSession'
+import { EMPTY_PROMPT_WORKSHOP, parsePromptWorkshop, type PromptWorkshop } from './promptWorkshop'
 
 // Persisted so the Ideas screen feels like a browser tab: the writer can wander off to read a
-// piece and come back mid-session, with the board, the marks and the trail intact.
+// piece and come back mid-workshop, with the draft and the trail of revisions intact.
 //
-// Scoped to a world AND to the version checked out when the session started. A world version owns
-// everything below it, and the setting the candidates were spun out of is the version's — so a
-// session carried across a version switch would be built on a world that is no longer on screen.
+// Scoped to a world AND to the version checked out when the workshop started. A world version owns
+// everything below it, and the setting the draft was written from is the version's — so a workshop
+// carried across a version switch would be built on a world that is no longer on screen.
 export interface WorldIdeasState {
   worldId: number | null
   worldVersionId: number | null
-  session: PromptSession
+  workshop: PromptWorkshop
 }
 
 export const EMPTY_WORLD_IDEAS_STATE: WorldIdeasState = {
   worldId: null,
   worldVersionId: null,
-  session: EMPTY_PROMPT_SESSION,
+  workshop: EMPTY_PROMPT_WORKSHOP,
 }
 
 const worldIdeasPreference = createPreference<WorldIdeasState>({
@@ -29,7 +29,7 @@ const worldIdeasPreference = createPreference<WorldIdeasState>({
       return {
         worldId: typeof parsed?.worldId === 'number' ? parsed.worldId : null,
         worldVersionId: typeof parsed?.worldVersionId === 'number' ? parsed.worldVersionId : null,
-        session: parsePromptSession(parsed?.session),
+        workshop: parsePromptWorkshop(parsed?.workshop),
       }
     } catch {
       return EMPTY_WORLD_IDEAS_STATE

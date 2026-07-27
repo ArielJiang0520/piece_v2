@@ -3,7 +3,7 @@ import { streamSSE } from 'hono/streaming'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { normalizePromptInput } from '../../prompt-text'
-import { BLACKLISTED_PROVIDERS } from '../../../src/preferences/generationModel'
+import { openRouterProvider } from '../../openrouter-provider'
 import { readServerSentEvents } from '../../../src/utils/sse'
 import { abortGeneration, clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
 import { budgeted } from '../../llm-budget'
@@ -225,17 +225,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
       await withGenerationSlot(async () => {
         if (controller.signal.aborted) return
 
-        const provider: Record<string, unknown> = {
-          sort: 'latency',
-          require_parameters: true,
-          preferred_min_throughput: 30,
-        }
-        if (modelOption.preferredProviders.length > 0) {
-          provider.only = modelOption.preferredProviders
-        }
-        if (BLACKLISTED_PROVIDERS.length > 0) {
-          provider.ignore = BLACKLISTED_PROVIDERS
-        }
+        const provider = openRouterProvider(modelOption.preferredProviders)
 
         let response: Response | null = null
         for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
