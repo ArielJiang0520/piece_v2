@@ -154,7 +154,7 @@ export const UI_TEXT = {
       `This will permanently delete your account and all associated ${worlds}, ${prompts}, and ${pieces}.`,
     model: 'AI Model',
     appTitle: 'Mee-Fan',
-    loginTagline: "AI erotica, written on commission. Yours, no one else's.",
+    loginTagline: "AI fiction, written on commission. Yours, no one else's.",
     loginCreateAccount: 'Create account',
     loginWelcomeBack: 'Welcome back',
     loginRegisterIntro: 'Register to start writing.',
