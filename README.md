@@ -140,13 +140,19 @@ Needs `OPENROUTER_API_KEY` in the environment for generation and search embeddin
 
 [三个概念](#三个概念) · [使用流程](#使用流程) · [写场景](#写场景) · [阅读](#阅读) · [偏好](#偏好) · [附加设定](#附加设定) · [设定集的版本](#设定集的版本) · [问问](#问问) · [查找](#查找) · [它不是什么](#它不是什么) · [本地运行](#本地运行)
 
+<p align="center">
+  <img src="docs/screenshots/zh/scenes.png" width="240" alt="设定集里的场景列表，每条都标着生成次数">
+  <img src="docs/screenshots/zh/scene.png" width="240" alt="场景页：这条场景，以及它已保存的两次生成">
+  <img src="docs/screenshots/zh/streaming.png" width="240" alt="故事正在实时生成，一个字一个字地显示出来">
+</p>
+
 Mee-Fan 是一个私人的 AI 小说写作与阅读工具。
 
 你用自己的话描述一个设定，在它之上写一个场景，故事就会实时生成出来。没有分享、没有浏览、没有推荐——你做的一切只属于你自己，整个 app 都是照着手机阅读做的。
 
 ### 三个概念
 
-<img src="docs/screenshots/world.png" width="260" align="right" alt="设定集的「关于」页：版本记录、附加设定与设定正文">
+<img src="docs/screenshots/zh/world.png" width="260" align="right" alt="设定集的「关于」页：版本记录、附加设定与设定正文">
 
 **设定集（World）**——你要写的那个世界。人物、语气、关系、反复出现的细节，凡是生成时该知道的都写进去。它是一段自由的文字，不是表格。花五分钟就够开始了；读过几篇之后你自然知道缺什么，再回来补。
 
@@ -174,16 +180,16 @@ app 里其余的一切，都是为了让这四步中的某一步更好。
 - **AI 打磨。** 对你手上这条场景过一遍：同一个故事、同一批人，但更利落。说说哪里不对，或者直接让它过一遍。新稿会落回编辑器，原文一点即回（**还原**）。
 
 <p align="center">
-  <img src="docs/screenshots/scene-builder.png" width="240" alt="AI 构思场景：写好的一稿，可以「就用这条」或「再来一次」">
-  <img src="docs/screenshots/more-like-this.png" width="240" alt="类似的：同一种味道，但换了人物和情境的新场景">
-  <img src="docs/screenshots/rework.png" width="240" alt="AI 打磨：同一个故事被写得更利落，旁边就是「还原」">
+  <img src="docs/screenshots/zh/scene-builder.png" width="240" alt="AI 构思场景：写好的一稿，可以「就用这条」或「再来一次」">
+  <img src="docs/screenshots/zh/more-like-this.png" width="240" alt="类似的：同一种味道，但换了人物和情境的新场景">
+  <img src="docs/screenshots/zh/rework.png" width="240" alt="AI 打磨：同一个故事被写得更利落，旁边就是「还原」">
 </p>
 
 反复重写的场景会归到同一条场景的**版本**之下，而不是在列表里堆成一串几乎一样的条目，列表始终是一列想法。你可以打开版本记录，对照、切换。
 
 ### 阅读
 
-<img src="docs/screenshots/paragraph-actions.png" width="260" align="right" alt="轻点某一段后，下方浮出展开、续写、喜欢三个操作">
+<img src="docs/screenshots/zh/paragraph-actions.png" width="260" align="right" alt="轻点某一段后，下方浮出展开、续写、喜欢三个操作">
 
 生成是实时流出来的。过程中你可以调慢、调快、暂停，或者直接跳到结尾。
 
@@ -201,7 +207,7 @@ app 里其余的一切，都是为了让这四步中的某一步更好。
 
 ### 偏好
 
-<img src="docs/screenshots/taste.png" width="260" align="right" alt="偏好页：由你喜欢过的段落提炼出的一段文字">
+<img src="docs/screenshots/zh/taste.png" width="260" align="right" alt="偏好页：由你喜欢过的段落提炼出的一段文字">
 
 阅读时轻点你喜欢的段落，它就被存下来，还可以顺手写一句哪里戳中你。日积月累，app 会把这些提炼成一小段文字，写清楚你在**这个设定集里**对什么有反应；开启之后，它会回流进新的生成。它是一段散文，不是标签也不是打分，而且按设定集分开存放——你在一个设定里喜欢的东西不会串到另一个。你可以读这段文字，逐条编辑或删除喜欢过的段落，也可以随时刷新。
 
@@ -209,7 +215,7 @@ app 里其余的一切，都是为了让这四步中的某一步更好。
 
 ### 附加设定
 
-<img src="docs/screenshots/additions.png" width="260" align="right" alt="「关于」页上的附加设定，可以随时开关">
+<img src="docs/screenshots/zh/additions.png" width="260" align="right" alt="「关于」页上的附加设定，可以随时开关">
 
 附加设定是一块额外的设定——一个角色、一段关系、一条规则——放在设定集旁边，而不是写进它里面。开启后，它的正文会接在设定集描述的末尾，供之后的生成使用；关掉，设定集就还是原来的样子。
 
@@ -223,7 +229,7 @@ app 里其余的一切，都是为了让这四步中的某一步更好。
 
 ### 问问
 
-<img src="docs/screenshots/ask.png" width="260" align="right" alt="问问：关于这个设定集的对话，回答它还缺什么">
+<img src="docs/screenshots/zh/ask.png" width="260" align="right" alt="问问：关于这个设定集的对话，回答它还缺什么">
 
 一个只针对某个设定集的对话。问问这个设定缺了什么、某一段读起来如何、某句话该怎么写。它是关于设定集的聊天，不是生成器——你的设定集不会被它改动。
 
