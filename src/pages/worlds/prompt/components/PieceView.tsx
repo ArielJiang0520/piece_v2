@@ -6,7 +6,7 @@ import { useUiText } from '@/i18n'
 import { useLanguageId } from '@/preferences/language'
 import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
-import ProseBody, { proseTextClass, proseTextStyle } from '../../shared/ProseBody'
+import ProseBody, { ProseText, proseTextClass, proseTextStyle } from '../../shared/ProseBody'
 import MarkerRail, { revealMarker, type MarkerTick } from '../../shared/MarkerRail'
 import { annotateParagraphs } from '../../generate/paragraphs'
 import type { PieceAction, PieceStructure } from '../../shared/pieceStructure'
@@ -226,7 +226,7 @@ export default function PieceView({
                   className={proseTextClass(readingFont)}
                   style={proseTextStyle(readingFontSize)}
                 >
-                  {paragraph.text}
+                  <ProseText text={paragraph.text} />
                 </p>
               </div>
             ))}

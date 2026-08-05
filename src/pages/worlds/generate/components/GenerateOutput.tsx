@@ -5,7 +5,7 @@ import { useUiText } from '@/i18n'
 import type { GenerationPhase } from '@/hooks/useGeneration'
 import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
-import ProseBody, { proseTextClass, proseTextStyle } from '../../shared/ProseBody'
+import ProseBody, { ProseText, proseTextClass, proseTextStyle } from '../../shared/ProseBody'
 import { annotateParagraphs } from '../paragraphs'
 import type { PieceAction, PieceSegment } from '../../shared/pieceStructure'
 
@@ -96,7 +96,7 @@ export default function GenerateOutput({
                     style={proseTextStyle(readingFontSize)}
                     onClick={() => onSelectParagraph(selected ? null : paragraph.index)}
                   >
-                    {paragraph.text}
+                    <ProseText text={paragraph.text} />
                   </p>
                   {liked && (
                     <div className="mt-1 flex items-center gap-1 text-ink-4">

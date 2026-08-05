@@ -350,7 +350,10 @@ export default function TopNav() {
               <span>{t.yourEntities(entityLabel('world', { plural: true, capitalize: true }, language))}</span>
               <ChevronRight aria-hidden="true" className="h-4 w-4" />
             </button>
-            {worldsQuery.isLoading ? (
+            {/* isPending, not isLoading: this query is gated on `open`, and a disabled query is
+                pending without fetching — isLoading is false there, so the empty state rendered
+                over a world the drawer simply hadn't fetched yet. */}
+            {worldsQuery.isPending ? (
               <ul className="flex flex-col gap-2">
                 {Array.from({ length: 3 }, (_, index) => (
                   <li key={index} className="py-1.5">

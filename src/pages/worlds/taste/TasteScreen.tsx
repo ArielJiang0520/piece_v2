@@ -7,6 +7,7 @@ import { useUiText } from '@/i18n'
 import Skeleton from '@/components/Skeleton'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { setTasteProfileEnabled, useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
+import { ProseText } from '../shared/ProseBody'
 
 interface ProfileResponse {
   // The reader's taste profile for this world, as freeform prose ('' when there's none yet).
@@ -257,7 +258,9 @@ export default function TasteScreen() {
                 onClick={() => setExpandedLikeId(prev => (prev === like.id ? null : like.id))}
                 className="flex w-full items-start gap-2 text-left"
               >
-                <p className="flex-1 font-serif-zh text-[14px] leading-snug text-ink-2">{like.snippet}</p>
+                <p className="flex-1 font-serif-zh text-[14px] leading-snug text-ink-2">
+                  <ProseText text={like.snippet} />
+                </p>
                 <ChevronDown
                   aria-hidden="true"
                   className={`mt-0.5 h-4 w-4 shrink-0 text-ink-4 transition-transform ${expandedLikeId === like.id ? 'rotate-180' : ''}`}
@@ -266,7 +269,7 @@ export default function TasteScreen() {
 
               {expandedLikeId === like.id && (
                 <p className="mt-2 whitespace-pre-line rounded-lg bg-paper p-3 font-serif-zh text-[13px] leading-relaxed text-ink-3">
-                  {like.context}
+                  <ProseText text={like.context} />
                 </p>
               )}
 
