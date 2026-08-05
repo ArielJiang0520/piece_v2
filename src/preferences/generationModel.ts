@@ -48,6 +48,14 @@ export const MODELS: ModelOption[] = [
     reasoning: { effort: 'none' },
     preferredProviders: [],
   },
+  {
+    id: 'xiaomi/mimo-v2.5-pro',
+    label: 'Xiaomi Mimo V2.5 Pro',
+    recommended: false,
+    attributes: { speed: 1, quality: 3, cost: 3 },
+    reasoning: { effort: 'none' },
+    preferredProviders: [],
+  },
 ]
 
 export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'

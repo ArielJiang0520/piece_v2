@@ -156,7 +156,7 @@ export default function WorldList() {
   }
 
   return (
-    <div className="page-fade-in min-h-screen page-width">
+    <div className="page-fade-in page-width">
       <main className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
         <div className="px-6 pt-5">
           {showSampleWorldTip && (

@@ -8,6 +8,7 @@ import Login from './pages/Login'
 import WorldList from './pages/worlds/list/WorldList'
 import WorldPrompts from './pages/worlds/prompts/WorldPrompts'
 import WorldAbout from './pages/worlds/about/WorldAbout'
+import WorldAdditions from './pages/worlds/additions/WorldAdditions'
 import WorldEditor from './pages/worlds/editor/WorldEditor'
 import PromptPage from './pages/worlds/prompt/PromptPage'
 import WorldIdeasScreen from './pages/worlds/ideas/WorldIdeasScreen'
@@ -53,6 +54,7 @@ const router = createBrowserRouter([
           { path: '/worlds/:id', element: <WorldPrompts /> },
           { path: '/worlds/:id/ideas', element: <WorldIdeasScreen /> },
           { path: '/worlds/:id/about', element: <WorldAbout /> },
+          { path: '/worlds/:id/additions', element: <WorldAdditions /> },
           { path: '/worlds/:id/taste', element: <TasteScreen /> },
           { path: '/worlds/:id/chat', element: <WorldChatScreen /> },
           { path: '/worlds/:id/prompt/new', element: <PromptPage /> },

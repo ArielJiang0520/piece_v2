@@ -16,6 +16,8 @@ import {
 } from '@/preferences/promptWorkshop'
 import { setWorldIdeasState, useWorldIdeasState } from '@/preferences/worldIdeasState'
 import PromptWorkshopView from '../shared/PromptWorkshopView'
+import { useWorkshopComposer } from '../shared/useWorkshopComposer'
+import { useWorldAdditions } from '../shared/useWorldAdditions'
 
 export default function WorldIdeasScreen() {
   const t = useUiText()
@@ -23,12 +25,15 @@ export default function WorldIdeasScreen() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const worldId = Number(id)
+  // Ideas are worked up against the same world a piece would be written against. No indicator
+  // here: this screen has its own pinned header, and the prompt it hands off to shows the line.
+  const { activeIds: additionIds } = useWorldAdditions(id)
 
   const entityLabelSingular = entityLabel('prompt', {}, language)
 
   useTopNavConfig({ backHref: id ? `/worlds/${id}` : '/worlds' })
 
-  const [note, setNote] = useState('')
+  const { note, setNote, editingRound, beginEdit, leaveEdit, reset } = useWorkshopComposer()
   const [isWorking, setIsWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -67,7 +72,7 @@ export default function WorldIdeasScreen() {
     try {
       const res = (await apiFetch(`/api/worlds/${id}/ideas`, {
         method: 'POST',
-        body: JSON.stringify({ notes: [...history.notes, trimmedNote], drafts: history.drafts }),
+        body: JSON.stringify({ notes: [...history.notes, trimmedNote], drafts: history.drafts, additionIds }),
       })) as { draft: string }
       persist(withDraft(workshop, trimmedNote, res.draft, from))
       setNote('')
@@ -78,21 +83,23 @@ export default function WorldIdeasScreen() {
     }
   }
 
-  // The same ask, run again, replacing the draft on screen. Nothing new is said and no round is
-  // added — the conversation sent is the one that produced what is already there.
-  async function runRegenerate() {
+  // The ask run again, replacing the draft on screen — with `asked` when the writer rewrote it,
+  // and with the note that produced the draft when they only want another go at the same one. No
+  // round is added either way.
+  async function runRegenerate(asked?: string) {
     if (!id || isWorking || !worldQuery.isSuccess) return
-    const at = workshop.viewing
-    const request = regenerationRequest(workshop, at)
+    const at = editingRound ?? workshop.viewing
+    const request = regenerationRequest(workshop, at, asked)
     if (!request) return
     setError(null)
     setIsWorking(true)
     try {
       const res = (await apiFetch(`/api/worlds/${id}/ideas`, {
         method: 'POST',
-        body: JSON.stringify({ notes: request.notes, drafts: request.drafts }),
+        body: JSON.stringify({ notes: request.notes, drafts: request.drafts, additionIds }),
       })) as { draft: string }
-      persist(withRegeneratedDraft(workshop, res.draft, at))
+      persist(withRegeneratedDraft(workshop, res.draft, at, asked))
+      leaveEdit()
     } catch (e) {
       setError(e instanceof Error ? e.message : t.workshopError(entityLabelSingular))
     } finally {
@@ -116,13 +123,21 @@ export default function WorldIdeasScreen() {
       error={error}
       note={note}
       onNoteChange={setNote}
-      onViewDraft={index => persist({ ...workshop, viewing: index })}
-      onSubmit={runDraft}
-      onRegenerate={runRegenerate}
+      onViewDraft={index => {
+        // Moving off the draft being rewritten ends the rewrite: the ask in the box belongs to the
+        // round it came from, not to whichever one is now on screen.
+        leaveEdit()
+        persist({ ...workshop, viewing: index })
+      }}
+      editingRound={editingRound}
+      onEditRound={index => beginEdit(index, workshop.notes[index] ?? '')}
+      onCancelEdit={leaveEdit}
+      onSubmit={() => (editingRound === null ? runDraft() : runRegenerate(trimmedNote))}
+      onRegenerate={() => runRegenerate()}
       onWrite={write}
       onClear={() => {
         persist(EMPTY_PROMPT_WORKSHOP)
-        setNote('')
+        reset()
       }}
       canSubmit={canSubmit}
       copy={{

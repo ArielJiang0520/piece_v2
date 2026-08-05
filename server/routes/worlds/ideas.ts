@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { PROMPT_WORKSHOP_MODEL_ID } from '../../../src/preferences/generationModel'
+import { worldBodyWithAdditions } from '../../world-additions'
 import {
   parseWorkshopInput,
   requestDraft,
@@ -58,7 +59,8 @@ ideasRoutes.post('/', authMiddleware, async (c: any) => {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
 
-  const messages = workshopMessages(buildIdeasSystemPrompt(world.body), workshop)
+  const worldBody = worldBodyWithAdditions(userId, worldId, world.current_version_id, world.body, body?.additionIds)
+  const messages = workshopMessages(buildIdeasSystemPrompt(worldBody), workshop)
 
   const { draft, failure } = await requestDraft({
     apiKey,

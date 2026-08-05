@@ -3,6 +3,7 @@ import { eq, and, desc, inArray, ne, sql } from 'drizzle-orm'
 import { db, pieces, promptClusters, prompts, worldVersions, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, findUserWorldId, getUserId, paramInt } from '../../route-helpers'
+import additionRoutes from './additions'
 import promptRoutes from './prompts'
 import generateRoutes from './generate'
 import clusterRoutes from './clusters'
@@ -378,6 +379,7 @@ worldRoutes.delete('/:id', authMiddleware, (c) => {
   return c.json({ ok: true })
 })
 
+worldRoutes.route('/:id/additions', additionRoutes)
 worldRoutes.route('/:id/prompts', promptRoutes)
 worldRoutes.route('/:id/clusters', clusterRoutes)
 worldRoutes.route('/:id/generate', generateRoutes)

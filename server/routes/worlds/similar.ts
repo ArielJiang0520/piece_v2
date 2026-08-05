@@ -4,6 +4,7 @@ import { db, prompts } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { PROMPT_WORKSHOP_MODEL_ID } from '../../../src/preferences/generationModel'
+import { worldBodyWithAdditions } from '../../world-additions'
 import {
   parseWorkshopInput,
   requestDraft,
@@ -118,8 +119,9 @@ similarRoutes.post('/', authMiddleware, async (c: any) => {
     workshop.notes = ['Write me a different prompt that feels like mine.']
   }
 
+  const worldBody = worldBodyWithAdditions(userId, worldId, world.current_version_id, world.body, body?.additionIds)
   const messages = workshopMessages(
-    buildSimilarSystemPrompt(world.body, sourceText, workshop.drafts.length > 0),
+    buildSimilarSystemPrompt(worldBody, sourceText, workshop.drafts.length > 0),
     workshop,
   )
 

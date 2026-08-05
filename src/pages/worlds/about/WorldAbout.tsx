@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, History, Loader2, MessageCircle, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, History, Loader2, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -12,6 +12,7 @@ import { useLanguageId } from '@/preferences/language'
 import { relativeTime } from '@/utils/time'
 import { useSwitchWorldVersion } from '@/hooks/useSwitchWorldVersion'
 import WorldTabs from '../shared/WorldTabs'
+import { useWorldAdditions } from '../shared/useWorldAdditions'
 
 const ONE_HOUR_MS = 60 * 60 * 1e3
 
@@ -89,6 +90,8 @@ export default function WorldAbout() {
   // Shared with the header quick-switcher; invalidates the version-filtered prompt list too.
   const switchMutation = useSwitchWorldVersion(id)
 
+  const { additions, activeIds, activeAdditions, toggle } = useWorldAdditions(id)
+
   const createVersionMutation = useMutation({
     mutationFn: (versionName: string) =>
       apiFetch(`/api/worlds/${id}/versions`, {
@@ -139,6 +142,7 @@ export default function WorldAbout() {
       queryClient.removeQueries({ queryKey: ['world-versions', id] })
       queryClient.removeQueries({ queryKey: ['world-clusters', id] })
       queryClient.removeQueries({ queryKey: ['world-clusters-count', id] })
+      queryClient.removeQueries({ queryKey: ['world-additions', id] })
       navigate('/worlds')
     },
     onError: error => {
@@ -154,6 +158,9 @@ export default function WorldAbout() {
     // version-filtered prompt list and its count need to refetch.
     queryClient.invalidateQueries({ queryKey: ['world-clusters', id] })
     queryClient.invalidateQueries({ queryKey: ['world-clusters-count', id] })
+    // Additions are version-owned too: a switch shows a different shelf, and a new version an
+    // empty one. The active set falls away on its own — it is keyed by version.
+    queryClient.invalidateQueries({ queryKey: ['world-additions', id] })
   }
 
   useEffect(() => {
@@ -301,8 +308,8 @@ export default function WorldAbout() {
 
   if (!world) {
     return (
-      <div className="page-fade-in min-h-screen bg-paper">
-        <div className="page-width min-h-screen px-6 pb-32 pt-0">
+      <div className="page-fade-in bg-paper">
+        <div className="page-width px-6 pb-32 pt-0">
           <Skeleton className="mt-6 h-11 w-48" />
           <Skeleton className="mt-6 h-11 w-full rounded-full" />
           <div className="mt-8 flex items-center justify-between">
@@ -317,8 +324,8 @@ export default function WorldAbout() {
 
   if (editing) {
     return (
-      <div className="page-fade-in min-h-screen bg-paper">
-        <div className="page-width flex min-h-screen flex-col px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-0">
+      <div className="page-fade-in bg-paper">
+        <div className="page-width flex min-h-below-nav flex-col px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-0">
           {/* The version being edited, with its name editable right where it is shown. */}
           <div className="sticky top-23 z-10 -mx-6 border-b border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
             <div className="py-3">
@@ -417,8 +424,8 @@ export default function WorldAbout() {
   }
 
   return (
-    <div className="page-fade-in min-h-screen bg-paper">
-      <div className="page-width min-h-screen px-6 pb-32 pt-0">
+    <div className="page-fade-in bg-paper">
+      <div className="page-width px-6 pb-32 pt-0">
         <div className="sticky top-23 z-10 -mx-6 border-b border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
           <div className="flex items-center justify-between gap-3 py-3">
             <div ref={versionMenuRef} className="relative min-w-0 flex-1">
@@ -579,7 +586,72 @@ export default function WorldAbout() {
           </h1>
         </header>
 
-        <article className="mt-8 whitespace-pre-wrap font-serif-zh text-[17px] leading-8 text-ink-2">
+        {/* Sits on the top edge of the description, not after it: what's switched on is appended
+            to this text, and a world body runs long enough that anything below it is out of
+            reach. The bottom of this page is for Delete alone.
+
+            Toggling is here, as pills, rather than on the additions screen — this is where the
+            description they join is read, and a pill is a one-thumb tap. Writing and deleting the
+            additions themselves is a screen of its own. */}
+        <div className="mt-8 border-b border-rose-line/70 pb-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="t-eyebrow truncate">{t.additions}</span>
+              {additions.length > 0 && (
+                // Counted off the resolved list, not the stored set: an id whose addition is gone
+                // is not something that's on.
+                <span
+                  className={`inline-flex shrink-0 justify-center rounded-full px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none tracking-normal ring-1 ${activeAdditions.length > 0
+                    ? 'bg-rose-pale text-rose-deep ring-rose-line'
+                    : 'bg-paper-2 text-ink-3 ring-paper-3/70'
+                    }`}
+                >
+                  {activeAdditions.length}/{additions.length}
+                </span>
+              )}
+            </div>
+            <Link
+              to={`/worlds/${id}/additions`}
+              className="inline-flex shrink-0 items-center gap-1 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-opacity duration-200 active:opacity-60"
+            >
+              {additions.length === 0 ? t.newAddition : t.manageAdditions}
+              <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {additions.length === 0 ? (
+            <p className="t-meta mt-3">{t.noAdditionsYet}</p>
+          ) : (
+            // One line that scrolls rather than a block that wraps: the shelf can grow, and a
+            // wrapping grid would push the description further down every time it does.
+            <div className="-mx-6 mt-3 flex gap-2 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {additions.map(addition => {
+                const on = activeIds.includes(addition.id)
+                return (
+                  // The glyph carries the state, not the tint alone: a row of pills that differ
+                  // only in shade reads as decoration, and you can't tell which are in play.
+                  <button
+                    key={addition.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggle(addition.id)}
+                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border py-1.5 pl-2.5 pr-3.5 font-serif-zh text-[13px] italic leading-none transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${on
+                      ? 'border-rose/45 bg-rose-pale text-rose-deep'
+                      : 'border-rose-line/80 bg-paper/60 text-ink-4'
+                      }`}
+                  >
+                    {on
+                      ? <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+                      : <X aria-hidden="true" className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />}
+                    <span>{addition.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <article className="mt-5 whitespace-pre-wrap font-serif-zh text-[17px] leading-8 text-ink-2">
           {hasBody ? body : <p className="t-meta">{t.noBodyYet}</p>}
         </article>
 

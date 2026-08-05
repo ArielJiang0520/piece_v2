@@ -16,6 +16,8 @@ export function useSwitchWorldVersion(worldId: string | number | undefined) {
       queryClient.invalidateQueries({ queryKey: ['world-versions', id] })
       queryClient.invalidateQueries({ queryKey: ['world-clusters', id] })
       queryClient.invalidateQueries({ queryKey: ['world-clusters-count', id] })
+      // Additions belong to a version too, so the shelf changes with the switch.
+      queryClient.invalidateQueries({ queryKey: ['world-additions', id] })
     },
   })
 }

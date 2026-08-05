@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, RotateCcw, Sparkles } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Pencil, RotateCcw, Sparkles } from 'lucide-react'
 import { SkeletonText } from '@/components/Skeleton'
 import { useUiText } from '@/i18n'
 import type { PromptWorkshop } from '@/preferences/promptWorkshop'
@@ -12,6 +12,11 @@ import type { PromptWorkshop } from '@/preferences/promptWorkshop'
 // The screen shows exactly one draft, because that is what the writer is working on. Earlier
 // drafts are reachable through the stepper, and revising from one of them throws away everything
 // after it: the trail is the writer's path to the prompt, not a gallery of options.
+//
+// A step of that path can also be rewritten in place — tap the trail line you are on and the
+// composer changes that ask instead of adding another one. It is the same operation as "try this
+// again", with the question changed rather than repeated, so a badly worded round gets fixed
+// rather than argued with over two more rounds.
 const headerTextActionClass =
   'inline-flex h-8 shrink-0 items-center justify-center px-1 font-serif-zh text-[14px] italic leading-none text-ink-3 underline decoration-ink-4/50 underline-offset-4 transition-colors duration-200 active:text-ink disabled:opacity-40'
 
@@ -36,6 +41,12 @@ interface PromptWorkshopViewProps {
   note: string
   onNoteChange: (value: string) => void
   onViewDraft: (index: number) => void
+  // Which round's ask the composer is currently rewriting, or null while it is writing the next
+  // one. Always the round on screen — stepping anywhere else leaves the rewrite.
+  editingRound: number | null
+  onEditRound: (index: number) => void
+  onCancelEdit: () => void
+  // Adds the next round, or — while a round is being rewritten — redoes that one in place.
   onSubmit: () => void
   // Run the draft on screen again, same note, same model — it replaces what is there rather than
   // adding a round. The only way to see what else the same ask produces.
@@ -57,6 +68,9 @@ export default function PromptWorkshopView({
   note,
   onNoteChange,
   onViewDraft,
+  editingRound,
+  onEditRound,
+  onCancelEdit,
   onSubmit,
   onRegenerate,
   onWrite,
@@ -73,9 +87,18 @@ export default function PromptWorkshopView({
   // Stepping back past the newest draft: the next revision starts from the one on screen, so
   // everything after it goes. Said plainly on screen rather than discovered afterward.
   const isRevisingFromEarlier = hasDrafts && viewing < drafts.length - 1
+  const isEditing = editingRound !== null
   // The trail is folded away by default — it grows every round, and the draft is what the writer
-  // is here to read. Tapping it opens the list of what they have asked for so far.
+  // is here to read. Tapping it opens the list of what they have asked for so far. It opens itself
+  // for a rewrite, since that is where the ask being rewritten is.
   const [trailOpen, setTrailOpen] = useState(false)
+  useEffect(() => {
+    if (isEditing) setTrailOpen(true)
+  }, [isEditing])
+
+  // Rewriting round 0 is rewriting the opening brief, so the box asks for one again rather than
+  // for a change to something.
+  const placeholder = editingRound === 0 || !hasDrafts ? copy.seedPlaceholder : copy.notePlaceholder
 
   // The composer grows with the text instead of scrolling a one-line field out of sight — an
   // opening brief is short, but "what to change" after three rounds rarely is. Capped by
@@ -89,7 +112,7 @@ export default function PromptWorkshopView({
   }, [note])
 
   return (
-    <div className="page-fade-in min-h-screen bg-paper">
+    <div className="page-fade-in bg-paper">
       {/* Pinned header, on hairline rows under the top nav: what this screen is, then — once a draft
           exists — which draft is on screen and the folded-away trail. The world's name already lives
           in the nav above, so it isn't repeated. Which model writes these prompts is a fixture of
@@ -151,20 +174,33 @@ export default function PromptWorkshopView({
                       />
                     </button>
                     {/* Each line is the note that produced the draft of the same index, so tapping
-                        one jumps to what it made. */}
+                        one jumps to what it made. Tapping the line you are already on opens it for
+                        rewriting instead — the pencil marks the one that does that — and tapping it
+                        again backs out. */}
                     {trailOpen && (
                       <div className="mt-2 border-l-2 border-rose-line pl-4">
                         {notes.map((line, index) => (
                           <button
                             key={index}
                             type="button"
-                            onClick={() => onViewDraft(index)}
+                            onClick={() => {
+                              if (editingRound === index) onCancelEdit()
+                              else if (index === viewing) onEditRound(index)
+                              else onViewDraft(index)
+                            }}
                             aria-current={index === viewing}
-                            className={`block w-full py-1 text-left font-serif-zh leading-6 transition-colors active:text-ink ${
+                            aria-label={index === viewing ? `${line} — ${t.workshopEditAsk}` : undefined}
+                            className={`flex w-full items-start gap-2 py-1 text-left font-serif-zh leading-6 transition-colors active:text-ink ${
                               index === viewing ? 'text-ink' : 'text-ink-3'
                             } ${index === 0 ? 'text-[15px]' : 'text-[14px] italic'}`}
                           >
-                            {index === 0 ? line : `+ ${line}`}
+                            <span className="min-w-0 flex-1">{index === 0 ? line : `+ ${line}`}</span>
+                            {index === viewing && (
+                              <Pencil
+                                aria-hidden="true"
+                                className={`mt-1 size-3.5 shrink-0 ${editingRound === index ? 'text-rose' : 'text-ink-4'}`}
+                              />
+                            )}
                           </button>
                         ))}
                       </div>
@@ -184,12 +220,17 @@ export default function PromptWorkshopView({
           <SkeletonText lineClassName="h-4" lines={4} />
         ) : draft ? (
           <>
-            {isRevisingFromEarlier && (
+            {isEditing ? (
+              <p className="t-meta mb-4 leading-6 text-ink-3">{t.workshopRedoNotice}</p>
+            ) : isRevisingFromEarlier ? (
               <p className="t-meta mb-4 leading-6 text-ink-3">{t.workshopRevisingFromEarlier}</p>
-            )}
+            ) : null}
             <p className="whitespace-pre-wrap font-serif-zh text-[16px] leading-7 text-ink">{draft}</p>
             {/* Attached to the draft, because both are about this draft: take it to the builder, or
-                spend the same ask again and see what else comes back. */}
+                spend the same ask again and see what else comes back. While the ask is being
+                rewritten, running it again is the button in the composer — the same re-run, with
+                the changed question — so the unchanged one steps aside rather than sitting there
+                ready to throw the edit away. */}
             <div className="mt-6 flex items-center gap-2 border-t border-rose-line/60 pt-4">
               <button
                 type="button"
@@ -198,14 +239,16 @@ export default function PromptWorkshopView({
               >
                 {t.workshopWriteThis}
               </button>
-              <button
-                type="button"
-                onClick={onRegenerate}
-                className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-rose-line/80 px-4 font-serif-zh text-[15px] italic leading-none text-ink-2 transition-transform duration-200 active:translate-y-px active:bg-rose-tint/45"
-              >
-                <RotateCcw aria-hidden="true" className="h-4 w-4 text-ink-3" />
-                <span>{t.workshopRegenerate}</span>
-              </button>
+              {!isEditing && (
+                <button
+                  type="button"
+                  onClick={onRegenerate}
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-rose-line/80 px-4 font-serif-zh text-[15px] italic leading-none text-ink-2 transition-transform duration-200 active:translate-y-px active:bg-rose-tint/45"
+                >
+                  <RotateCcw aria-hidden="true" className="h-4 w-4 text-ink-3" />
+                  <span>{t.workshopRegenerate}</span>
+                </button>
+              )}
             </div>
           </>
         ) : (
@@ -223,13 +266,24 @@ export default function PromptWorkshopView({
       {!isBlocked && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-rose-line bg-paper/95 backdrop-blur">
           <div className="page-width flex flex-col gap-2.5 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+            {/* The box looks the same whichever job it is doing, and the two differ in whether they
+                add a round or overwrite one — so while it is rewriting, it says so, with the way
+                back out beside it. */}
+            {editingRound !== null && (
+              <div className="flex items-center justify-between gap-3">
+                <p className="t-eyebrow truncate">{t.workshopEditingRound(editingRound + 1)}</p>
+                <button type="button" onClick={onCancelEdit} className={headerTextActionClass}>
+                  {t.workshopCancelEdit}
+                </button>
+              </div>
+            )}
             <textarea
               ref={noteRef}
               rows={1}
               value={note}
               onChange={event => onNoteChange(event.target.value)}
-              placeholder={hasDrafts ? copy.notePlaceholder : copy.seedPlaceholder}
-              aria-label={hasDrafts ? copy.notePlaceholder : copy.seedPlaceholder}
+              placeholder={placeholder}
+              aria-label={placeholder}
               className="max-h-32 w-full resize-none overflow-y-auto rounded-2xl border border-rose-line bg-paper px-4 py-3 font-serif-zh text-[16px] italic leading-6 text-ink placeholder:text-ink-4 focus:border-rose/40 focus:outline-none focus:ring-2 focus:ring-rose/15"
             />
             <button
@@ -240,10 +294,15 @@ export default function PromptWorkshopView({
             >
               {isWorking ? (
                 <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+              ) : isEditing ? (
+                // The same mark the unchanged re-run carries, because it is the same operation.
+                <RotateCcw aria-hidden="true" className="h-4 w-4" />
               ) : (
                 <Sparkles aria-hidden="true" className="h-4 w-4" />
               )}
-              <span>{isWorking ? copy.working : hasDrafts ? copy.revise : copy.draftThis}</span>
+              <span>
+                {isWorking ? copy.working : isEditing ? t.workshopRedo : hasDrafts ? copy.revise : copy.draftThis}
+              </span>
             </button>
           </div>
         </div>

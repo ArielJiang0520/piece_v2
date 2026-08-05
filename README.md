@@ -1,25 +1,92 @@
-# Piece
+# Mee-Fan
 
-Piece is a private app for generating AI smut you actually want to read.
+**[mee-fan.com](https://mee-fan.com)**
 
-It's for the 1am case where you have a specific itch — a niche pairing, a kink-shaped scenario, a ship from some corner that fanfic doesn't really cover, or a character you'd feel weird searching publicly for. You write the setup, the app generates the scene, you read it. Each world is yours alone; nobody else sees it.
+Mee-Fan is a private app for writing and reading AI fiction.
 
-## How it's organized
+You describe a setting in your own words, write a scene against it, and the app streams a story back. Nothing is shared, browsed or recommended — everything you make is yours alone, and the whole app is built for reading on a phone.
 
-**World** — the universe you're playing in. The pairing, the tone, the dynamic, the recurring details. A world might be two midfielders on some random Eredivisie club, or a serious character from a show you'd feel bad sexualizing publicly. Whatever you'd never put in a public fic.
+## The three things
 
-**Prompt** — a specific scenario inside that world. Not a one-shot query — a *recipe*. The post-loss locker room. The private lesson. The moment right before something tips over. You write a prompt once and come back to it whenever you want another take on the same setup.
+**World** — the setting you're writing in. Characters, tone, relationships, the recurring details, whatever the writing should know. A world is freeform text, not a form. Five minutes of it is enough to start; you learn what's missing after a few reads and come back to add it.
 
-**Piece** — one generated read of one prompt. Generate the same prompt again tomorrow and you get a different version: different pacing, different beats, different turns. The premise is something you want to enjoy more than once, and one generation is rarely enough.
+**Scene** — a specific situation inside that world. Not a one-off query — a *recipe*. The argument in the car. The lesson that runs long. The moment right before something tips over. You write a scene once and come back to it whenever you want another read of the same setup.
 
-## How you use it
+**Take** — one generated read of one scene. Run the same scene again tomorrow and you get a different version: different pacing, different beats, different turns. A premise worth reading is usually worth reading more than once, and one generation is rarely the best one.
 
-Open a world → pick a prompt that matches your mood → generate → read. If you have something specific in mind that isn't an existing prompt, type it straight into the generate box. The whole point is that you arrive with intent — you already know what you want.
+> In the code these are `worlds`, `prompts` and `pieces`. The user-facing names live in `src/config.ts` (`ENTITY_LABELS`) — change them there and every screen follows. This README uses the code names only when talking about the code.
 
-Prompts that are variations of the same scene idea get clustered automatically. When you tweak a prompt to chase the version that lands, your prompt list doesn't turn into a wall of nearly-identical entries; the cluster groups them and you can drill in to see the variants.
+## The loop
+
+Open a world → pick a scene → generate → read. If you arrive with something specific that isn't an existing scene, write it straight into a new one.
+
+Everything else in the app exists to make one of those four steps better.
+
+## Writing scenes
+
+Four ways to get to a scene, all landing in the same editor:
+
+- **Write it yourself.** The default, and still the fastest when you already know what you want.
+- **AI scene builder.** Say a word or two about what you're after and the AI drafts a scene from your world. Revise it round by round — each note you give is kept as a trail, and you can go back and change an earlier ask to redo everything after it.
+- **More like this.** Start from a scene you liked and get a different story with the same feel — new situation, new people, another corner of the world. Not a reworded version of the original. The new scene remembers what it came from, so a scene can show you what it inspired.
+- **AI rework.** A pass over the scene you already have: same story, same people, sharper. Say what isn't working, or just ask for a pass. The draft comes back in the editor with the original one tap away (**Revert**).
+
+Scenes you keep rewriting are grouped as **versions** of one scene rather than piling up as near-duplicates in your list, so the list stays a list of ideas. You can open the version history, compare and switch.
+
+## Reading
+
+Generation streams live. While it runs you can slow it down, speed it up, pause, or skip to the end.
+
+While reading or after it finishes:
+
+- **Expand** — take the last stretch and let it breathe.
+- **Continue** — keep going, optionally with a note on where it should go.
+- **Re-run from a marker** — every expand and continue leaves a marker in the text; jump back to one and take a different path from there.
+
+Reading display (font, size) is adjustable in place, and the app has a light and a dark mode.
+
+A take is only saved when you say so. Saved takes hang off their scene, can be reopened and continued later, and can be edited by hand.
+
+## Taste
+
+Tap a paragraph you love while reading and it's saved, optionally with a note about what got to you. Over time the app distills those into a short written profile of what you respond to **in that world**, and — when you switch it on — feeds it back into new writing. It's prose, not tags or ratings, and it lives per world, so what you like in one setting doesn't leak into another. You can read the profile, edit or delete individual likes, and refresh it whenever.
+
+## Additions
+
+An addition is a piece of extra setting — a character, a relationship, a rule — kept beside the world rather than inside it. Switch one on and its text is appended to the world description for anything generated next; switch it off and the world reads as it always did.
+
+Takes record which additions were on when they were written, and the scene list can narrow to what was written with the additions currently on.
+
+## Versions of a world
+
+A world's history works like branches. Editing a world edits it in place; **New version** saves your edits as a separate version and leaves the current one untouched. A version owns everything under it — its scenes, its takes, its likes, its additions — so switching versions swaps the whole world underneath you, and switching back restores it exactly.
+
+## Ask
+
+A chat, scoped to one world. Ask what the setting is missing, how a passage reads, how to word something. It's a conversation about the world, not a generator — your world is never changed by it.
+
+## Finding things
+
+Your scenes are searchable by free text (fuzzy, so you don't need the exact wording), and sortable by recent, oldest, most takes, or most rewritten. New accounts start with a few sample worlds to poke at; delete them whenever.
+
+## Elsewhere
+
+- Bilingual — English and Chinese, switchable at any time.
+- Several models to generate with, chosen per generation.
 
 ## What it isn't
 
-- Not social. No sharing, no discovery, no other users' content. Worlds are private to you.
-- Not a re-reading library. Pieces are saved, but the experience is the fresh generation, not the archive.
-- Not a low-friction "show me anything" tool. If you don't already have a story you want, this app isn't for you.
+- **Not social.** No sharing, no discovery, no other people's content. Worlds are private to your account.
+- **Not an archive.** Takes are saved and re-readable, but the app is built around the fresh read, not the shelf.
+- **Not a "surprise me" button.** It rewards arriving with something you want.
+
+## Running it
+
+Bun is the runtime for both server and tooling.
+
+```bash
+bun install
+bun run dev     # API on :3001, client on :5173
+```
+
+Needs `OPENROUTER_API_KEY` in the environment for generation and search embeddings. See `CLAUDE.md` for architecture and `DESIGN.md` for the design rules.

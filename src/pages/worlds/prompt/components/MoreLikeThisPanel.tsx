@@ -15,6 +15,8 @@ import {
 } from '@/preferences/promptWorkshop'
 import { setSimilarPromptsState, useSimilarPromptsState } from '@/preferences/similarPromptsState'
 import PromptWorkshopView from '../../shared/PromptWorkshopView'
+import { useWorkshopComposer } from '../../shared/useWorkshopComposer'
+import { useWorldAdditions } from '../../shared/useWorldAdditions'
 
 // A long prompt swamps the muse and burns the budget, so we don't riff on it.
 const MAX_SIMILAR_PROMPT_TOKENS = 500
@@ -38,6 +40,8 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText,
   const language = useLanguageId()
   const navigate = useNavigate()
   const entityLabelSingular = entityLabel('prompt', {}, language)
+  // A riff reads the same world the piece will be written against, additions included.
+  const { activeIds: additionIds } = useWorldAdditions(worldId)
 
   // The persisted store may hold another prompt's leftovers, or a workshop built on a version the
   // world has since moved off; treat either as empty here.
@@ -46,7 +50,7 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText,
     || (persisted.worldVersionId != null && worldVersionId != null && persisted.worldVersionId !== worldVersionId)
   const workshop = isForeign ? EMPTY_PROMPT_WORKSHOP : persisted.workshop
 
-  const [note, setNote] = useState('')
+  const { note, setNote, editingRound, beginEdit, leaveEdit, reset } = useWorkshopComposer()
   const [isWorking, setIsWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -59,7 +63,9 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText,
   // Unlike the Ideas screen, the writer need not type anything to start: they got here by tapping
   // "more like this" ON a prompt, and that prompt is the brief. A note only steers it.
   const trimmedNote = note.trim()
-  const canSubmit = !!sourceText && !tooLong && !isWorking
+  // Rewriting an ask is the one case that needs words: an empty box is "run it again", which is
+  // already the button on the draft.
+  const canSubmit = !!sourceText && !tooLong && !isWorking && (editingRound === null || trimmedNote.length > 0)
 
   async function runDraft() {
     if (!worldId || !canSubmit) return
@@ -79,6 +85,7 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText,
           promptId: sourcePromptId,
           notes: outgoingNote ? [...history.notes, outgoingNote] : history.notes,
           drafts: history.drafts,
+          additionIds,
         }),
       })) as { draft: string }
       persist(withDraft(workshop, outgoingNote || t.workshopFirstPass, res.draft, from))
@@ -90,12 +97,13 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText,
     }
   }
 
-  // The same ask, run again, replacing the draft on screen. Nothing new is said and no round is
-  // added — the conversation sent is the one that produced what is already there.
-  async function runRegenerate() {
+  // The ask run again, replacing the draft on screen — with `asked` when the writer rewrote it,
+  // and with the note that produced the draft when they only want another go at the same one. No
+  // round is added either way.
+  async function runRegenerate(asked?: string) {
     if (!worldId || isWorking || !sourceText || tooLong) return
-    const at = workshop.viewing
-    const request = regenerationRequest(workshop, at)
+    const at = editingRound ?? workshop.viewing
+    const request = regenerationRequest(workshop, at, asked)
     if (!request) return
     setError(null)
     setIsWorking(true)
@@ -106,9 +114,11 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText,
           promptId: sourcePromptId,
           notes: request.notes,
           drafts: request.drafts,
+          additionIds,
         }),
       })) as { draft: string }
-      persist(withRegeneratedDraft(workshop, res.draft, at))
+      persist(withRegeneratedDraft(workshop, res.draft, at, asked))
+      leaveEdit()
     } catch (e) {
       setError(e instanceof Error ? e.message : t.similarError(entityLabelSingular))
     } finally {
@@ -131,13 +141,21 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText,
       error={error}
       note={note}
       onNoteChange={setNote}
-      onViewDraft={index => persist({ ...workshop, viewing: index })}
-      onSubmit={runDraft}
-      onRegenerate={runRegenerate}
+      onViewDraft={index => {
+        // Moving off the draft being rewritten ends the rewrite: the ask in the box belongs to the
+        // round it came from, not to whichever one is now on screen.
+        leaveEdit()
+        persist({ ...workshop, viewing: index })
+      }}
+      editingRound={editingRound}
+      onEditRound={index => beginEdit(index, workshop.notes[index] ?? '')}
+      onCancelEdit={leaveEdit}
+      onSubmit={() => (editingRound === null ? runDraft() : runRegenerate(trimmedNote))}
+      onRegenerate={() => runRegenerate()}
       onWrite={write}
       onClear={() => {
         persist(EMPTY_PROMPT_WORKSHOP)
-        setNote('')
+        reset()
       }}
       canSubmit={canSubmit}
       blockedMessage={tooLong ? t.similarTooLong : null}

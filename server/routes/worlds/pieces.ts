@@ -7,6 +7,7 @@ import { createClusterForPrompt, embedPromptForSearch, recomputePromptCluster } 
 import { normalizePromptInput, promptTextMatchesNormalized } from '../../prompt-text'
 import { parseStructure, serializeStructure } from '../../../src/pages/worlds/shared/pieceStructure'
 import { tasteApplies } from '../../taste-profile'
+import { resolveAdditions } from '../../world-additions'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
 
@@ -39,6 +40,12 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   // toggle on AND had a non-empty profile for this world. Toggle-on with an empty profile
   // injects nothing, so it doesn't count.
   const usedTaste = body.useTaste === true && tasteApplies(userId, worldId)
+
+  // The additions that were switched on for this generation, stamped so continuing the piece
+  // later rebuilds the same world text no matter what is switched on then. Resolved against this
+  // version, so a stale id from elsewhere can't be recorded. None on stays null — the bare body.
+  const additions = resolveAdditions(userId, worldId, worldVersionId, body.additionIds)
+  const additionIdsJson = additions.length > 0 ? JSON.stringify(additions.map(addition => addition.id)) : null
 
   let existingPromptId: number | undefined
   let existingPromptClusterId: number | null = null
@@ -174,6 +181,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     model,
     provider,
     used_taste: usedTaste ? 1 : 0,
+    addition_ids: additionIdsJson,
     created_at: now,
     updated_at: now,
   }).returning({ id: pieces.id }).get()

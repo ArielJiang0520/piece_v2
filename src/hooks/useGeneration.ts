@@ -22,6 +22,10 @@ export interface GenerateInput {
   // Whether to feed the reader's distilled taste profile into this generation. Flows
   // straight through into the request body (see the `...input` spread below).
   useTaste: boolean
+  // The world additions to append to the world description. The reader's currently switched-on
+  // set for a fresh generation; on a resume, the set the piece was written with, so continuing
+  // it can't drop a character halfway through.
+  additionIds: number[]
 }
 
 interface State {
@@ -241,9 +245,9 @@ export function useGeneration({ worldId, onDone }: UseGenerationOptions) {
     void runGeneration(rest, priorText, 'continue', direction)
   }
 
-  // Regenerate from a cut point: the kept text is fed straight back as an assistant
-  // prefill the model simply continues — no special instruction, so it writes the next
-  // paragraph fresh.
+  // Regenerate from a cut point: the same request as `continueStory` — the kept text is fed
+  // back as an assistant prefill and continued. The only difference is that the caller cuts
+  // `priorText` at the tapped paragraph instead of sending the whole story.
   function regenerate(input: GenerateInput & { priorText: string; direction?: string }) {
     const { priorText, direction, ...rest } = input
     if (!priorText) return

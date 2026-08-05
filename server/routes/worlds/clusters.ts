@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
-import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray, or, sql } from 'drizzle-orm'
 import { db, pieces, promptClusters, prompts, worldVersions } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getUserId, pagination, paramInt } from '../../route-helpers'
 import { cosineSimilarity, embedPrompt, parseEmbedding, recomputePromptCluster } from '../../prompt-clustering'
+import { parseAdditionIds } from '../../world-additions'
 
 const clusterRoutes = new Hono<{ Variables: Variables }>()
 
@@ -54,7 +55,7 @@ function versionFields(versions: ReturnType<typeof versionLabelsForWorld>, world
 function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow[]) {
   const clusterIds = clusterRows.map(cluster => cluster.id)
   const versions = versionLabelsForWorld(worldId)
-  if (clusterIds.length === 0) return clusterRows.map(cluster => ({ ...cluster, ...versionFields(versions, cluster.world_version_id), title: 'Untitled cluster', latest_piece_at: null as number | null, similar_count: 0, is_generated: false }))
+  if (clusterIds.length === 0) return clusterRows.map(cluster => ({ ...cluster, ...versionFields(versions, cluster.world_version_id), title: 'Untitled cluster', latest_piece_at: null as number | null, similar_count: 0, is_generated: false, used_additions: false }))
 
   const promptRows = db
     .select({
@@ -118,6 +119,29 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
 
   const similarCountByCluster = new Map<number, number>()
   const allPromptIds = [...promptIdToCluster.keys()]
+
+  // Whether a prompt has ever been written with world additions switched on. The stamp lives on
+  // pieces, so a prompt counts if any of its pieces carries a non-empty one. A cluster takes this
+  // from its latest prompt alone — that prompt is the cluster's current text, and the card shows
+  // how the premise as it now stands was written.
+  const usedAdditionsByPrompt = new Map<number, boolean>()
+  if (allPromptIds.length > 0) {
+    const additionRows = db
+      .select({
+        prompt_id: pieces.prompt_id,
+        used: sql<number>`max(case when ${pieces.addition_ids} is not null and ${pieces.addition_ids} <> '[]' then 1 else 0 end)`,
+      })
+      .from(pieces)
+      .where(and(
+        inArray(pieces.prompt_id, allPromptIds),
+        eq(pieces.world_id, worldId),
+        eq(pieces.user_id, userId),
+      ))
+      .groupBy(pieces.prompt_id)
+      .all()
+    for (const row of additionRows) usedAdditionsByPrompt.set(row.prompt_id, Number(row.used) === 1)
+  }
+
   if (allPromptIds.length > 0) {
     const childRows = db
       .select({
@@ -151,6 +175,7 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
       latest_piece_at: latestPieceByCluster.get(cluster.id) ?? null,
       similar_count: similarCountByCluster.get(cluster.id) ?? 0,
       is_generated: generated.has(cluster.id),
+      used_additions: latestPrompt ? usedAdditionsByPrompt.get(latestPrompt.id) ?? false : false,
     }
   })
 }
@@ -161,6 +186,48 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
 function clusterVersionFilter(currentVersionId: number | null) {
   if (currentVersionId == null) return undefined
   return eq(promptClusters.world_version_id, currentVersionId)
+}
+
+// What the list asked to be narrowed to. "Nothing switched on" is a state of its own, not an
+// absence of one: `none` is the plain shelf — the prompts written with no additions at all — and
+// is what the list sits in by default. An absent param is the reader stepping out to everything.
+type AdditionScope =
+  | { kind: 'all' }
+  | { kind: 'none' }
+  | { kind: 'ids'; ids: number[] }
+
+function requestedAdditionScope(c: any): AdditionScope {
+  const raw = (c.req.query('additions') ?? '').trim()
+  if (!raw) return { kind: 'all' }
+  if (raw === 'none') return { kind: 'none' }
+  const ids = parseAdditionIds(raw.split(','))
+  return ids.length > 0 ? { kind: 'ids', ids } : { kind: 'all' }
+}
+
+// The prompts carrying an addition stamp. The stamp lives on pieces, so a prompt counts when any
+// of its pieces carries one. With `wanted`, one of those ids — "any", not "all": a premise
+// written under one of the additions that are on still belongs to the shelf as it now stands.
+// With null, any addition at all, which is the set the plain shelf is the complement of.
+function promptsWithAdditions(userId: number, worldId: number, wanted: number[] | null): Set<number> {
+  const wantedIds = wanted ? new Set(wanted) : null
+  const matched = new Set<number>()
+  if (wantedIds && wantedIds.size === 0) return matched
+
+  const rows = db
+    .select({ prompt_id: pieces.prompt_id, addition_ids: pieces.addition_ids })
+    .from(pieces)
+    .where(and(
+      eq(pieces.world_id, worldId),
+      eq(pieces.user_id, userId),
+      isNotNull(pieces.addition_ids),
+    ))
+    .all()
+  for (const row of rows) {
+    const ids = parseAdditionIds(row.addition_ids)
+    if (ids.length === 0) continue
+    if (!wantedIds || ids.some(id => wantedIds.has(id))) matched.add(row.prompt_id)
+  }
+  return matched
 }
 
 const SEARCH_LIMIT = 50
@@ -217,13 +284,26 @@ clusterRoutes.get('/search', authMiddleware, async (c: any) => {
       score: cosineSimilarity(queryEmbedding, embedding),
     })
   }
-  scored.sort((a, b) => b.score - a.score)
-  const top = scored.slice(0, SEARCH_LIMIT)
+  // Narrowing to the shelf happens before the cut-off, so the top matches are the top matches
+  // among the prompts the reader is actually looking at.
+  const scope = requestedAdditionScope(c)
+  let matches = scored
+  if (scope.kind === 'ids') {
+    const usingAdditions = promptsWithAdditions(userId, worldId, scope.ids)
+    matches = scored.filter(({ cluster }) =>
+      cluster.latest_prompt_id !== null && usingAdditions.has(cluster.latest_prompt_id))
+  } else if (scope.kind === 'none') {
+    const usingAdditions = promptsWithAdditions(userId, worldId, null)
+    matches = scored.filter(({ cluster }) =>
+      cluster.latest_prompt_id === null || !usingAdditions.has(cluster.latest_prompt_id))
+  }
+  matches.sort((a, b) => b.score - a.score)
+  const top = matches.slice(0, SEARCH_LIMIT)
 
   const enriched = enrichClusters(userId, worldId, top.map(s => s.cluster))
   const items = enriched.map((cluster, i) => ({ ...cluster, score: top[i]!.score }))
 
-  return c.json({ items, total: scored.length, query, hasMore: false })
+  return c.json({ items, total: matches.length, query, hasMore: false })
 })
 
 clusterRoutes.get('/', authMiddleware, (c: any) => {
@@ -237,15 +317,38 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
   const { page, limit, offset } = pagination(c)
   const sortParam = c.req.query('sort') as string | undefined
   const sortKey: SortKey = sortParam && sortParam in SORT_ORDERS ? sortParam as SortKey : 'latest_updated'
+
+  // A cluster belongs to the shelf when its latest prompt does — the same prompt the card's text
+  // and its addition mark come from. Nothing matching means an empty list, not an unfiltered one.
+  const scope = requestedAdditionScope(c)
+  let additionFilter = undefined
+  if (scope.kind === 'ids') {
+    const promptIds = [...promptsWithAdditions(userId, worldId, scope.ids)]
+    if (promptIds.length === 0) {
+      return c.json({ items: [], page, limit, total: 0, totalPieces: 0, hasMore: false })
+    }
+    additionFilter = inArray(promptClusters.latest_prompt_id, promptIds)
+  } else if (scope.kind === 'none') {
+    // The complement: everything except the prompts written with something on. A cluster with no
+    // latest prompt was written with nothing either, so it stays.
+    const promptIds = [...promptsWithAdditions(userId, worldId, null)]
+    if (promptIds.length > 0) {
+      additionFilter = or(
+        isNull(promptClusters.latest_prompt_id),
+        notInArray(promptClusters.latest_prompt_id, promptIds),
+      )
+    }
+  }
+
   const total = db
     .select({ value: sql<number>`count(*)` })
     .from(promptClusters)
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter))
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter, additionFilter))
     .get()?.value ?? 0
   const totalPieces = db
     .select({ value: sql<number>`coalesce(sum(${promptClusters.piece_count}), 0)` })
     .from(promptClusters)
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter))
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter, additionFilter))
     .get()?.value ?? 0
   const rows = db
     .select({
@@ -267,7 +370,7 @@ clusterRoutes.get('/', authMiddleware, (c: any) => {
       eq(pieces.world_id, worldId),
       eq(pieces.user_id, userId),
     ))
-    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter))
+    .where(and(eq(promptClusters.world_id, worldId), eq(promptClusters.user_id, userId), versionFilter, additionFilter))
     .groupBy(
       promptClusters.id,
       promptClusters.prompt_count,

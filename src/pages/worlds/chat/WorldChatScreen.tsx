@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Check, Copy, RefreshCw } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { SkeletonText } from '@/components/Skeleton'
 import { useUiText } from '@/i18n'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { useWorldChat } from './useWorldChat'
+import AdditionsIndicator from '../shared/AdditionsIndicator'
+import { useWorldAdditions } from '../shared/useWorldAdditions'
 
 const MAX_COMPOSER_HEIGHT = 140
 
@@ -22,6 +24,9 @@ export default function WorldChatScreen() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [confirmClear, setConfirmClear] = useState(false)
+  // Which reply is currently showing its "Copied" confirmation, by position in the thread.
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   // Auto-scrolling is only ever welcome when the reader is already following the tail. Scroll
@@ -30,6 +35,7 @@ export default function WorldChatScreen() {
 
   const viewport = useVisualViewport()
   const { messages, isLoading, streaming, error, send, stop, clear, isClearing } = useWorldChat(id)
+  const { additions, activeIds } = useWorldAdditions(id)
   const lastIndex = messages.length - 1
 
   // Nothing behind this surface should scroll while it is up.
@@ -83,6 +89,21 @@ export default function WorldChatScreen() {
     send(editDraft, { replaceFromId: messageId })
   }
 
+  useEffect(() => () => {
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+  }, [])
+
+  async function copyReply(index: number, content: string) {
+    try {
+      await navigator.clipboard.writeText(content)
+    } catch {
+      return
+    }
+    setCopiedIndex(index)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopiedIndex(null), 1600)
+  }
+
   function regenerate(assistantIndex: number) {
     const previous = messages[assistantIndex - 1]
     if (!previous || previous.role !== 'user' || previous.id < 0) return
@@ -117,6 +138,9 @@ export default function WorldChatScreen() {
           {t.chatClear}
         </button>
       </header>
+
+      {/* Which world is being asked about, additions included — the same text the chat is given. */}
+      <AdditionsIndicator additions={additions} activeIds={activeIds} className="shrink-0" />
 
       <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
         {isLoading ? (
@@ -172,6 +196,8 @@ export default function WorldChatScreen() {
 
               const isLast = index === lastIndex
               const waiting = isLast && streaming && message.content.length === 0
+              const settled = message.content.length > 0 && !(isLast && streaming)
+              const copied = copiedIndex === index
               return (
                 <div key={`${message.id}-${index}`}>
                   {waiting ? (
@@ -181,15 +207,31 @@ export default function WorldChatScreen() {
                       {message.content}
                     </p>
                   )}
-                  {isLast && !streaming && message.content.length > 0 && (
-                    <button
-                      type="button"
-                      className="mt-2.5 inline-flex items-center gap-1.5 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-colors active:text-ink"
-                      onClick={() => regenerate(index)}
-                    >
-                      <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-                      {t.chatRegenerate}
-                    </button>
+                  {settled && (
+                    <div className="mt-2.5 flex items-center gap-4">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-colors active:text-ink"
+                        onClick={() => copyReply(index, message.content)}
+                      >
+                        {copied ? (
+                          <Check aria-hidden="true" className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy aria-hidden="true" className="h-3.5 w-3.5" />
+                        )}
+                        {copied ? t.copied : t.copy}
+                      </button>
+                      {isLast && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-colors active:text-ink"
+                          onClick={() => regenerate(index)}
+                        >
+                          <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
+                          {t.chatRegenerate}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )

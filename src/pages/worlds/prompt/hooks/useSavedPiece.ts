@@ -7,6 +7,7 @@ import { useUiText } from '@/i18n'
 import { containsChineseText } from '@/preferences/readingSpeed'
 import { relativeTime } from '@/utils/time'
 import type { PieceDetail, PieceStripPiece } from '../../shared/types'
+import { describeAdditionIds, sameAdditionSet, type WorldAddition } from '../../shared/useWorldAdditions'
 
 interface UseSavedPieceOptions {
   lockedMode: boolean
@@ -15,6 +16,10 @@ interface UseSavedPieceOptions {
   resetKey: string
   promptPieces: PieceStripPiece[]
   activePromptPieceCount: number
+  // The world's additions and the reader's currently switched-on set, for the provenance line:
+  // which additions this piece was written with, and whether that still matches.
+  additions: WorldAddition[]
+  activeAdditionIds: number[]
 }
 
 // The static prompt page's piece selection + display labels. Only ever deals with
@@ -24,6 +29,8 @@ export function useSavedPiece({
   resetKey,
   promptPieces,
   activePromptPieceCount,
+  additions,
+  activeAdditionIds,
 }: UseSavedPieceOptions) {
   const language = useLanguageId()
   const t = useUiText()
@@ -70,6 +77,18 @@ export function useSavedPiece({
     : null
   const footerStatsLabel = language === 'zh' ? `${countLabel}已生成` : `${countLabel} generated`
   const tasteLabel = selectedPiece?.used_taste ? t.tasteShaped : null
+  // Which additions this piece was written with. Said out loud because continuing it uses that
+  // set rather than whatever is switched on now — and because an addition deleted since is a
+  // piece that can no longer be continued as it was written.
+  const stampedIds = selectedPiece?.addition_ids ?? []
+  const { names: stampedNames, missingCount } = describeAdditionIds(additions, stampedIds)
+  const additionsLabel = stampedIds.length === 0
+    ? null
+    : [
+      stampedNames.length > 0 ? t.writtenWithAdditions(stampedNames.join(' · ')) : null,
+      missingCount > 0 ? t.additionsDeletedSince(missingCount) : null,
+      missingCount === 0 && !sameAdditionSet(stampedIds, activeAdditionIds) ? t.additionsDifferFromCurrent : null,
+    ].filter(Boolean).join(' - ')
 
   return {
     selectedPieceId,
@@ -81,6 +100,7 @@ export function useSavedPiece({
     metaLabel,
     modelLabel,
     tasteLabel,
+    additionsLabel,
     footerStatsLabel,
   }
 }

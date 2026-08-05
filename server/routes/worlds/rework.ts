@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { PROMPT_WORKSHOP_MODEL_ID } from '../../../src/preferences/generationModel'
+import { worldBodyWithAdditions } from '../../world-additions'
 import {
   parseWorkshopInput,
   requestDraft,
@@ -73,7 +74,8 @@ reworkRoutes.post('/', authMiddleware, async (c: any) => {
     workshop.notes = ['Give my prompt a pass — same story, sharper.']
   }
 
-  const messages = workshopMessages(buildReworkSystemPrompt(world.body, text), workshop)
+  const worldBody = worldBodyWithAdditions(userId, worldId, world.current_version_id, world.body, body?.additionIds)
+  const messages = workshopMessages(buildReworkSystemPrompt(worldBody, text), workshop)
 
   const { draft, failure } = await requestDraft({
     apiKey,

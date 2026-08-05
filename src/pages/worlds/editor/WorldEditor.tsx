@@ -131,8 +131,8 @@ export default function WorldEditor() {
 
   return (
     <>
-      <div className="page-fade-in min-h-svh bg-paper">
-        <div className="page-width flex min-h-svh flex-col px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-7">
+      <div className="page-fade-in bg-paper">
+        <div className="page-width flex min-h-below-nav flex-col px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-7">
           {isFirstUserWorld && (
             <div className="rounded-md border border-rose-line bg-rose-pale/45 px-4 py-3">
               <p className="flex flex-col items-start gap-1 font-serif-zh text-[16px] leading-7 text-ink">

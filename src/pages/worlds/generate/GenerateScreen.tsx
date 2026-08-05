@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, FastForward, Heart, Pause, Play, Rewind } from 'lucide-react'
+import { ArrowRight, FastForward, Heart, Pause, Play, Rewind, SkipForward } from 'lucide-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -22,6 +22,8 @@ import {
 import GenerateOutput from './components/GenerateOutput'
 import ParagraphLikePanel from '../taste/ParagraphLikePanel'
 import MarkerRail, { revealMarker } from '../shared/MarkerRail'
+import AdditionsIndicator from '../shared/AdditionsIndicator'
+import { useWorldAdditions, type WorldAddition } from '../shared/useWorldAdditions'
 import { useGatedReveal } from './hooks/useGatedReveal'
 import { useUnsavedExitGuard } from './hooks/useUnsavedExitGuard'
 import { buildExpandPrefix, buildLikeContext, splitParagraphs } from './paragraphs'
@@ -129,16 +131,24 @@ export default function GenerateScreen() {
   // without it, every continuation in resume mode would POST an empty prompt and 400.
   const promptText = statePrompt || resumePiece?.prompt || promptDetailQuery.data?.prompt.text || ''
 
+  // A resumed piece keeps the additions it was written with; a fresh one takes whatever the
+  // reader has switched on. Continuing a story must not change the world underneath it.
+  const { activeIds, additions, ready: additionsReady } = useWorldAdditions(id)
+  const additionIds = resumeMode ? resumePiece?.addition_ids ?? [] : activeIds
+
   const startedRef = useRef(false)
   useEffect(() => {
     if (resumeMode || startedRef.current) return
+    // The active set is derived from the checked-out version, so starting before the world has
+    // resolved would generate against the bare body and then save that as the piece's stamp.
+    if (!additionsReady) return
     if (!promptText) {
       // Nothing to generate and nothing to wait for — bounce back to the prompt page.
       if (!needPromptFetch) navigate(backHref, { replace: true, state: exitState })
       return
     }
     startedRef.current = true
-    generate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste })
+    generate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds })
     // Reset the guard on cleanup so StrictMode's mount→unmount→mount in dev re-issues
     // the run instead of leaving the aborted first one stranded. runGeneration aborts
     // the prior controller and gates the stale run by generationId, so the replaced
@@ -147,7 +157,7 @@ export default function GenerateScreen() {
       startedRef.current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeMode, promptText, needPromptFetch])
+  }, [resumeMode, promptText, needPromptFetch, additionsReady])
 
   const [saving, setSaving] = useState(false)
   const readerUnsaved = output.length > 0 && !saving
@@ -170,6 +180,7 @@ export default function GenerateScreen() {
           model,
           provider: provider || undefined,
           useTaste,
+          additionIds,
         }),
       }) as SaveResponse
       stop()
@@ -180,6 +191,7 @@ export default function GenerateScreen() {
         model,
         provider: provider || null,
         used_taste: result.usedTaste,
+        addition_ids: additionIds,
         created_at: Date.now(),
         updated_at: Date.now(),
       })
@@ -227,6 +239,9 @@ export default function GenerateScreen() {
         model: result.model,
         provider: result.provider,
         used_taste: result.used_taste,
+        // Never rewritten on a resume — the piece keeps the set it was born with, which is what
+        // the PATCH leaves alone server-side.
+        addition_ids: result.addition_ids,
         created_at: result.created_at,
         updated_at: result.updated_at,
       })
@@ -274,12 +289,14 @@ export default function GenerateScreen() {
         initialText={resumeMode ? resumePiece?.body ?? '' : ''}
         initialStructure={resumeMode ? resumePiece?.structure ?? null : null}
         initialParagraphIndex={resumeParagraphIndex}
+        additions={additions}
+        additionIds={additionIds}
         onSave={saveNewPiece}
         onSaveOverwrite={saveResume}
         onExit={handleExit}
-        onExpand={(priorText, direction) => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, priorText, direction })}
-        onContinue={(priorText, direction) => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, priorText, direction })}
-        onRegenerate={(priorText, direction) => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, priorText, direction })}
+        onExpand={(priorText, direction) => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
+        onContinue={(priorText, direction) => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
+        onRegenerate={(priorText, direction) => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
       />
       <ConfirmDialog
         open={confirmOpen}
@@ -324,6 +341,10 @@ interface GenerateReaderProps {
   initialStructure: PieceStructure | null
   // Paragraph to open the resumed seed on, matching where the reader was on the piece view.
   initialParagraphIndex: number | null
+  // The world's additions, and the ones this run is writing with — the reader's switched-on set
+  // for a fresh generation, the piece's own stamp when resuming.
+  additions: WorldAddition[]
+  additionIds: number[]
   onSave: (text: string, structure: PieceStructure) => void
   onSaveOverwrite: (text: string, structure: PieceStructure) => void
   onExit: () => void
@@ -353,6 +374,8 @@ function GenerateReader({
   initialText,
   initialStructure,
   initialParagraphIndex,
+  additions,
+  additionIds,
   onSave,
   onSaveOverwrite,
   onExit,
@@ -434,7 +457,7 @@ function GenerateReader({
   const slower = () => setReadingSpeed(Math.max(READING_SPEED_MIN, readingSpeed - SPEED_BUTTON_STEP))
   const faster = () => setReadingSpeed(Math.min(READING_SPEED_MAX, readingSpeed + SPEED_BUTTON_STEP))
 
-  const { revealedText, revealComplete } = useGatedReveal({
+  const { revealedText, revealComplete, skipToEnd } = useGatedReveal({
     buffer: output,
     backendComplete: displayComplete,
     active: !showingSeed && !paused && !error && frozenText === null,
@@ -542,9 +565,9 @@ function GenerateReader({
   }
 
   // Per-paragraph continue: keep everything through the tapped paragraph, drop all the
-  // text below it, and regenerate from there. Uses the regenerate path (system + prompt +
-  // kept text as an assistant prefill, no special instruction) so the model just picks
-  // up the story from that cut point.
+  // text below it, and regenerate from there. Identical to Continue on the server — same
+  // system prompt, same original prompt, same continuation instruction — the only
+  // difference is that the prior text is cut at this paragraph rather than the whole story.
   const handleContinueFrom = (paragraphIndex: number, direction: string) => {
     startAction(buildExpandPrefix(displayText, paragraphIndex), 'regenerate', direction)
   }
@@ -652,6 +675,10 @@ function GenerateReader({
           </>
         )}
       </div>
+
+      {/* What the world carries for this run. On a resume these are the piece's own additions,
+          not whatever is switched on now, so the line matches the story being continued. */}
+      <AdditionsIndicator additions={additions} activeIds={additionIds} className="shrink-0" />
 
       <div className="relative min-h-0 flex-1">
       <div
@@ -831,6 +858,18 @@ function GenerateReader({
                   className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity disabled:opacity-30 active:text-ink active:opacity-70"
                 >
                   <FastForward aria-hidden="true" className="h-5 w-5 fill-current" />
+                </button>
+                {/* Dump the rest of the buffer on screen at once. The text arrives well ahead
+                    of the paced reveal, so this only lights up once the stream itself is
+                    done — until then there's no "rest" to show, just more of the same wait. */}
+                <button
+                  type="button"
+                  aria-label={t.skipToEnd}
+                  disabled={!displayComplete}
+                  onClick={skipToEnd}
+                  className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity disabled:opacity-30 active:text-ink active:opacity-70"
+                >
+                  <SkipForward aria-hidden="true" className="h-5 w-5 fill-current" />
                 </button>
               </>
             ) : null}

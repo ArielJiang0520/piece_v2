@@ -86,6 +86,25 @@ sqlite.run(`
     -- 1 when this piece was generated with the reader's taste profile applied (toggle on AND
     -- they had a non-empty profile for this world). Drives the "shaped by your taste" meta line.
     used_taste INTEGER NOT NULL DEFAULT 0,
+    -- JSON array of the world_additions that were switched on when this piece was written, so
+    -- continuing it rebuilds the same world text no matter what is switched on now. Null means
+    -- none were on (or the piece predates additions) — the bare world body, as before.
+    addition_ids TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  -- Optional blocks of world text — a character, a relationship, a rule — that the reader
+  -- switches on and off, and which append to the world body at the model call. Version-owned
+  -- like prompt_clusters: deleting a version deletes its additions, and a new version starts
+  -- with none. The on/off set itself is not here; it is a per-device preference in localStorage.
+  CREATE TABLE IF NOT EXISTS world_additions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    world_version_id INTEGER NOT NULL REFERENCES world_versions(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -190,13 +209,14 @@ function rebuildPiecesTable() {
         model TEXT,
         provider TEXT,
         used_taste INTEGER NOT NULL DEFAULT 0,
+        addition_ids TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
     `)
     sqlite.run(`
-      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, structure, model, provider, used_taste, created_at, updated_at)
-      SELECT id, user_id, world_id, prompt_id, body, structure, model, provider, used_taste, created_at, updated_at FROM pieces;
+      INSERT INTO pieces_new (id, user_id, world_id, prompt_id, body, structure, model, provider, used_taste, addition_ids, created_at, updated_at)
+      SELECT id, user_id, world_id, prompt_id, body, structure, model, provider, used_taste, addition_ids, created_at, updated_at FROM pieces;
     `)
     sqlite.run('DROP TABLE pieces;')
     sqlite.run('ALTER TABLE pieces_new RENAME TO pieces;')
@@ -409,6 +429,9 @@ addColumnIfMissing('pieces', 'structure', 'structure TEXT')
 // Whether the reader's taste profile shaped this generation. Added before the
 // world_version_id drop below so the pieces-table rebuild fallback can copy the column.
 addColumnIfMissing('pieces', 'used_taste', 'used_taste INTEGER NOT NULL DEFAULT 0')
+// The world additions this piece was written with (JSON array of ids). Added before the
+// world_version_id drop below so the pieces-table rebuild fallback can copy the column.
+addColumnIfMissing('pieces', 'addition_ids', 'addition_ids TEXT')
 // Backfill: existing pieces last "updated" when they were created.
 sqlite.run('UPDATE pieces SET updated_at = created_at WHERE updated_at = 0;')
 addColumnIfMissing('prompts', 'similar_to_prompt_id', 'similar_to_prompt_id INTEGER REFERENCES prompts(id)')
@@ -631,6 +654,7 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_variations ON prompt_clusters(user_id, world_id, prompt_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_version ON prompt_clusters(user_id, world_id, world_version_id);
   CREATE INDEX IF NOT EXISTS idx_taste_likes_world_version ON taste_likes(user_id, world_id, world_version_id);
+  CREATE INDEX IF NOT EXISTS idx_world_additions_version ON world_additions(user_id, world_id, world_version_id, created_at, id);
   CREATE INDEX IF NOT EXISTS idx_worlds_user_updated ON worlds(user_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_world_versions_world_created ON world_versions(world_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -755,6 +779,18 @@ export const pieces = sqliteTable('pieces', {
   model: text('model'),
   provider: text('provider'),
   used_taste: integer('used_taste').notNull().default(0),
+  addition_ids: text('addition_ids'),
+  created_at: integer('created_at').notNull(),
+  updated_at: integer('updated_at').notNull(),
+})
+
+export const worldAdditions = sqliteTable('world_additions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  world_id: integer('world_id').notNull().references(() => worlds.id),
+  world_version_id: integer('world_version_id').notNull().references(() => worldVersions.id),
+  name: text('name').notNull(),
+  body: text('body').notNull().default(''),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })
@@ -791,4 +827,4 @@ export const worldChatMessages = sqliteTable('world_chat_messages', {
   created_at: integer('created_at').notNull(),
 })
 
-export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, tasteLikes, tasteProfile, worldChatMessages } })
+export const db = drizzle(sqlite, { schema: { users, sessions, worlds, worldVersions, promptClusters, prompts, pieces, worldAdditions, tasteLikes, tasteProfile, worldChatMessages } })

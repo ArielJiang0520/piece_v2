@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { readServerSentEvents } from '@/utils/sse'
+import { useWorldAdditions } from '../shared/useWorldAdditions'
 
 export interface ChatMessage {
   id: number
@@ -20,6 +21,11 @@ interface SendOptions {
 export function useWorldChat(worldId: string | undefined) {
   const queryClient = useQueryClient()
   const controllerRef = useRef<AbortController | null>(null)
+  // Read through a ref so `send` keeps a stable identity — the switched-on set changes as the
+  // reader toggles additions, and every send should use the current one regardless.
+  const { activeIds } = useWorldAdditions(worldId)
+  const additionIdsRef = useRef<number[]>(activeIds)
+  additionIdsRef.current = activeIds
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
   // While a turn is in flight this holds the whole thread (server rows + the streaming
@@ -67,7 +73,7 @@ export function useWorldChat(worldId: string | undefined) {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({ message, replace_from_id: options.replaceFromId }),
+        body: JSON.stringify({ message, replace_from_id: options.replaceFromId, additionIds: additionIdsRef.current }),
       })
 
       if (!response.ok || !response.body) {

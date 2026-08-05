@@ -79,6 +79,9 @@ export interface PieceDetail {
   model: string | null
   provider: string | null
   used_taste: boolean
+  // The world additions that were switched on when this piece was written. Continuing it uses
+  // these, not whatever is switched on now, so a resumed story keeps the world it started in.
+  addition_ids: number[]
   created_at: number
   // Equals created_at until the piece is resumed and re-saved (see PieceStripPiece).
   updated_at: number
@@ -92,6 +95,7 @@ export interface OverwritePieceResponse {
   model: string | null
   provider: string | null
   used_taste: boolean
+  addition_ids: number[]
   created_at: number
   updated_at: number
 }

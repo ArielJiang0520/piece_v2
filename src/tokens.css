@@ -132,6 +132,15 @@ body {
   margin-inline: auto;
 }
 
+/* Fills the screen from under the top nav down — for the editors, whose writing surface stretches
+   to the bottom. The nav is sticky, not fixed, so its rows (3rem, plus the 3.5rem action row the
+   editors put in it) are taken out of the flow already: a page that asks for a further 100vh below
+   them is that much taller than the screen, and ends in dead space. svh, not vh, for the same
+   reason — mobile Chrome resolves vh against the URL-bar-hidden viewport. */
+.min-h-below-nav {
+  min-height: calc(100svh - 5.75rem);
+}
+
 /* ---------- Typography roles ---------- */
 /* Use these four roles ruthlessly. Editorial discipline = the design. */
 

@@ -9,6 +9,7 @@ import { abortGeneration, clearGeneration, registerGeneration, withGenerationSlo
 import { budgeted } from '../../llm-budget'
 import { describeStreamError, parseOpenRouterError } from '../../openrouter-errors'
 import { loadTasteForGeneration } from '../../taste-profile'
+import { worldBodyWithAdditions } from '../../world-additions'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
 
@@ -17,7 +18,7 @@ function ownerKey(userId: number, worldId: number) {
   return `${userId}:${worldId}`
 }
 
-function buildSystemPrompt(worldBody: string, continuing: boolean, tasteSection: string): string {
+function buildSystemPrompt(worldBody: string, continuing: boolean, tasteSection: string, promptText: string): string {
   const sections: string[] = []
   if (worldBody.trim()) {
     sections.push(`# World setting\n${worldBody.trim()}`)
@@ -29,10 +30,27 @@ function buildSystemPrompt(worldBody: string, continuing: boolean, tasteSection:
 
   // When continuing, the assistant message holds the story so far and the user turn asks
   // to extend it. Spell that out so the model never re-reads it as a brief to restart.
+  //
+  // The original prompt rides along HERE, in the system message, rather than as its own user
+  // turn: a standalone "write a story about X" user message is what made these models start
+  // over. Stated as a standing brief it does the opposite — it keeps a long continuation from
+  // drifting off the premise, which is the only thing the story text alone can't guarantee.
   if (continuing) {
-    sections.push(
-      `# Continuation\nThe assistant message already contains the story so far. Your job is to continue it from its final sentence as the same narrator, in the same scene, language, voice, and tense. Do NOT start over, recap, summarize, or repeat any wording that already appears — write only what happens next.`,
-    )
+    const continuation = [
+      '# Continuation',
+      'The assistant message already contains the story so far. Your job is to continue it from its final sentence as the same narrator, in the same scene, language, voice, and tense. Do NOT start over, recap, summarize, or repeat any wording that already appears — write only what happens next.',
+    ]
+    if (promptText.trim()) {
+      continuation.push(
+        '',
+        'the story so far was written from this prompt, and that prompt IS STILL IN FORCE. It is not satisfied yet. Everything you write next must keep serving it:',
+        '',
+        '"""',
+        promptText.trim(),
+        '"""',
+      )
+    }
+    sections.push(continuation.join('\n'))
   }
 
   // The reader's distilled taste, injected as a SECONDARY nudge: the world and prompt above
@@ -73,6 +91,7 @@ const EXPANSION_INSTRUCTION = [
 
 const CONTINUATION_INSTRUCTION = [
   'Continue the story above from exactly where it stops — pick up at the very next beat.',
+  'The prompt this story was written from is in the system message and still stands — keep the continuation working toward it.',
   'Do NOT restart, retell, summarize, or repeat any text already written above.',
   'Write only what happens next, matching the existing scene, language, voice, tense, and tone.',
 ].join('\n')
@@ -146,10 +165,11 @@ function buildMessages(args: {
 
   // Continuation — both the whole-story "Continue" and the per-paragraph cut. Mirrors the
   // (working) expansion shape: story so far as an assistant message, then a user turn that
-  // asks to extend it. We deliberately drop the original prompt turn — on these models a
+  // asks to extend it. The original prompt is not a turn of its own — on these models a
   // standalone "write a story about X" user message is what made the model restart from
-  // scratch, and ending the request on an assistant message (prefill) restarts too. The
-  // story itself carries all the context the continuation needs.
+  // scratch, and ending the request on an assistant message (prefill) restarts too. It
+  // reaches the model through the system prompt's Continuation section instead, so the
+  // continuation still knows the brief it is writing toward.
   if (isContinuation) {
     return [
       system,
@@ -167,7 +187,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, useTaste, mode, priorText, direction } = await c.req.json()
+  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, useTaste, mode, priorText, direction, additionIds } = await c.req.json()
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
@@ -186,7 +206,11 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   // The reader can switch the taste profile off; when on, inject this world's taste profile
   // as a soft secondary section.
   const tasteSection = useTaste === true ? buildTasteSection(userId, worldId) : ''
-  const systemPrompt = buildSystemPrompt(world.body, isContinuation, tasteSection)
+  // The switched-on additions read as part of the world description. On a resume the client
+  // sends the set the piece was written with, not whatever is on now, so a continuation can't
+  // lose a character halfway through the story.
+  const worldBody = worldBodyWithAdditions(userId, worldId, world.current_version_id, world.body, additionIds)
+  const systemPrompt = buildSystemPrompt(worldBody, isContinuation, tasteSection, promptText)
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)

@@ -5,6 +5,7 @@ import { type Variables, authMiddleware } from '../middleware'
 import { getUserId, isValidModelId, paramInt } from '../route-helpers'
 import { parseStructure, serializeStructure } from '../../src/pages/worlds/shared/pieceStructure'
 import { tasteApplies } from '../taste-profile'
+import { parseAdditionIds } from '../world-additions'
 
 const pieceRoutes = new Hono<{ Variables: Variables }>()
 
@@ -19,9 +20,21 @@ const PIECE_SELECT = {
   model: pieces.model,
   provider: pieces.provider,
   used_taste: pieces.used_taste,
+  addition_ids: pieces.addition_ids,
   created_at: pieces.created_at,
   updated_at: pieces.updated_at,
 } as const
+
+// The stamp is written once, when the piece is first saved, and never rewritten — PATCH below
+// leaves it alone. Resuming a piece continues it with the world text it was born with.
+function pieceResponse(piece: { used_taste: number; addition_ids: string | null; structure: string | null; body: string }) {
+  return {
+    ...piece,
+    used_taste: !!piece.used_taste,
+    addition_ids: parseAdditionIds(piece.addition_ids),
+    structure: parseStructure(piece.structure, piece.body),
+  }
+}
 
 pieceRoutes.get('/:id', authMiddleware, (c) => {
   const userId = getUserId(c)
@@ -33,7 +46,7 @@ pieceRoutes.get('/:id', authMiddleware, (c) => {
     .where(and(eq(pieces.id, id), eq(pieces.user_id, userId)))
     .get()
   if (!piece) return c.json({ error: 'Not found' }, 404)
-  return c.json({ ...piece, used_taste: !!piece.used_taste, structure: parseStructure(piece.structure, piece.body) })
+  return c.json(pieceResponse(piece))
 })
 
 // Overwrite a piece in place — used when a saved piece is resumed, continued, and
@@ -89,7 +102,7 @@ pieceRoutes.patch('/:id', authMiddleware, async (c) => {
     .where(and(eq(pieces.id, id), eq(pieces.user_id, userId)))
     .get()
   if (!piece) return c.json({ error: 'Not found' }, 404)
-  return c.json({ ...piece, used_taste: !!piece.used_taste, structure: parseStructure(piece.structure, piece.body) })
+  return c.json(pieceResponse(piece))
 })
 
 export default pieceRoutes

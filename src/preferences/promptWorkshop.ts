@@ -72,30 +72,40 @@ export function viewingDraft(workshop: PromptWorkshop): string | null {
   return workshop.drafts[workshop.viewing] ?? null
 }
 
-// Re-running the draft on screen: the same note, against the same conversation that produced it.
-// `historyFor(index - 1)` is everything BEFORE this draft, and `notes[index]` is the note that made
-// it — so the request is byte-identical to the one that produced what is on screen, which is what
-// makes it a fair second look at the same ask rather than a new round.
+// Re-running a round: `historyFor(index - 1)` is everything BEFORE this draft, and `notes[index]`
+// is the note that made it — so with no `note` given the request is byte-identical to the one that
+// produced what is on screen, which is what makes it a fair second look at the same ask rather than
+// a new round.
+//
+// Pass `note` to run the round again with the ask rewritten. That is the same operation — the
+// round is redone in place, not added to — which is why it is the same request and not a mode of
+// its own: a rewritten ask is just a re-run whose question changed.
 export function regenerationRequest(
   workshop: PromptWorkshop,
   index: number,
+  note?: string,
 ): { notes: string[]; drafts: string[]; note: string } | null {
-  const note = workshop.notes[index]
-  if (note === undefined) return null
+  const asked = note ?? workshop.notes[index]
+  if (asked === undefined) return null
   const history = historyFor(workshop, index - 1)
-  return { notes: [...history.notes, note], drafts: history.drafts, note }
+  return { notes: [...history.notes, asked], drafts: history.drafts, note: asked }
 }
 
-// The re-run lands in place of the draft it replaces. Drafts made from the old one go, for the
-// same reason stepping back and revising drops them: they were written against text that no longer
-// exists, so keeping them would leave the trail claiming a descent that isn't there.
+// The re-run lands in place of the draft it replaces, and — when the ask was rewritten — so does
+// the note, since the trail has to say what actually produced the draft under it. Drafts made from
+// the old one go, for the same reason stepping back and revising drops them: they were written
+// against text that no longer exists, so keeping them would leave the trail claiming a descent that
+// isn't there.
 export function withRegeneratedDraft(
   workshop: PromptWorkshop,
   draft: string,
   index: number,
+  note?: string,
 ): PromptWorkshop {
+  const notes = workshop.notes.slice(0, index + 1)
+  if (note !== undefined) notes[index] = note
   return {
-    notes: workshop.notes.slice(0, index + 1),
+    notes,
     drafts: [...workshop.drafts.slice(0, index), draft],
     viewing: index,
   }

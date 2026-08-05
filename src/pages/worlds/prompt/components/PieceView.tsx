@@ -23,6 +23,9 @@ interface PieceViewProps {
   pieceModelLabel: string | null
   // Non-null when the reader's taste profile shaped this piece; rendered as a meta line.
   pieceTasteLabel: string | null
+  // Non-null when this piece was written with world additions switched on; names them, and says
+  // so when that set no longer matches what is on (or has been deleted since).
+  pieceAdditionsLabel: string | null
   pieceFooterStatsLabel: string | null
   pieceNumber: number | null
   readingFont: ReadingFont
@@ -42,6 +45,7 @@ export default function PieceView({
   pieceMetaLabel,
   pieceModelLabel,
   pieceTasteLabel,
+  pieceAdditionsLabel,
   pieceFooterStatsLabel,
   pieceNumber,
   readingFont,
@@ -181,6 +185,11 @@ export default function PieceView({
                 <div className="t-meta mt-0.5 flex items-center gap-1 text-ink-4">
                   <Sparkles aria-hidden="true" className="h-3 w-3" />
                   {pieceTasteLabel}
+                </div>
+              )}
+              {pieceAdditionsLabel && (
+                <div className="t-meta mt-0.5 text-ink-4">
+                  {pieceAdditionsLabel}
                 </div>
               )}
             </div>

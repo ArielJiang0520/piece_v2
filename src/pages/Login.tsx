@@ -62,8 +62,10 @@ export default function Login() {
   }
 
   return (
-    <div className="page-fade-in min-h-screen bg-paper px-4">
-      <div className="page-width relative flex min-h-screen flex-col justify-center py-16">
+    <div className="page-fade-in bg-paper px-4">
+      {/* No nav on this screen, so the panel centers against the whole viewport — svh so mobile
+          Chrome measures it with the URL bar showing rather than hidden. */}
+      <div className="page-width relative flex min-h-svh flex-col justify-center py-16">
         <div
           className="absolute right-4 top-5 grid w-28 grid-cols-2 overflow-hidden rounded-full border border-rose-line p-0.5"
           aria-label={t.language}

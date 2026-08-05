@@ -5,6 +5,7 @@ import { apiFetch } from '@/api'
 import { entityLabel } from '@/config'
 import { useUiText } from '@/i18n'
 import { useLanguageId } from '@/preferences/language'
+import { useWorldAdditions } from '../../shared/useWorldAdditions'
 
 // AI help while editing a prompt, as an inspector over the editor rather than a screen of its own.
 // The prompt stays on the page above this sheet the whole time, and a pass is written straight into
@@ -33,6 +34,8 @@ export default function ReworkSheet({ worldId, text, onPass, onTryAgain, onClose
   const t = useUiText()
   const language = useLanguageId()
   const entityLabelSingular = entityLabel('prompt', {}, language)
+  // A pass reads the same world the piece will be written against, additions included.
+  const { activeIds: additionIds } = useWorldAdditions(worldId)
 
   const [note, setNote] = useState('')
   const [isWorking, setIsWorking] = useState(false)
@@ -72,6 +75,7 @@ export default function ReworkSheet({ worldId, text, onPass, onTryAgain, onClose
         text: anchor,
         notes: ask ? [ask] : [],
         drafts: [],
+        additionIds,
       }),
     })) as { draft: string }
   }

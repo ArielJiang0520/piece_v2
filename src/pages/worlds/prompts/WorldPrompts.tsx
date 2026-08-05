@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ChevronRight, GitBranch, Heart, Search, Plus, X, Lightbulb, PenLine } from 'lucide-react'
+import { ArrowUp, ChevronRight, GitBranch, Heart, Search, X, Lightbulb, Wrench } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -14,9 +14,12 @@ import TextField from '@/components/TextField'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { useLanguageId } from '@/preferences/language'
 import { setTasteProfileEnabled, useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
+import NewPromptMenu from './NewPromptMenu'
+import AdditionsIndicator from '../shared/AdditionsIndicator'
 import WorldSortMenu from '../shared/WorldSortMenu'
 import WorldTabs from '../shared/WorldTabs'
 import { useScrollTopButton } from '../shared/useScrollTopButton'
+import { useWorldAdditions } from '../shared/useWorldAdditions'
 
 interface ClusterGroup {
   id: number
@@ -27,6 +30,9 @@ interface ClusterGroup {
   latest_piece_at: number | null
   similar_count: number
   is_generated: boolean
+  // Whether the cluster's latest prompt has been written with world additions switched on. Taken
+  // from that prompt alone: it is the cluster's current text, so it is what the card is about.
+  used_additions: boolean
 }
 
 interface PromptResponse {
@@ -111,6 +117,17 @@ export default function WorldPrompts() {
   const [searchInput, setSearchInput] = useState(queryParam)
   const isSearching = queryParam.length > 0
 
+  // Additions are a mode the reader sits in, so the list follows it: it shows the prompts written
+  // the way the world currently stands — with the additions that are on, or with none of them when
+  // nothing is on — and the wrench steps back out to everything on the version.
+  const { additions, activeIds, activeAdditions } = useWorldAdditions(id)
+  const [followShelf, setFollowShelf] = useState(true)
+  const narrowingToAdditions = followShelf && activeAdditions.length > 0
+  // The plain shelf only reads as a narrowing once the world has additions to be without; before
+  // that an empty list is just an empty world.
+  const narrowingToPlain = followShelf && activeAdditions.length === 0 && additions.length > 0
+  const additionsParam = !followShelf ? '' : activeIds.length > 0 ? activeIds.join(',') : 'none'
+
   useEffect(() => {
     if (searchInput.trim() === queryParam) return
     const t = setTimeout(() => {
@@ -134,9 +151,9 @@ export default function WorldPrompts() {
   // The list is always the checked-out version's prompts — a version is a branch, and its prompts
   // are reached by switching to it, not by browsing across from another one.
   const clustersQuery = useInfiniteQuery({
-    queryKey: ['world-clusters', id, sort],
+    queryKey: ['world-clusters', id, sort, additionsParam],
     queryFn: ({ pageParam }) =>
-      apiFetch(`/api/worlds/${id}/clusters?page=${pageParam}&limit=${PAGE_SIZE}&sort=${sort}`) as Promise<PromptResponse>,
+      apiFetch(`/api/worlds/${id}/clusters?page=${pageParam}&limit=${PAGE_SIZE}&sort=${sort}&additions=${additionsParam}`) as Promise<PromptResponse>,
     enabled: !!id && !isSearching,
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.hasMore ? lastPage.page + 1 : undefined,
@@ -144,8 +161,8 @@ export default function WorldPrompts() {
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = clustersQuery
 
   const searchQuery = useQuery({
-    queryKey: ['world-clusters-search', id, queryParam],
-    queryFn: () => apiFetch(`/api/worlds/${id}/clusters/search?q=${encodeURIComponent(queryParam)}`) as Promise<SearchResponse>,
+    queryKey: ['world-clusters-search', id, queryParam, additionsParam],
+    queryFn: () => apiFetch(`/api/worlds/${id}/clusters/search?q=${encodeURIComponent(queryParam)}&additions=${additionsParam}`) as Promise<SearchResponse>,
     enabled: !!id && isSearching,
   })
 
@@ -255,18 +272,13 @@ export default function WorldPrompts() {
 
   if (!worldQuery.data || (isSearching ? false : !clustersQuery.data)) {
     return (
-      <div className="min-h-screen bg-paper">
-        <div className="page-width min-h-screen px-6 pb-32 pt-0">
+      <div className="bg-paper">
+        <div className="page-width px-6 pb-32 pt-0">
           <Skeleton className="mt-6 h-11 w-48" />
           <div className="sticky top-23 z-10 -mx-6 mt-6 border-y border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
-            <div className="flex items-center gap-3 py-3">
+            <div className="flex items-center gap-2 py-3">
               <Skeleton className="h-11 min-w-0 flex-1 rounded-full" />
-              <Skeleton className="h-11 w-28 shrink-0 rounded-full" />
               <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
-            </div>
-            <div className="flex items-stretch gap-2 pb-3">
-              <Skeleton className="h-10 flex-1 rounded-full" />
-              <Skeleton className="h-10 flex-1 rounded-full" />
             </div>
           </div>
           <div className="mt-5 flex items-center justify-between gap-4">
@@ -280,10 +292,14 @@ export default function WorldPrompts() {
   }
 
   return (
-    <div className="page-fade-in min-h-screen bg-paper">
-      <div className="page-width min-h-screen px-6 pb-32 pt-0">
+    <div className="page-fade-in bg-paper">
+      <div className="page-width px-6 pb-32 pt-0">
+        {/* The additions bar rides inside the pinned block, so what the list is standing in stays on
+            screen as you scroll it — above the controls, since it frames them rather than
+            qualifying them. Its own hairline separates it from the row beneath. */}
         <div className="sticky top-23 z-10 -mx-6 border-b border-rose-line/70 bg-paper/90 px-6 backdrop-blur">
-          <div className="flex items-center gap-3 py-3">
+          <AdditionsIndicator additions={additions} activeIds={activeIds} className="-mx-6" />
+          <div className="flex items-center gap-2 py-3">
             <div className="min-w-0 flex-1">
               <TextField
                 type="text"
@@ -306,26 +322,28 @@ export default function WorldPrompts() {
                 )}
               />
             </div>
+            {/* Only there once the world has additions at all — until then every prompt was written
+                the same way, and the list is already everything. */}
+            {additions.length > 0 && (
+              <button
+                type="button"
+                aria-pressed={followShelf}
+                aria-label={
+                  !followShelf
+                    ? t.allPromptsInstead
+                    : activeAdditions.length > 0 ? t.onlyAdditionPrompts : t.onlyPlainPrompts
+                }
+                onClick={() => setFollowShelf(value => !value)}
+                className={`grid h-12 w-12 shrink-0 place-items-center rounded-full border transition-[border-color,background-color,color,transform] duration-200 active:translate-y-px ${
+                  followShelf
+                    ? 'border-rose/40 bg-rose-pale text-rose-deep'
+                    : 'border-rose-line/80 bg-paper/60 text-ink-4'
+                }`}
+              >
+                <Wrench aria-hidden="true" className="h-4.5 w-4.5" />
+              </button>
+            )}
             <WorldSortMenu options={sortOptions} value={sort} onChange={handleSortChange} />
-          </div>
-          {/* The two ways to arrive at a prompt, pinned under the search field: type it yourself, or
-              have AI draft one from a word or two. They lead to the same builder — the AI screen
-              hands its draft to it — so they belong together, at different weights, not as rivals. */}
-          <div className="flex items-stretch gap-2 pb-3">
-            <Link
-              to={`/worlds/${id}/prompt/new`}
-              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-rose font-serif-zh text-[14px] italic leading-none text-white transition-all duration-200 active:translate-y-px active:bg-rose-deep"
-            >
-              <Plus aria-hidden="true" className="h-4 w-4 stroke-[1.8]" />
-              <span>{t.newEntity(entityLabel('prompt', { capitalize: true }, language))}</span>
-            </Link>
-            <Link
-              to={`/worlds/${id}/ideas`}
-              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-rose-line/80 bg-paper font-serif-zh text-[14px] italic leading-none text-ink-2 transition-transform duration-200 active:translate-y-px active:bg-rose-tint/45"
-            >
-              <PenLine aria-hidden="true" className="h-4 w-4 text-rose" />
-              <span>{t.workshopEntry(entityLabel('prompt', {}, language))}</span>
-            </Link>
           </div>
         </div>
 
@@ -344,20 +362,22 @@ export default function WorldPrompts() {
           </div>
         )}
 
-        {/* Both entries now ride in the pinned bar, so the only thing left floating is the way back
-            up to it — centred, not parked in the right corner a left thumb has to stretch for. */}
+        {/* Stays centred while the new-prompt button holds the corner: its band spans the width, so
+            it lets taps through everywhere but the button itself. */}
         {showScrollTop && (
-          <div className="fixed inset-x-0 bottom-[calc(1.75rem+env(safe-area-inset-bottom))] z-40 flex items-center justify-center px-5">
+          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(1.75rem+env(safe-area-inset-bottom))] z-40 flex items-center justify-center px-5">
             <button
               type="button"
               onClick={scrollToTop}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-transform duration-200 active:translate-y-px"
+              className="pointer-events-auto grid h-11 w-11 shrink-0 place-items-center rounded-full bg-paper text-ink shadow-(--shadow-feather) transition-transform duration-200 active:translate-y-px"
               aria-label={t.scrollToTop}
             >
               <ArrowUp aria-hidden="true" className="h-5 w-5" />
             </button>
           </div>
         )}
+
+        <NewPromptMenu worldId={id} />
 
         {!isSearching && (
           <div className="mt-6 flex items-center gap-3 rounded-2xl border border-rose-line/80 bg-paper/60 px-4 py-4">
@@ -402,7 +422,11 @@ export default function WorldPrompts() {
             <p className="t-meta mb-5">
               {isSearching
                 ? t.noMatches
-                : t.noEntitiesYet(entityLabel('prompt', { plural: true }, language))}
+                : narrowingToAdditions
+                  ? t.noAdditionPrompts
+                  : narrowingToPlain
+                    ? t.noPlainPrompts
+                    : t.noEntitiesYet(entityLabel('prompt', { plural: true }, language))}
             </p>
           </div>
         ) : (
@@ -430,11 +454,19 @@ export default function WorldPrompts() {
                       onClick={event => saveClusterReturnState(group.id, event)}
                       className="block py-7 transition-transform duration-200 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-rose/30 focus-visible:ring-offset-4 focus-visible:ring-offset-paper"
                     >
-                      <RelativeTimeStatus
-                        className="mb-3 block"
-                        timestamp={group.latest_piece_at}
-                        emptyLabel={t.noEntitiesYet(entityLabel('piece', { plural: true }, language))}
-                      />
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <RelativeTimeStatus
+                          className="block min-w-0"
+                          timestamp={group.latest_piece_at}
+                          emptyLabel={t.noEntitiesYet(entityLabel('piece', { plural: true }, language))}
+                        />
+                        {group.used_additions && (
+                          <span className="shrink-0 text-rose" title={t.builtWithAdditions}>
+                            <Wrench aria-hidden="true" className="h-3.5 w-3.5" />
+                            <span className="sr-only">{t.builtWithAdditions}</span>
+                          </span>
+                        )}
+                      </div>
                       <p className="font-serif-zh text-[16px] leading-7 text-ink-2 line-clamp-4">
                         {group.title}
                       </p>

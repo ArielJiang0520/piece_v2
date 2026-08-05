@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="page-width min-h-screen px-4 py-12">
+      <div className="page-width px-4 py-12">
         <Skeleton className="mb-8 h-9 w-40" />
         <div className="flex flex-col gap-3">
           {Array.from({ length: 4 }, (_, index) => (

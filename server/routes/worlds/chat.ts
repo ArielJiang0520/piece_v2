@@ -10,6 +10,7 @@ import { readServerSentEvents } from '../../../src/utils/sse'
 import { clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
 import { budgeted } from '../../llm-budget'
 import { describeStreamError, parseOpenRouterError } from '../../openrouter-errors'
+import { worldBodyWithAdditions } from '../../world-additions'
 
 const chatRoutes = new Hono<{ Variables: Variables }>()
 
@@ -96,7 +97,7 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { message, replace_from_id: replaceFromId } = await c.req.json().catch(() => ({}))
+  const { message, replace_from_id: replaceFromId, additionIds } = await c.req.json().catch(() => ({}))
   const messageText = typeof message === 'string' ? message.trim() : ''
   if (!messageText) return c.json({ error: 'Message required' }, 400)
 
@@ -140,7 +141,7 @@ chatRoutes.post('/', authMiddleware, async (c: any) => {
     .run()
 
   const messages = [
-    { role: 'system', content: buildSystemPrompt(world.body) },
+    { role: 'system', content: buildSystemPrompt(worldBodyWithAdditions(userId, worldId, world.current_version_id, world.body, additionIds)) },
     ...history.map(turn => ({ role: turn.role, content: turn.content })),
     { role: 'user', content: messageText },
   ]

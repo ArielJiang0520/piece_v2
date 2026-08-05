@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { sliceByUnits } from '@/utils/textUnits'
 
 // Default reveal speed (non-whitespace text units per second).
@@ -78,9 +78,16 @@ export function useGatedReveal({
     return () => cancelAnimationFrame(frame)
   }, [active])
 
+  // Drop the pacing and show everything buffered so far. Only meaningful once the backend
+  // has finished — otherwise it would just catch up to a stream still arriving — so the
+  // caller gates the control on `backendComplete`.
+  const skipToEnd = useCallback(() => {
+    setRevealedChars(bufferRef.current.length)
+  }, [])
+
   const clampedRevealed = Math.min(revealedChars, buffer.length)
   const revealedText = buffer.slice(0, clampedRevealed)
   const revealComplete = backendComplete && clampedRevealed >= buffer.length && buffer.length > 0
 
-  return { revealedText, revealComplete }
+  return { revealedText, revealComplete, skipToEnd }
 }

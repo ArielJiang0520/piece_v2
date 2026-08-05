@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, ChevronDown, Trash2 } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, Copy, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -23,6 +23,8 @@ import MoreLikeThisPanel from './components/MoreLikeThisPanel'
 import ReworkSheet from './components/ReworkSheet'
 import { useGenerateData } from './hooks/useGenerateData'
 import { useSavedPiece } from './hooks/useSavedPiece'
+import AdditionsIndicator from '../shared/AdditionsIndicator'
+import { useWorldAdditions } from '../shared/useWorldAdditions'
 import { parseVersionDraft, type ClusterPrompt } from '../shared/types'
 
 const headerTextActionClass =
@@ -62,11 +64,15 @@ export default function PromptPage() {
   // so a step back never takes their own words with it — it only ever undoes a pass that nothing
   // has happened since.
   const [revertStack, setRevertStack] = useState<string[]>([])
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const normalizedPrompt = prompt.trim()
   const readingFont = useReadingFont()
   const readingFontSize = useReadingFontSize()
   const model = useGenerationModel()
   const backHref = id ? `/worlds/${id}` : '/worlds'
+  // Shared with the Rework and More-like-this sheets on this screen — they send the same set.
+  const { additions, activeIds } = useWorldAdditions(id)
 
   const {
     activePrompt,
@@ -117,12 +123,15 @@ export default function PromptPage() {
     metaLabel,
     modelLabel,
     tasteLabel,
+    additionsLabel,
     footerStatsLabel,
   } = useSavedPiece({
     lockedMode,
     resetKey: promptId ?? 'new',
     promptPieces,
     activePromptPieceCount,
+    additions,
+    activeAdditionIds: activeIds,
   })
 
   const nextVersionNumber = clusterPrompts.length + 1
@@ -255,6 +264,21 @@ export default function PromptPage() {
     if (activePrompt) setPrompt(activePrompt.text)
   }, [activePrompt, promptId])
 
+  useEffect(() => () => {
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+  }, [])
+
+  async function copyPrompt() {
+    try {
+      await navigator.clipboard.writeText(prompt)
+    } catch {
+      return
+    }
+    setCopied(true)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1600)
+  }
+
   useEffect(() => {
     if (!showGenerateTabs) setActiveTab('prompt')
     else if (activeTab === 'similar' && !showSimilarTab) setActiveTab('prompt')
@@ -372,7 +396,7 @@ export default function PromptPage() {
   return (
     // The rework sheet is docked to the bottom rather than floating over the page, so the page
     // makes room for it instead of letting it sit on top of the generate controls.
-    <div className={`page-fade-in min-h-screen page-width px-4 ${visibleActiveTab === 'prompt' ? `pt-6 ${reworkVisible ? 'pb-[22rem]' : needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}` : 'pt-0'}`}>
+    <div className={`page-fade-in page-width px-4 ${visibleActiveTab === 'prompt' ? `pt-6 ${reworkVisible ? 'pb-[22rem]' : needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}` : 'pt-0'}`}>
       {visibleActiveTab === 'prompt' ? (
         <>
           {showInspiredBar && (
@@ -399,6 +423,14 @@ export default function PromptPage() {
             </div>
           )}
 
+          {/* Passive: what the world will carry when Generate is tapped. Switching additions on
+              and off lives on the Additions tab, not here. */}
+          <AdditionsIndicator
+            additions={additions}
+            activeIds={activeIds}
+            className={`-mx-4 w-[calc(100%+2rem)] ${showInspiredBar || parentPromptId != null ? '' : '-mt-6'} mb-1`}
+          />
+
           <div className={`${complete ? 'mb-1' : ''} bg-paper/95 pb-1`}>
             {/* One row: what you're editing on the left, what you can do with it on the right. The
                 label is kept short enough to share the line — on a phone, splitting the two apart
@@ -423,14 +455,31 @@ export default function PromptPage() {
                 )}
                 <div className="flex shrink-0 items-center gap-3">
                   {lockedMode ? (
-                    <button
-                      type="button"
-                      className={headerTextActionClass}
-                      onClick={handleEditActivePrompt}
-                      disabled={activeClusterId == null}
-                    >
-                      {t.edit}
-                    </button>
+                    <>
+                      {/* Only while the prompt is sitting still — once it's in the editor the text
+                          is in flux, and the writer has the field itself to copy from. */}
+                      <button
+                        type="button"
+                        aria-label={copied ? t.copied : t.copy}
+                        className="inline-flex h-8 shrink-0 items-center justify-center px-1 text-ink-3 transition-colors active:text-ink disabled:pointer-events-none disabled:opacity-50"
+                        onClick={copyPrompt}
+                        disabled={!normalizedPrompt}
+                      >
+                        {copied ? (
+                          <Check aria-hidden="true" className="h-4 w-4" />
+                        ) : (
+                          <Copy aria-hidden="true" className="h-4 w-4" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className={headerTextActionClass}
+                        onClick={handleEditActivePrompt}
+                        disabled={activeClusterId == null}
+                      >
+                        {t.edit}
+                      </button>
+                    </>
                   ) : (
                     <>
                       {revertStack.length > 0 && (
@@ -500,6 +549,7 @@ export default function PromptPage() {
               pieceMetaLabel={metaLabel}
               pieceModelLabel={modelLabel}
               pieceTasteLabel={tasteLabel}
+              pieceAdditionsLabel={additionsLabel}
               pieceFooterStatsLabel={footerStatsLabel}
               pieceNumber={pieceNumber}
               readingFont={readingFont}
