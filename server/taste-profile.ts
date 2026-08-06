@@ -42,6 +42,14 @@ export function versionLikes(userId: number, worldId: number, versionId: number)
   )
 }
 
+// The likes that actually feed the profile: the version's likes the reader still has switched on.
+// Turning one off is the ONLY thing that drops it from the model's input — a like is never
+// retired by age or by how many have piled up, and it is never deleted or shortened either. The
+// reader's list stays whole; what they hand the distiller is their call.
+function activeVersionLikes(userId: number, worldId: number, versionId: number) {
+  return and(versionLikes(userId, worldId, versionId), eq(tasteLikes.active, 1))
+}
+
 // The stored profile is plain prose. Read it as such, trimmed; empty when there's nothing yet.
 function readProfile(userId: number, worldId: number, versionId: number): string {
   const row = db
@@ -52,11 +60,13 @@ function readProfile(userId: number, worldId: number, versionId: number): string
   return row?.profile?.trim() ?? ''
 }
 
+// Counts the likes that feed the profile, i.e. the switched-on ones — the same set the distiller
+// reads, so `distilled_like_count` and the background trigger below compare like with like.
 function likeCount(userId: number, worldId: number, versionId: number): number {
   return db
     .select({ n: count() })
     .from(tasteLikes)
-    .where(versionLikes(userId, worldId, versionId))
+    .where(activeVersionLikes(userId, worldId, versionId))
     .get()?.n ?? 0
 }
 
@@ -169,7 +179,7 @@ async function requestDistillation(prompt: string, modelId: string): Promise<str
   }
 }
 
-// Rebuild the checked-out version's profile from all of its likes. Runs the LLM call inside the
+// Rebuild the checked-out version's profile from the likes it has switched on. Runs the LLM call inside the
 // generation slot so it never opens a second OpenRouter session alongside a live story stream.
 // Deduped per (world, version). Returns the new profile (persisted), or null when there was
 // nothing to do / it failed.
@@ -190,13 +200,14 @@ async function runDistillation(userId: number, worldId: number, versionId: numbe
   const likes = db
     .select({ snippet: tasteLikes.snippet, context: tasteLikes.context, reasons: tasteLikes.reasons })
     .from(tasteLikes)
-    .where(versionLikes(userId, worldId, versionId))
+    .where(activeVersionLikes(userId, worldId, versionId))
     .orderBy(desc(tasteLikes.created_at))
     .all()
 
   const total = likes.length
   if (total === 0) {
-    // No likes: clear the profile so a version whose likes were all deleted shows an empty slate.
+    // Nothing switched on: clear the profile, so a version whose likes were all deleted — or all
+    // turned off — shows an empty slate rather than one distilled from likes that no longer count.
     const now = Date.now()
     db.insert(tasteProfile)
       .values({ world_id: worldId, world_version_id: versionId, user_id: userId, profile: '', distilled_like_count: 0, updated_at: now })

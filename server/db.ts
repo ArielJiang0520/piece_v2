@@ -123,6 +123,11 @@ sqlite.run(`
     -- than the bare line. Null for likes recorded before this was captured.
     context TEXT,
     reasons TEXT,
+    -- Whether this like feeds the distiller. The reader turns likes off by hand on the taste
+    -- screen when one no longer speaks for them; nothing turns them off automatically (no age
+    -- window, no pool ceiling). Off likes are kept in full and still listed — they just don't
+    -- go to the model. New likes are on.
+    active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL
   );
 
@@ -590,6 +595,9 @@ if (addColumnIfMissing('taste_likes', 'world_version_id', 'world_version_id INTE
 if (foreignKeyOnDelete('taste_likes', 'world_version_id') !== 'CASCADE') {
   rebuildTasteLikesTableWithVersionCascade()
 }
+// Which likes feed the distiller. Added after the rebuild above so that fallback (which recreates
+// the table from the older column list) can't drop it again. Existing likes default to on.
+addColumnIfMissing('taste_likes', 'active', 'active INTEGER NOT NULL DEFAULT 1')
 
 // The cluster is the sole holder of a world version below the world; prompts, pieces and
 // piece-attached likes all derive theirs by walking up to it. Older databases also stamped every
@@ -804,6 +812,7 @@ export const tasteLikes = sqliteTable('taste_likes', {
   context: text('context'),
   reasons: text('reasons'),
   world_version_id: integer('world_version_id').references(() => worldVersions.id),
+  active: integer('active').notNull().default(1),
   created_at: integer('created_at').notNull(),
 })
 

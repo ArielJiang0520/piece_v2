@@ -640,9 +640,7 @@ export default function WorldAbout() {
                       : 'border-rose-line/80 bg-paper/60 text-ink-4'
                       }`}
                   >
-                    {on
-                      ? <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
-                      : <X aria-hidden="true" className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />}
+                    {on ?? <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />}
                     <span>{addition.name}</span>
                   </button>
                 )
