@@ -14,13 +14,18 @@ import { useWorldAdditions } from '../../shared/useWorldAdditions'
 //
 // One ask, one result. The sheet keeps no trail of its own: asking again works off whatever is in
 // the editor now, and stepping back is the Revert action on the page, not a gallery in here.
+//
+// An empty editor is the same act with nothing to anchor to, so it is the same sheet: say a word or
+// two and AI writes the first prompt into the field. That is the only difference — from the moment
+// the draft lands, every further ask is an ordinary pass over it.
 const headerTextActionClass =
   'inline-flex h-8 shrink-0 items-center justify-center px-1 font-serif-zh text-[14px] italic leading-none text-ink-3 underline decoration-ink-4/50 underline-offset-4 transition-colors duration-200 active:text-ink disabled:pointer-events-none disabled:opacity-40'
 
 interface ReworkSheetProps {
   worldId: string | undefined
   // The text as it stands in the editor right now, not the saved row — a half-typed edit is what
-  // the writer wants worked on.
+  // the writer wants worked on. Empty means there is nothing to work on yet, and the sheet writes
+  // the first prompt instead of passing over one.
   text: string
   // A fresh pass: the editor takes the draft and keeps what it had, so it can be reverted to.
   onPass: (draft: string) => void
@@ -64,20 +69,28 @@ export default function ReworkSheet({ worldId, text, onPass, onTryAgain, onClose
   }, [note])
 
   const trimmedNote = note.trim()
-  // Nothing need be typed: the writer tapped Rework on their own text, and that is the brief. A
-  // note only says what to change about it — with none, the server stands in a first turn.
-  const canSubmit = !!text.trim() && !isWorking
+  // With text on the page nothing need be typed: the writer tapped Rework on their own words, and
+  // that is the brief — a note only says what to change about it, and with none the server stands in
+  // a first turn. With an empty editor the note is all there is, so it is required.
+  const drafting = !text.trim()
+  const canSubmit = (drafting ? !!trimmedNote : !!text.trim()) && !isWorking
 
+  // Which request this is comes from the anchor it works from, not from what is in the editor now:
+  // running the first ask again re-drafts from nothing, and by then the editor is no longer empty.
   async function requestPass(anchor: string, ask: string) {
-    return (await apiFetch(`/api/worlds/${worldId}/rework`, {
+    const path = anchor.trim() ? 'rework' : 'ideas'
+    const payload = anchor.trim()
+      ? { text: anchor, notes: ask ? [ask] : [], drafts: [], additionIds }
+      : { notes: [ask], drafts: [], additionIds }
+    return (await apiFetch(`/api/worlds/${worldId}/${path}`, {
       method: 'POST',
-      body: JSON.stringify({
-        text: anchor,
-        notes: ask ? [ask] : [],
-        drafts: [],
-        additionIds,
-      }),
+      body: JSON.stringify(payload),
     })) as { draft: string }
+  }
+
+  // Same rule as the request itself: what failed is named after the anchor it was working from.
+  function fallbackError(anchor: string) {
+    return anchor.trim() ? t.reworkError(entityLabelSingular) : t.workshopError(entityLabelSingular)
   }
 
   async function runPass() {
@@ -92,7 +105,7 @@ export default function ReworkSheet({ worldId, text, onPass, onTryAgain, onClose
       setNote('')
       onPass(res.draft)
     } catch (e) {
-      setError(e instanceof Error ? e.message : t.reworkError(entityLabelSingular))
+      setError(e instanceof Error ? e.message : fallbackError(anchor))
     } finally {
       setIsWorking(false)
     }
@@ -109,14 +122,19 @@ export default function ReworkSheet({ worldId, text, onPass, onTryAgain, onClose
       passedTextRef.current = res.draft
       onTryAgain(res.draft)
     } catch (e) {
-      setError(e instanceof Error ? e.message : t.reworkError(entityLabelSingular))
+      setError(e instanceof Error ? e.message : fallbackError(lastAsk.text))
     } finally {
       setIsWorking(false)
     }
   }
 
   const hasPassed = !!lastAsk
-  const placeholder = hasPassed ? t.workshopNotePlaceholder : t.reworkSeedPlaceholder
+  const title = drafting ? t.aiDraft : t.rework
+  const placeholder = drafting
+    ? t.workshopSeedPlaceholder
+    : hasPassed
+      ? t.workshopNotePlaceholder
+      : t.reworkSeedPlaceholder
 
   // Docked to the bottom with no backdrop: dimming the page would hide the one thing this sheet
   // exists to keep in view. It closes by its own Close action or by tapping Rework again.
@@ -124,18 +142,20 @@ export default function ReworkSheet({ worldId, text, onPass, onTryAgain, onClose
     <div
       className="sheet-slide-up fixed inset-x-0 bottom-0 z-40 rounded-t-2xl border-t border-rose-line bg-paper/95 shadow-[0_-24px_70px_rgba(26,18,16,0.22)] backdrop-blur"
       role="dialog"
-      aria-label={t.rework}
+      aria-label={title}
     >
       <div className="page-width flex flex-col px-5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] pt-3">
         <div className="flex items-center justify-between gap-3">
-          <p className="t-eyebrow">{t.rework}</p>
+          <p className="t-eyebrow">{title}</p>
           <button type="button" className={headerTextActionClass} onClick={onClose}>
             {t.close}
           </button>
         </div>
 
         {!hasPassed && (
-          <p className="t-meta mt-1 mb-3 leading-6 text-ink-3">{t.reworkEmptyHint(entityLabelSingular)}</p>
+          <p className="t-meta mt-1 mb-3 leading-6 text-ink-3">
+            {drafting ? t.workshopEmptyHint(entityLabelSingular) : t.reworkEmptyHint(entityLabelSingular)}
+          </p>
         )}
 
         <textarea
@@ -162,7 +182,15 @@ export default function ReworkSheet({ worldId, text, onPass, onTryAgain, onClose
           ) : (
             <Sparkles aria-hidden="true" className="h-4 w-4" />
           )}
-          <span>{isWorking ? t.workshopWorking : hasPassed ? t.workshopRevise : t.reworkDraftThis}</span>
+          <span>
+            {isWorking
+              ? t.workshopWorking
+              : drafting
+                ? t.workshopDraftThis
+                : hasPassed
+                  ? t.workshopRevise
+                  : t.reworkDraftThis}
+          </span>
         </button>
 
         {hasPassed && (

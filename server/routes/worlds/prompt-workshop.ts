@@ -3,11 +3,12 @@ import { openRouterProvider } from '../../openrouter-provider'
 import { withGenerationSlot } from '../../generation-lock'
 import { budgeted } from '../../llm-budget'
 
-// Shared path for the two prompt-workshop features ("similar prompts", "spark ideas"). Both hand
-// the model a conversation and get ONE prompt back; they differ only in the system prompt and in
-// what the workshop is anchored to (a world setting, or an existing prompt). Keeping the
-// OpenRouter call in one place means it shares the single-session slot, so overlapping either
-// feature with story generation can't 429 the account.
+// Shared path for the three prompt-workshop features ("more like this", and the editor sheet's two
+// halves — writing one from the world, passing over the one in the editor). All three hand the
+// model a conversation and get ONE prompt back; they differ only in the system prompt and in what
+// they are anchored to (a world setting, an existing prompt, the text in the editor). Keeping the
+// OpenRouter call in one place means it shares the single-session slot, so overlapping any of them
+// with story generation can't 429 the account.
 //
 // The response IS the draft — no list format, no per-line parsing. An earlier version of this file
 // dealt five candidates at once and needed a one-per-line wire format to ship five things safely

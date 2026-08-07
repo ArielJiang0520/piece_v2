@@ -183,16 +183,13 @@ export const UI_TEXT = {
     similarWorkingOn: 'Similar prompts in progress',
     similarError: (entities: string) => `Could not generate similar ${entities}. Please try again.`,
     similarTooLong: 'This prompt is too long to riff on.',
-    // The workshop screen. Named for what it plainly is — a builder for the thing you write against,
-    // never for the story itself, which is what "write with AI" would be read as here. The button and
-    // the screen say the same thing, so tapping one lands somewhere you recognise.
-    workshopTitle: (entity: string) => `AI ${entity} builder`,
-    // Sits beside "New scene", the one you type yourself.
-    workshopEntry: (entity: string) => `AI ${entity} builder`,
-    workshopEmptyHint: (entity: string) => `No finished idea needed. Say a word or two about what you want, and AI drafts a ${entity} you can revise, round by round.`,
+    // Writing a prompt from nothing — the empty-editor half of the sheet below. Never named for the
+    // story itself, which is what "write with AI" would be read as here.
+    workshopEmptyHint: (entity: string) => `No finished idea needed. Say a word or two about what you want, and AI writes a ${entity} straight into your editor.`,
     workshopSeedPlaceholder: 'What are you after? A word or two is enough',
     workshopError: (entity: string) => `Could not write a ${entity}. Please try again.`,
-    // Shared across both prompt workshops.
+    // The "More like this" workshop's draft trail. The editor's AI sheet has none — the editor is
+    // the only copy of the draft, and Revert is its step back.
     workshopDraftOf: (n: number, total: number) => `Draft ${n} of ${total}`,
     workshopPreviousDraft: 'Previous draft',
     workshopNextDraft: 'Next draft',
@@ -214,9 +211,11 @@ export const UI_TEXT = {
     // Stand-ins for a round the writer ran without typing anything.
     workshopFirstPass: 'Write a different one that feels like this.',
     workshopAnotherPass: 'Take it somewhere else again.',
-    // AI help on the prompt you already have — a sheet over the edit screen, not a workshop of its
-    // own, so the wording is about this prompt and what it comes back as, never a new one.
+    // AI help on the prompt in the editor — a sheet over the edit screen, not a workshop of its own,
+    // so the wording is about this prompt and what it comes back as, never a new one. With an empty
+    // editor there is no "this prompt" yet, and the action says what it will actually do instead.
     rework: 'AI rework',
+    aiDraft: 'AI draft',
     reworkEmptyHint: (entity: string) => `Say what isn't working — or just ask for a pass — and this ${entity} comes back sharper, still the same story.`,
     reworkSeedPlaceholder: "What isn't working? — optional",
     reworkDraftThis: 'Give it a pass',
@@ -478,16 +477,13 @@ export const UI_TEXT = {
     similarWorkingOn: '正在构思类似',
     similarError: (entities: string) => `生成类似${entities}失败，请重试。`,
     similarTooLong: '这条太长，无法衍生。',
-    // The workshop screen. Named for what it plainly is — a builder for the thing you write against,
-    // never for the story itself, which is what "write with AI" would be read as here. The button and
-    // the screen say the same thing, so tapping one lands somewhere you recognise.
-    workshopTitle: (entity: string) => `AI 构思${entity}`,
-    // Sits beside "New scene", the one you type yourself.
-    workshopEntry: (entity: string) => `AI 构思${entity}`,
-    workshopEmptyHint: (entity: string) => `不用先想好。说一两个词，AI 就写出一个${entity}，你再一轮轮改。`,
+    // Writing a prompt from nothing — the empty-editor half of the sheet below. Never named for the
+    // story itself, which is what "write with AI" would be read as here.
+    workshopEmptyHint: (entity: string) => `不用先想好。说一两个词，AI 就把一个${entity}直接写进你的编辑框。`,
     workshopSeedPlaceholder: '你想要什么？一两个词就够',
     workshopError: (entity: string) => `生成${entity}失败，请重试。`,
-    // Shared across both prompt workshops.
+    // The "More like this" workshop's draft trail. The editor's AI sheet has none — the editor is
+    // the only copy of the draft, and Revert is its step back.
     workshopDraftOf: (n: number, total: number) => `第 ${n} 稿 / 共 ${total} 稿`,
     workshopPreviousDraft: '上一稿',
     workshopNextDraft: '下一稿',
@@ -510,6 +506,7 @@ export const UI_TEXT = {
     workshopFirstPass: '写一条别的，但要这条的味道。',
     workshopAnotherPass: '再换个方向试试。',
     rework: 'AI 打磨',
+    aiDraft: 'AI 起草',
     reworkEmptyHint: (entity: string) => `说说哪里不对——或者直接让它过一遍——这条${entity}会更利落，但还是同一个故事。`,
     reworkSeedPlaceholder: '哪里不对？（可选）',
     reworkDraftThis: '过一遍',

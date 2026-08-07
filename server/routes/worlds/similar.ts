@@ -33,7 +33,7 @@ const SIMILAR_TEMPERATURE = 0.7
 // characters, situation or tone taken somewhere new") let the model keep the cast and the scene and
 // call that new, so the portable thing is now named alone and everything else is named as changing.
 // And revisionInstruction() — "change what they asked for and leave the rest" — has nothing to
-// attach to on the Ideas screen's first turn, but here the source prompt is in the system prompt,
+// attach to on a first turn with nothing to revise, but here the source prompt is in the system prompt,
 // so it read as an instruction to edit that. It is withheld until there is a draft to revise.
 function buildSimilarSystemPrompt(worldBody: string, sourceText: string, revising: boolean): string {
   const world = worldBody.trim()
@@ -111,7 +111,7 @@ similarRoutes.post('/', authMiddleware, async (c: any) => {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
 
-  // Unlike the Ideas screen, the writer need not say anything to start: they arrived here by
+  // Unlike drafting from nothing, the writer need not say anything to start: they arrived here by
   // tapping "more like this" ON a prompt, and that tap is the brief. The conversation still needs
   // a first turn, so stand one in for them. The client normally sends this in the reader's own
   // language; this fallback only covers a client that sent nothing.

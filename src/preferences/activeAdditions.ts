@@ -6,7 +6,7 @@ import { createPreference } from './createPreference'
 // Scoped to a world AND to the version checked out when they were switched on. Additions are
 // owned by a version, so a set carried across a version switch would name additions that aren't
 // on the shelf any more — the whole set falls away with the version, the same way the workshop
-// draft in worldIdeasState does.
+// draft in similarPromptsState does.
 export interface ActiveAdditionsState {
   worldId: number | null
   worldVersionId: number | null

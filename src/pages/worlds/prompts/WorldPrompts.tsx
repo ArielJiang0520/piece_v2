@@ -14,7 +14,7 @@ import TextField from '@/components/TextField'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { useLanguageId } from '@/preferences/language'
 import { setTasteProfileEnabled, useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
-import NewPromptMenu from './NewPromptMenu'
+import NewPromptButton from './NewPromptButton'
 import AdditionsIndicator from '../shared/AdditionsIndicator'
 import WorldSortMenu from '../shared/WorldSortMenu'
 import WorldTabs from '../shared/WorldTabs'
@@ -377,7 +377,7 @@ export default function WorldPrompts() {
           </div>
         )}
 
-        <NewPromptMenu worldId={id} />
+        <NewPromptButton worldId={id} />
 
         {!isSearching && (
           <div className="mt-6 flex items-center gap-3 rounded-2xl border border-rose-line/80 bg-paper/60 px-4 py-4">

@@ -60,7 +60,8 @@ export const MODELS: ModelOption[] = [
 
 export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
-// The three prompt-working flows — the workshop (Ideas / More like this) and Rework — are not a
+// The three prompt-working flows — "More like this", and the editor sheet's two halves (write one
+// from the world, pass over the one in the editor) — are not a
 // model choice. They write one short prompt, not a story: which model does it is a fixture of the
 // feature, so it is pinned here and never shown.
 export const PROMPT_WORKSHOP_MODEL_ID = 'z-ai/glm-5.2'

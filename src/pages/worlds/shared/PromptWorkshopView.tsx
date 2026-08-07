@@ -4,10 +4,10 @@ import { SkeletonText } from '@/components/Skeleton'
 import { useUiText } from '@/i18n'
 import type { PromptWorkshop } from '@/preferences/promptWorkshop'
 
-// Shared presentation for the two prompt workshops — "More like this" (build off one prompt) and
-// "Ideas" (build out of the world). Both run the same loop: say what you are after, get ONE prompt
-// back, say what to change, get it revised. Everything that differs is passed in — the copy and
-// the data/handlers.
+// Presentation for the "More like this" workshop — build a new prompt off one that already exists.
+// The loop: say what you are after, get ONE prompt back, say what to change, get it revised. The
+// copy and the data/handlers are passed in rather than reached for, so the loop stays the file's
+// only subject.
 //
 // The screen shows exactly one draft, because that is what the writer is working on. Earlier
 // drafts are reachable through the stepper, and revising from one of them throws away everything
@@ -32,8 +32,8 @@ export interface PromptWorkshopCopy {
 }
 
 interface PromptWorkshopViewProps {
-  // Names the screen on its own thin row: "Ideas" for the world screen. The "More like this" tab
-  // has no title — it sits under a tab that already says so — and shows no such row.
+  // Names the workshop on its own thin row. The "More like this" tab passes none — it sits under a
+  // tab that already says so — and shows no such row.
   title?: string
   workshop: PromptWorkshop
   isWorking: boolean

@@ -14,14 +14,17 @@ import {
 const reworkRoutes = new Hono<{ Variables: Variables }>()
 
 const REWORK_TIMEOUT_MS = 60000
-// Lower than story generation for the same reason as the other two workshops: the model is working
+// Lower than story generation for the same reason as the other prompt work: the model is working
 // to the writer's text, not ranging on its own.
 const REWORK_TEMPERATURE = 0.7
 
-// The third workshop, and the counterpart to "More like this": this one stays on the prompt the
-// writer already has. Same story, same people, same situation — sharper. What it produces is
-// another version inside the same cluster, which is what makes it a different thing from
-// `similar.ts` rather than a differently-worded version of it.
+// The counterpart to "More like this": this one stays on the prompt the writer already has. Same
+// story, same people, same situation — sharper. What it produces is another version inside the same
+// cluster, which is what makes it a different thing from `similar.ts` rather than a
+// differently-worded version of it.
+//
+// This is one half of the editor's AI sheet; `ideas.ts` is the other, for when the editor is still
+// empty and there is no text to anchor to.
 //
 // The anchor is the text in the writer's editor, not a saved row: they may have typed over it
 // before asking for a pass, and that half-finished edit is exactly what they want worked on.

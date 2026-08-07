@@ -67,7 +67,7 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   }
 
   // Whether this prompt was born from an AI candidate — a "More like this" offshoot (which also
-  // carries ancestry above) or a world-native "Spark ideas" pick (no parent). Drives the
+  // carries ancestry above) or one AI wrote into an empty editor from the world (no parent). Drives the
   // "Generated" tag on the prompt card.
   const isGenerated = similarToPromptId !== null || body.generated === true
 

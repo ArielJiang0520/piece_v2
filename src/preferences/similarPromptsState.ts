@@ -5,7 +5,7 @@ import { EMPTY_PROMPT_WORKSHOP, parsePromptWorkshop, type PromptWorkshop } from 
 // read a piece and come back mid-workshop, with the draft and the trail of revisions intact.
 //
 // Scoped to the source prompt AND to the world version checked out when the workshop started —
-// same reason as the Ideas screen: the world setting behind the draft belongs to a version.
+// same reason additions are: the world setting behind the draft belongs to a version.
 export interface SimilarPromptsState {
   promptId: number | null
   worldVersionId: number | null

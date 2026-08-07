@@ -11,6 +11,10 @@ import {
   workshopMessages,
 } from './prompt-workshop'
 
+// The empty-editor half of the AI sheet over the prompt editor: there is no prompt to work from
+// yet, so the world is the anchor and the writer's brief is the whole ask. `rework.ts` is the other
+// half, for once there is text on the page — from the writer's side it is one sheet, and which
+// request goes out is decided by whether the editor has anything in it.
 const ideasRoutes = new Hono<{ Variables: Variables }>()
 
 const IDEAS_TIMEOUT_MS = 60000

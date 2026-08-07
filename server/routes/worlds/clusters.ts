@@ -107,7 +107,7 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
 
   // "Similar prompts" ancestry, per cluster. A cluster is "generated" when any of its prompts was
   // born from an AI candidate — either seeded from an outside prompt ("More like this") or a
-  // world-native "Spark ideas" pick (is_generated, no parent). Its similar_count is how many
+  // world-native draft AI wrote into an empty editor (is_generated, no parent). Its similar_count is how many
   // prompts (anywhere in this world) were seeded from any prompt in the cluster.
   const promptIdToCluster = new Map<number, number>()
   const generated = new Set<number>()

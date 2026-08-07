@@ -34,7 +34,8 @@ interface MoreLikeThisPanelProps {
 
 // The "More like this" tab: works up a new prompt off a saved one. Not a similarity machine — the
 // writer says what they want to make out of this prompt and revises it over as many rounds as they
-// like. Same workshop as the Ideas screen, anchored to a source prompt instead of a world.
+// like. A workshop of its own, with its own trail — unlike the editor's AI sheet, there is no
+// editor here holding the draft, so the drafts live in the panel.
 export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText, worldVersionId }: MoreLikeThisPanelProps) {
   const t = useUiText()
   const language = useLanguageId()
@@ -60,7 +61,7 @@ export default function MoreLikeThisPanel({ worldId, sourcePromptId, sourceText,
     setSimilarPromptsState({ promptId: sourcePromptId, worldVersionId, workshop: next })
   }
 
-  // Unlike the Ideas screen, the writer need not type anything to start: they got here by tapping
+  // The writer need not type anything to start: they got here by tapping
   // "more like this" ON a prompt, and that prompt is the brief. A note only steers it.
   const trimmedNote = note.trim()
   // Rewriting an ask is the one case that needs words: an empty box is "run it again", which is

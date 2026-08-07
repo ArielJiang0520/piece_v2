@@ -50,9 +50,11 @@ export default function PromptPage() {
   const similarToPromptId = !lockedMode && typeof routeState?.similarToPromptId === 'number'
     ? routeState.similarToPromptId
     : null
-  // A fresh prompt picked from AI ideas ("Spark ideas") — carried through so it earns the
-  // "Generated" tag when saved. Only meaningful for a fresh draft.
-  const generated = !lockedMode && routeState?.generated === true
+  // A fresh prompt AI wrote rather than sharpened — carried through so it earns the "Generated" tag
+  // when saved. Arrives set from "More like this", or is earned here the moment a pass lands in an
+  // empty editor. Only meaningful for a fresh draft.
+  const routeGenerated = !lockedMode && routeState?.generated === true
+  const [generated, setGenerated] = useState(routeGenerated)
   const versionSourceClusterId = !lockedMode ? versionDraft?.sourceClusterId ?? null : null
   const [activeTab, setActiveTab] = useState<GenerateTab>('prompt')
   const [versionsOpen, setVersionsOpen] = useState(false)
@@ -203,10 +205,12 @@ export default function PromptPage() {
   const showGenerateTabs = !lockedMode || activeClusterId != null
   const needsFirstTakeScrollRoom = lockedMode && activePromptPieceCount === 0
   const showPieceStrip = lockedMode && activePromptPieceCount > 0
-  const showHeaderRow = (lockedMode && !!activePrompt) || (!lockedMode && !!versionDraft)
+  // Always there while the editor is open, even on a blank new prompt: the AI action lives in this
+  // row, and on a blank prompt it is the only thing on the screen that can fill the field.
+  const showHeaderRow = lockedMode ? !!activePrompt : true
   const headerLabel = lockedMode
     ? hasMultipleVersions && activeVersionNumber != null ? t.versionOf(activeVersionNumber, clusterPrompts.length) : ''
-    : t.editingPromptNewVersion
+    : versionDraft ? t.editingPromptNewVersion : ''
   const showPromptTab = useCallback(() => {
     setActiveTab('prompt')
     requestAnimationFrame(() => window.scrollTo({ top: 0 }))
@@ -254,10 +258,13 @@ export default function PromptPage() {
 
   useTopNavConfig({ backHref, rightAction: deleteClusterAction, bottomSlot: generateTabs })
 
+  // The page is not remounted between a fresh draft and a saved prompt, so what the route says is
+  // resynced here rather than only seeded — including whether AI wrote this one.
   useEffect(() => {
     if (promptId) return
     setPrompt(draftPrompt)
-  }, [draftPrompt, promptId])
+    setGenerated(routeGenerated)
+  }, [draftPrompt, promptId, routeGenerated])
 
   useEffect(() => {
     if (!promptId) return
@@ -377,6 +384,9 @@ export default function PromptPage() {
   }
 
   function handleReworkPass(draft: string) {
+    // A pass into an empty editor is AI writing the prompt, not sharpening one — that earns the
+    // "Generated" tag, and keeps it even if the writer works the text over afterwards.
+    if (!prompt.trim()) setGenerated(true)
     setRevertStack(stack => [...stack, prompt])
     setPrompt(draft)
   }
@@ -491,22 +501,27 @@ export default function PromptPage() {
                           {t.revert}
                         </button>
                       )}
+                      {/* Live on an empty editor too: with nothing to work on, the same sheet
+                          writes the first prompt, and this is the only way to it. */}
                       <button
                         type="button"
                         aria-pressed={reworkOpen}
                         className={`${headerTextActionClass} ${reworkOpen ? 'text-ink! decoration-ink-3!' : ''}`}
                         onClick={() => setReworkOpen(open => !open)}
-                        disabled={!normalizedPrompt}
                       >
-                        {t.rework}
+                        {normalizedPrompt ? t.rework : t.aiDraft}
                       </button>
-                      <button
-                        type="button"
-                        className={headerTextActionClass}
-                        onClick={handleCancelVersionDraft}
-                      >
-                        {t.cancel}
-                      </button>
+                      {/* Only an edit has something to go back to. A blank new prompt leaves by
+                          the nav's back arrow, like every other screen. */}
+                      {versionDraft && (
+                        <button
+                          type="button"
+                          className={headerTextActionClass}
+                          onClick={handleCancelVersionDraft}
+                        >
+                          {t.cancel}
+                        </button>
+                      )}
                     </>
                   )}
                 </div>

@@ -1,7 +1,8 @@
-// One prompt workshop, shared by both prompt-generation features ("Ideas" works from the world
-// setting, "More like this" works from an existing prompt). The workshop is the whole product
-// here: the writer says what they are after, gets ONE prompt back, says what to change, gets the
-// revised prompt, and keeps going for as many rounds as it takes.
+// The prompt workshop behind "More like this", which builds a new prompt off an existing one. The
+// workshop is the whole product there: the writer says what they are after, gets ONE prompt back,
+// says what to change, gets the revised prompt, and keeps going for as many rounds as it takes.
+// (The editor's own AI sheet works differently — it has no trail, because the editor holds the
+// draft and Revert is the step back.)
 //
 // It is stored as the conversation it is, because that is also exactly what gets sent to the
 // model — note, draft, note, draft — and because it makes going back a truncation instead of a

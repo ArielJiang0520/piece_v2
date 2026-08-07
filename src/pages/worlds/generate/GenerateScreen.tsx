@@ -70,7 +70,7 @@ export default function GenerateScreen() {
   const similarToPromptId = !lockedMode && typeof routeState?.similarToPromptId === 'number'
     ? routeState.similarToPromptId
     : null
-  // A fresh prompt picked from AI ideas ("Spark ideas") — earns the "Generated" tag on save.
+  // A fresh prompt AI wrote rather than one the writer typed — earns the "Generated" tag on save.
   const generated = !lockedMode && routeState?.generated === true
 
   const resumeParam = searchParams.get('resume')
