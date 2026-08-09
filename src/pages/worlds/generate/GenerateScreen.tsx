@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowRight, FastForward, Heart, Pause, Play, Rewind, SkipForward } from 'lucide-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -478,7 +478,14 @@ function GenerateReader({
   const displayText = showingSeed ? initialText : frozenText ?? revealedText
   // Live decomposition of what's on screen, so action markers render at each boundary in
   // real time (empty trailing segment kept so a just-fired action's marker appears at once).
-  const liveSegments = buildStructure(displayText, false).segments
+  // Memoized on its only real inputs: a fresh array identity every render would re-slice the
+  // whole text here and, worse, defeat GenerateOutput's own memo — which would then re-split
+  // the story into paragraphs on every arriving SSE chunk, even while paused.
+  const liveSegments = useMemo(
+    () => buildStructure(displayText, false).segments,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [displayText, actionLog],
+  )
   const canPause = !showingSeed && !finished && !error
   const canContinue = finished && !error && displayText.length > 0
   const canSave = (paused || finished) && !error && displayText.length > 0 && (mode !== 'resume' || expanded)
@@ -492,9 +499,16 @@ function GenerateReader({
   // expand/continue seed. When one is selected, the docked switch (Expand · Continue · Like)
   // takes over the bar and the whole-story transport/Continue is hidden so there's never a
   // double set of controls.
+  // Split once per laid-out text rather than on every render — while streaming this is the
+  // whole story being re-split, and chunks re-render far faster than the text changes. Stays
+  // gated on `canSelect` so a running reveal never pays for it at all.
+  const displayParagraphs = useMemo(
+    () => (canSelect ? splitParagraphs(displayText) : []),
+    [canSelect, displayText],
+  )
   const selectedParagraph =
-    canSelect && selectedParagraphIndex != null
-      ? splitParagraphs(displayText).find(p => p.index === selectedParagraphIndex) ?? null
+    selectedParagraphIndex != null
+      ? displayParagraphs.find(p => p.index === selectedParagraphIndex) ?? null
       : null
   const paragraphSelected = selectedParagraph !== null
 

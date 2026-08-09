@@ -221,10 +221,12 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* No `will-change` here: the class lands on every word of the story and never comes off,
+   so declaring it would leave one promoted compositor layer per word standing for the whole
+   session. WebKit composites this animation fine without the hint. */
 .streamed-word-fade {
   display: inline-block;
   animation: streamedWordFade 520ms ease-out both;
-  will-change: opacity, transform;
 }
 
 @keyframes pageFadeIn {
