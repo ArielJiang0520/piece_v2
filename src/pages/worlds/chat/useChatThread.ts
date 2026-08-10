@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import { readServerSentEvents } from '@/utils/sse'
@@ -11,6 +11,14 @@ export interface ChatMessage {
   created_at: number
 }
 
+// What the thread is about, and so what its bot can see. Every one of them gets the world and
+// its switched-on additions; what differs is whether a prompt is on the table, and which one.
+// The world version is never sent — the server takes the world's checked-out one.
+export type ChatSubject =
+  | { kind: 'world' }
+  | { kind: 'new-prompt' }
+  | { kind: 'cluster'; clusterId: number }
+
 // Optimistic turns have no server id yet; they get real ones when the query refetches.
 const PENDING_ID = -1
 
@@ -18,7 +26,19 @@ interface SendOptions {
   replaceFromId?: number
 }
 
-export function useWorldChat(worldId: string | undefined) {
+function subjectPath(subject: ChatSubject) {
+  if (subject.kind === 'cluster') return `/cluster/${subject.clusterId}`
+  if (subject.kind === 'new-prompt') return '/new-prompt'
+  return ''
+}
+
+function subjectKey(subject: ChatSubject) {
+  return subject.kind === 'cluster' ? `cluster:${subject.clusterId}` : subject.kind
+}
+
+// `subject` is null while what the thread is about is still being resolved (a cluster chat
+// opened by prompt id has to read the prompt first); the thread simply isn't there yet.
+export function useChatThread(worldId: string | undefined, subject: ChatSubject | null) {
   const queryClient = useQueryClient()
   const controllerRef = useRef<AbortController | null>(null)
   // Read through a ref so `send` keeps a stable identity — the switched-on set changes as the
@@ -32,10 +52,16 @@ export function useWorldChat(worldId: string | undefined) {
   // turns); the query is the source of truth the rest of the time.
   const [localThread, setLocalThread] = useState<ChatMessage[] | null>(null)
 
+  const endpoint = subject ? `/api/worlds/${worldId}/chat${subjectPath(subject)}` : ''
+  const queryKey = useMemo(
+    () => ['world-chat', worldId, subject ? subjectKey(subject) : null],
+    [worldId, subject],
+  )
+
   const threadQuery = useQuery({
-    queryKey: ['world-chat', worldId],
-    queryFn: () => apiFetch(`/api/worlds/${worldId}/chat`) as Promise<ChatMessage[]>,
-    enabled: !!worldId,
+    queryKey,
+    queryFn: () => apiFetch(endpoint) as Promise<ChatMessage[]>,
+    enabled: !!worldId && !!subject,
   })
 
   const messages = localThread ?? threadQuery.data ?? []
@@ -44,9 +70,9 @@ export function useWorldChat(worldId: string | undefined) {
 
   const send = useCallback(async (text: string, options: SendOptions = {}) => {
     const message = text.trim()
-    if (!message || !worldId || controllerRef.current) return
+    if (!message || !worldId || !subject || controllerRef.current) return
 
-    const base = queryClient.getQueryData<ChatMessage[]>(['world-chat', worldId]) ?? []
+    const base = queryClient.getQueryData<ChatMessage[]>(queryKey) ?? []
     // Editing or regenerating drops the replaced turn and everything after it — no branches.
     const kept = options.replaceFromId != null
       ? base.slice(0, base.findIndex(turn => turn.id === options.replaceFromId))
@@ -68,7 +94,7 @@ export function useWorldChat(worldId: string | undefined) {
     // instead of refetching.
     let synced = false
     try {
-      const response = await fetch(`/api/worlds/${worldId}/chat`, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -97,7 +123,7 @@ export function useWorldChat(worldId: string | undefined) {
             // `done` only arrives once the turn is on disk and carries the thread with it —
             // adopt it directly rather than refetching, which would race that write.
             if (Array.isArray(event.messages)) {
-              queryClient.setQueryData(['world-chat', worldId], event.messages)
+              queryClient.setQueryData(queryKey, event.messages)
               synced = true
             }
             break
@@ -115,22 +141,22 @@ export function useWorldChat(worldId: string | undefined) {
         // No `done` payload — the turn was stopped or errored. The server still persists what
         // it had, but it does that as its own request unwinds, so give it a beat before asking.
         await new Promise(resolve => setTimeout(resolve, 300))
-        await queryClient.invalidateQueries({ queryKey: ['world-chat', worldId] })
+        await queryClient.invalidateQueries({ queryKey })
       }
       // Only now drop the optimistic view: the query cache holds the real rows (with the real
       // ids that edit/regenerate need).
       setLocalThread(null)
     }
-  }, [queryClient, worldId])
+  }, [endpoint, queryClient, queryKey, subject, worldId])
 
   const stop = useCallback(() => {
     controllerRef.current?.abort()
   }, [])
 
   const clearMutation = useMutation({
-    mutationFn: () => apiFetch(`/api/worlds/${worldId}/chat`, { method: 'DELETE' }),
+    mutationFn: () => apiFetch(endpoint, { method: 'DELETE' }),
     onSuccess: () => {
-      queryClient.setQueryData(['world-chat', worldId], [])
+      queryClient.setQueryData(queryKey, [])
       setLocalThread(null)
       setError('')
     },

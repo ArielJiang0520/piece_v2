@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import { ArrowRight, Check, ChevronDown, Copy, Trash2 } from 'lucide-react'
+import { Check, Copy, MessageCircle, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog'
-import CountIndicator from '@/components/CountIndicator'
 import { useTopNavConfig } from '@/components/topNavConfig'
 import { entityLabel, formatEntityCount } from '@/config'
 import { useUiText } from '@/i18n'
 import { setGenerationModel, useGenerationModel } from '@/preferences/generationModel'
 import { useLanguageId } from '@/preferences/language'
-import { relativeTime } from '@/utils/time'
 import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
 import PromptCard from './components/PromptCard'
@@ -19,8 +16,6 @@ import PieceStrip from './components/PieceStrip'
 import PieceView from './components/PieceView'
 import GenerateControls from './components/GenerateControls'
 import GenerateVersionsPanel from './components/VersionsPanel'
-import MoreLikeThisPanel from './components/MoreLikeThisPanel'
-import ReworkSheet from './components/ReworkSheet'
 import { useGenerateData } from './hooks/useGenerateData'
 import { useSavedPiece } from './hooks/useSavedPiece'
 import AdditionsIndicator from '../shared/AdditionsIndicator'
@@ -30,7 +25,7 @@ import { parseVersionDraft, type ClusterPrompt } from '../shared/types'
 const headerTextActionClass =
   'inline-flex h-8 shrink-0 items-center justify-center px-1 font-serif-zh text-[14px] italic leading-none text-ink-3 underline decoration-ink-4/50 underline-offset-4 transition-colors duration-200 hover:text-ink hover:decoration-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-4/30 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:pointer-events-none disabled:opacity-50'
 
-type GenerateTab = 'prompt' | 'similar'
+type GenerateTab = 'prompt' | 'versions'
 
 // The static prompt page: shows a prompt (or a new/version draft), its saved pieces, and
 // the controls to start generating. Generating or resuming navigates to the separate
@@ -42,30 +37,13 @@ export default function PromptPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const lockedMode = !!promptId
-  const routeState = location.state as { draftPrompt?: unknown; versionDraft?: unknown; similarToPromptId?: unknown; generated?: unknown } | null
+  const routeState = location.state as { draftPrompt?: unknown; versionDraft?: unknown } | null
   const versionDraft = parseVersionDraft(routeState?.versionDraft)
   const draftPrompt = versionDraft?.promptText ?? (typeof routeState?.draftPrompt === 'string' ? routeState.draftPrompt : '')
-  // Carried forward from the "Similar prompts" page so ancestry is recorded when this fresh
-  // prompt is first saved. Only meaningful for a fresh draft (not a locked/existing prompt).
-  const similarToPromptId = !lockedMode && typeof routeState?.similarToPromptId === 'number'
-    ? routeState.similarToPromptId
-    : null
-  // A fresh prompt AI wrote rather than sharpened — carried through so it earns the "Generated" tag
-  // when saved. Arrives set from "More like this", or is earned here the moment a pass lands in an
-  // empty editor. Only meaningful for a fresh draft.
-  const routeGenerated = !lockedMode && routeState?.generated === true
-  const [generated, setGenerated] = useState(routeGenerated)
   const versionSourceClusterId = !lockedMode ? versionDraft?.sourceClusterId ?? null : null
   const [activeTab, setActiveTab] = useState<GenerateTab>('prompt')
-  const [versionsOpen, setVersionsOpen] = useState(false)
-  const [inspiredOpen, setInspiredOpen] = useState(false)
   const [showVersionDiff, setShowVersionDiff] = useState(false)
-  const [reworkOpen, setReworkOpen] = useState(false)
   const [prompt, setPrompt] = useState(draftPrompt)
-  // What the prompt said before each rework pass, newest last. Emptied the moment the writer types,
-  // so a step back never takes their own words with it — it only ever undoes a pass that nothing
-  // has happened since.
-  const [revertStack, setRevertStack] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const normalizedPrompt = prompt.trim()
@@ -73,7 +51,7 @@ export default function PromptPage() {
   const readingFontSize = useReadingFontSize()
   const model = useGenerationModel()
   const backHref = id ? `/worlds/${id}` : '/worlds'
-  // Shared with the Rework and More-like-this sheets on this screen — they send the same set.
+  // What the world will carry when Generate is tapped — the same set the chat is given.
   const { additions, activeIds } = useWorldAdditions(id)
 
   const {
@@ -111,9 +89,6 @@ export default function PromptPage() {
   }, [clusterIsForeign, navigate, backHref])
 
   const activePromptPieceCount = activePrompt?.piece_count ?? promptPieces.length
-  // Set when this prompt was spun off another via "More like this"; FK nulls out if the parent
-  // is deleted, so a non-null value is a live prompt we can redirect to.
-  const parentPromptId = lockedMode ? activePrompt?.similar_to_prompt_id ?? null : null
 
   const {
     selectedPieceId,
@@ -142,23 +117,10 @@ export default function PromptPage() {
     : -1
   const activeVersionNumber = activeVersionIndex >= 0 ? activeVersionIndex + 1 : null
   const hasMultipleVersions = clusterPrompts.length > 1
-  // "More like this" riffs on a saved prompt, so it only exists for an existing (locked) prompt.
-  const showSimilarTab = lockedMode && !!promptId
-  // Count of prompts already spun off this one, shown as a bubble on the tab. Shares the query key
-  // with MoreLikeThisPanel so the two never double-fetch.
-  const inspiredCountQuery = useQuery({
-    queryKey: ['prompt-inspired', id, Number(promptId)],
-    queryFn: () =>
-      apiFetch(`/api/worlds/${id}/similar/${Number(promptId)}/children`) as Promise<{ children: ClusterPrompt[] }>,
-    enabled: showSimilarTab && !!id,
-  })
-  const inspired = inspiredCountQuery.data?.children ?? []
-  const inspiredCount = inspired.length
-  // The bar that opens the inspired-prompts sheet lives on the prompt tab, so it only makes sense
-  // once this prompt has actually spun something off.
-  const showInspiredBar = showSimilarTab && inspiredCount > 0
+  // The version history of a saved prompt, so it only exists for an existing (locked) prompt.
+  const showVersionsTab = lockedMode && !!promptId
   const visibleActiveTab: GenerateTab =
-    activeTab === 'similar' && !showSimilarTab ? 'prompt' : activeTab
+    activeTab === 'versions' && !showVersionsTab ? 'prompt' : activeTab
 
   // Deleting the cluster from here removes the whole prompt — every version and every piece —
   // not just the version currently on screen (that lives in the versions sheet).
@@ -218,7 +180,7 @@ export default function PromptPage() {
   const generateTabs = useMemo(() => {
     if (!showGenerateTabs) return undefined
 
-    const gridColsClass = showSimilarTab ? 'grid-cols-2' : 'grid-cols-1'
+    const gridColsClass = showVersionsTab ? 'grid-cols-2' : 'grid-cols-1'
 
     return (
       <nav
@@ -236,16 +198,16 @@ export default function PromptPage() {
           >
             {entityLabel('prompt', {}, language)}
           </GenerateTabButton>
-          {showSimilarTab && (
+          {showVersionsTab && (
             <GenerateTabButton
-              active={visibleActiveTab === 'similar'}
-              onClick={() => setActiveTab('similar')}
+              active={visibleActiveTab === 'versions'}
+              onClick={() => setActiveTab('versions')}
             >
               <span className="inline-flex items-center gap-3">
-                <span>{t.moreLikeThis}</span>
-                {inspiredCount > 0 && (
+                <span>{t.versions}</span>
+                {clusterPrompts.length > 0 && (
                   <span className="inline-flex min-w-4 justify-center rounded-full bg-paper-2 px-1.5 py-0.5 font-sans text-[10px] font-semibold leading-none tracking-normal text-ink-3 ring-1 ring-paper-3/70">
-                    {inspiredCount}
+                    {clusterPrompts.length}
                   </span>
                 )}
               </span>
@@ -254,17 +216,16 @@ export default function PromptPage() {
         </div>
       </nav>
     )
-  }, [language, showGenerateTabs, showSimilarTab, showPromptTab, t, visibleActiveTab, inspiredCount])
+  }, [language, showGenerateTabs, showVersionsTab, showPromptTab, t, visibleActiveTab, clusterPrompts.length])
 
   useTopNavConfig({ backHref, rightAction: deleteClusterAction, bottomSlot: generateTabs })
 
   // The page is not remounted between a fresh draft and a saved prompt, so what the route says is
-  // resynced here rather than only seeded — including whether AI wrote this one.
+  // resynced here rather than only seeded — including text carried back from the chat.
   useEffect(() => {
     if (promptId) return
     setPrompt(draftPrompt)
-    setGenerated(routeGenerated)
-  }, [draftPrompt, promptId, routeGenerated])
+  }, [draftPrompt, promptId])
 
   useEffect(() => {
     if (!promptId) return
@@ -288,37 +249,8 @@ export default function PromptPage() {
 
   useEffect(() => {
     if (!showGenerateTabs) setActiveTab('prompt')
-    else if (activeTab === 'similar' && !showSimilarTab) setActiveTab('prompt')
-  }, [activeTab, showGenerateTabs, showSimilarTab])
-
-  // Rework acts on the prompt in the editor, so it only exists where that editor is: the prompt
-  // tab, unlocked. Switch tabs, or leave the edit for the saved prompt, and the text it was working
-  // on is no longer on screen — the sheet closes rather than hanging over whatever replaced it.
-  useEffect(() => {
-    if (lockedMode || visibleActiveTab !== 'prompt') setReworkOpen(false)
-  }, [lockedMode, visibleActiveTab])
-  const reworkVisible = reworkOpen && !lockedMode && visibleActiveTab === 'prompt'
-
-  // Close the versions sheet if there's nothing left to show (e.g. after deleting versions).
-  useEffect(() => {
-    if (!hasMultipleVersions) setVersionsOpen(false)
-  }, [hasMultipleVersions])
-
-  // Lock background scroll while the versions sheet is open.
-  useEffect(() => {
-    if (!versionsOpen) return
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = previous }
-  }, [versionsOpen])
-
-  // Lock background scroll while the inspired-prompts sheet is open.
-  useEffect(() => {
-    if (!inspiredOpen) return
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = previous }
-  }, [inspiredOpen])
+    else if (activeTab === 'versions' && !showVersionsTab) setActiveTab('prompt')
+  }, [activeTab, showGenerateTabs, showVersionsTab])
 
   const promptError = promptDetailsError ? t.couldNotLoad(entityLabel('prompt', {}, language)) : ''
   const generateDisabled = promptDetailsLoading || !normalizedPrompt
@@ -327,7 +259,26 @@ export default function PromptPage() {
 
   function handleGenerate() {
     if (generateDisabled) return
-    navigate(genBase, { state: { prompt, versionDraft: routeState?.versionDraft, similarToPromptId, generated } })
+    navigate(genBase, { state: { prompt, versionDraft: routeState?.versionDraft } })
+  }
+
+  // The chat that has this screen's material in view. From a saved prompt it is that prompt's
+  // cluster; from a blank editor there is no prompt yet, so it is the new-prompt thread; from an
+  // edit in progress it is still the cluster being worked on, not an invented one. The editor's
+  // unsaved text rides along so coming back doesn't lose it.
+  function openChat() {
+    if (!id) return
+    if (lockedMode) {
+      navigate(`/worlds/${id}/prompt/${promptId}/chat`)
+      return
+    }
+    if (versionDraft) {
+      navigate(`/worlds/${id}/prompt/${versionDraft.sourcePromptId}/chat`, {
+        state: { versionDraft: { ...versionDraft, promptText: prompt } },
+      })
+      return
+    }
+    navigate(`/worlds/${id}/prompt/new/chat`, { state: { draftPrompt: prompt } })
   }
 
   // The paragraph the reader is currently on: the topmost one still below the sticky chrome
@@ -375,70 +326,20 @@ export default function PromptPage() {
     navigate(`/worlds/${id}/prompt/${versionDraft.sourcePromptId}`, { replace: true })
   }
 
-  // AI help on the prompt being edited — the counterpart to "More like this", which builds a
-  // separate prompt instead. It is a sheet over this screen rather than a screen of its own: the
-  // text being worked on stays in view, and a pass is written into the editor here.
   function handlePromptEdited(value: string) {
     setPrompt(value)
-    if (revertStack.length > 0) setRevertStack([])
-  }
-
-  function handleReworkPass(draft: string) {
-    // A pass into an empty editor is AI writing the prompt, not sharpening one — that earns the
-    // "Generated" tag, and keeps it even if the writer works the text over afterwards.
-    if (!prompt.trim()) setGenerated(true)
-    setRevertStack(stack => [...stack, prompt])
-    setPrompt(draft)
-  }
-
-  // The same ask run again stands in place of the pass it repeats, so the two are one step back.
-  function handleReworkTryAgain(draft: string) {
-    setPrompt(draft)
-  }
-
-  function handleRevert() {
-    const previous = revertStack[revertStack.length - 1]
-    if (previous === undefined) return
-    setPrompt(previous)
-    setRevertStack(stack => stack.slice(0, -1))
   }
 
   return (
-    // The rework sheet is docked to the bottom rather than floating over the page, so the page
-    // makes room for it instead of letting it sit on top of the generate controls.
-    <div className={`page-fade-in page-width px-4 ${visibleActiveTab === 'prompt' ? `pt-6 ${reworkVisible ? 'pb-[22rem]' : needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}` : 'pt-0'}`}>
+    <div className={`page-fade-in page-width px-4 ${visibleActiveTab === 'prompt' ? `pt-6 ${needsFirstTakeScrollRoom ? 'pb-48' : 'pb-32'}` : 'pt-0'}`}>
       {visibleActiveTab === 'prompt' ? (
         <>
-          {showInspiredBar && (
-            <button
-              type="button"
-              onClick={() => setInspiredOpen(true)}
-              className="-mx-4 -mt-6 mb-1 flex w-[calc(100%+2rem)] items-center justify-center gap-1.5 border-b border-rose-line/70 bg-paper-2/40 px-4 py-4 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-colors active:text-ink"
-            >
-              <span>{t.inspiredPromptsLabel(formatEntityCount(inspiredCount, 'prompt', language), entityLabel('prompt', {}, language))}</span>
-              <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            </button>
-          )}
-
-          {parentPromptId != null && (
-            <div className={`-mx-4 ${showInspiredBar ? '' : '-mt-6'} mb-1 flex w-[calc(100%+2rem)] justify-center border-b border-rose-line/70 bg-paper-2/40 px-4 py-4`}>
-              <button
-                type="button"
-                onClick={() => navigate(`/worlds/${id}/prompt/${parentPromptId}`)}
-                className="inline-flex items-center gap-1 font-serif-zh text-[13px] italic leading-none text-ink-3 transition-colors active:text-ink"
-              >
-                <span>{t.inspiredByParent(entityLabel('prompt', {}, language))}</span>
-                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-              </button>
-            </div>
-          )}
-
           {/* Passive: what the world will carry when Generate is tapped. Switching additions on
               and off lives on the Additions tab, not here. */}
           <AdditionsIndicator
             additions={additions}
             activeIds={activeIds}
-            className={`-mx-4 w-[calc(100%+2rem)] ${showInspiredBar || parentPromptId != null ? '' : '-mt-6'} mb-1`}
+            className="-mx-4 -mt-6 mb-1 w-[calc(100%+2rem)]"
           />
 
           <div className={`${complete ? 'mb-1' : ''} bg-paper/95 pb-1`}>
@@ -450,15 +351,6 @@ export default function PromptPage() {
                 {headerLabel ? (
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="t-meta truncate text-ink-3">{headerLabel}</span>
-                    {lockedMode && hasMultipleVersions && (
-                      <button
-                        type="button"
-                        onClick={() => setVersionsOpen(true)}
-                        className="inline-flex shrink-0 items-center rounded-full bg-paper-2 px-2 py-0.5 font-sans text-[11px] font-semibold leading-none text-ink-3 ring-1 ring-paper-3/70 transition-colors active:bg-paper-3"
-                      >
-                        {t.seeAllVersions}
-                      </button>
-                    )}
                   </div>
                 ) : (
                   <span aria-hidden="true" className="h-px flex-1 bg-paper-3/70" />
@@ -492,25 +384,6 @@ export default function PromptPage() {
                     </>
                   ) : (
                     <>
-                      {revertStack.length > 0 && (
-                        <button
-                          type="button"
-                          className={headerTextActionClass}
-                          onClick={handleRevert}
-                        >
-                          {t.revert}
-                        </button>
-                      )}
-                      {/* Live on an empty editor too: with nothing to work on, the same sheet
-                          writes the first prompt, and this is the only way to it. */}
-                      <button
-                        type="button"
-                        aria-pressed={reworkOpen}
-                        className={`${headerTextActionClass} ${reworkOpen ? 'text-ink! decoration-ink-3!' : ''}`}
-                        onClick={() => setReworkOpen(open => !open)}
-                      >
-                        {normalizedPrompt ? t.rework : t.aiDraft}
-                      </button>
                       {/* Only an edit has something to go back to. A blank new prompt leaves by
                           the nav's back arrow, like every other screen. */}
                       {versionDraft && (
@@ -577,108 +450,32 @@ export default function PromptPage() {
           </section>
         </>
       ) : (
-        // Full-bleed: MoreLikeThisPanel manages its own page padding and fixed action bar.
-        <div className="-mx-4">
-          <MoreLikeThisPanel
+        // The version history of this prompt, in the tab rather than a sheet over it: it is a
+        // view of the same premise, not an interruption of it.
+        <div className="pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+          <GenerateVersionsPanel
             worldId={id}
-            sourcePromptId={Number(promptId)}
-            sourceText={activePrompt?.text ?? prompt}
-            worldVersionId={currentWorldVersionId}
+            currentPromptId={promptId ?? null}
+            prompts={clusterPrompts}
+            loading={clusterLoading || promptDetailsLoading}
+            showDiff={showVersionDiff}
+            onShowDiffChange={setShowVersionDiff}
+            onViewPrompt={showPromptTab}
           />
         </div>
       )}
 
-      {reworkVisible && (
-        <ReworkSheet
-          worldId={id}
-          text={prompt}
-          onPass={handleReworkPass}
-          onTryAgain={handleReworkTryAgain}
-          onClose={() => setReworkOpen(false)}
-        />
-      )}
-
-      {versionsOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={t.versions}>
-          <button
-            type="button"
-            aria-label={t.close}
-            className="sheet-backdrop-in absolute inset-0 bg-ink/35"
-            onClick={() => setVersionsOpen(false)}
-          />
-          <div className="sheet-slide-up relative flex h-[85vh] flex-col rounded-t-2xl border-t border-rose-line bg-paper shadow-[0_-24px_70px_rgba(26,18,16,0.22)]">
-            <div className="flex items-center justify-between gap-3 border-b border-rose-line/70 px-5 pb-3 pt-4">
-              <div className="flex items-center gap-2">
-                <span className="t-eyebrow">{t.versions}</span>
-                <span className="inline-flex min-w-5 justify-center rounded-full bg-paper-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none tracking-normal text-ink-3 ring-1 ring-paper-3/70">
-                  {clusterPrompts.length}
-                </span>
-              </div>
-              <button type="button" className={headerTextActionClass} onClick={() => setVersionsOpen(false)}>
-                {t.close}
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-              <GenerateVersionsPanel
-                worldId={id}
-                currentPromptId={promptId ?? null}
-                prompts={clusterPrompts}
-                loading={clusterLoading || promptDetailsLoading}
-                showDiff={showVersionDiff}
-                onShowDiffChange={setShowVersionDiff}
-                onViewPrompt={() => setVersionsOpen(false)}
-              />
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
-
-      {inspiredOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={t.inspiredPrompts}>
-          <button
-            type="button"
-            aria-label={t.close}
-            className="sheet-backdrop-in absolute inset-0 bg-ink/35"
-            onClick={() => setInspiredOpen(false)}
-          />
-          <div className="sheet-slide-up relative flex h-[85vh] flex-col rounded-t-2xl border-t border-rose-line bg-paper shadow-[0_-24px_70px_rgba(26,18,16,0.22)]">
-            <div className="flex items-center justify-between gap-3 border-b border-rose-line/70 px-5 pb-3 pt-4">
-              <div className="flex items-center gap-2">
-                <span className="t-eyebrow">{t.inspiredPrompts}</span>
-                <span className="inline-flex min-w-5 justify-center rounded-full bg-paper-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none tracking-normal text-ink-3 ring-1 ring-paper-3/70">
-                  {inspiredCount}
-                </span>
-              </div>
-              <button type="button" className={headerTextActionClass} onClick={() => setInspiredOpen(false)}>
-                {t.close}
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-              <ul className="hairline-list flex flex-col">
-                {inspired.map(child => (
-                  <li key={child.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInspiredOpen(false)
-                        navigate(`/worlds/${id}/prompt/${child.id}`)
-                      }}
-                      className="block w-full py-6 text-left transition-transform duration-150 active:scale-[0.99]"
-                    >
-                      <div className="t-meta flex items-center justify-between gap-3">
-                        <span className="truncate not-italic text-ink-3">{relativeTime(child.updated_at, language)}</span>
-                        <CountIndicator count={child.piece_count} className="shrink-0 justify-end gap-x-2" />
-                      </div>
-                      <p className="mt-3 whitespace-pre-wrap font-serif-zh text-[16px] leading-7 text-ink-2">{child.text}</p>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>,
-        document.body,
+      {/* The chat about what is on this screen. Docked bottom-left, above the safe area: the app
+          is held one-handed with the left thumb, and the generate CTA docks to the top. */}
+      {visibleActiveTab === 'prompt' && (
+        <button
+          type="button"
+          onClick={openChat}
+          className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-30 inline-flex items-center gap-1.5 rounded-full bg-rose-pale px-3.5 py-2.5 font-serif-zh text-[13px] italic leading-none text-rose-deep shadow-(--shadow-cta) transition-transform active:translate-y-px"
+        >
+          <MessageCircle aria-hidden="true" className="h-4 w-4" />
+          {lockedMode || versionDraft ? t.chatTitle : t.chatWriteOne}
+        </button>
       )}
 
       <ConfirmDialog

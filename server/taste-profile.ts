@@ -14,7 +14,7 @@ import { TASTE_MODEL_ID } from '../src/preferences/generationModel'
 import { openRouterProvider } from './openrouter-provider'
 
 // The distillation model is pinned in the shared model-roles block (generationModel.ts),
-// alongside the piece-gen and similar/ideas models, so all three are tuned in one place.
+// alongside the piece-gen and chat models, so all three are tuned in one place.
 //
 // Distillation is a background job — the manual refresh no longer waits on it (see the refresh
 // route), so this timeout is a generous backstop, not a UX deadline. Its real purpose is to

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowUp, ChevronRight, GitBranch, Heart, Search, X, Lightbulb, Wrench } from 'lucide-react'
+import { ArrowUp, ChevronRight, GitBranch, Heart, Search, X, Wrench } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
@@ -28,8 +28,6 @@ interface ClusterGroup {
   piece_count: number
   latest_prompt_id: number | null
   latest_piece_at: number | null
-  similar_count: number
-  is_generated: boolean
   // Whether the cluster's latest prompt has been written with world additions switched on. Taken
   // from that prompt alone: it is the cluster's current text, so it is what the card is about.
   used_additions: boolean
@@ -435,7 +433,7 @@ export default function WorldPrompts() {
               {groups.map((group, index) => {
                 const hasPieces = group.piece_count > 0
                 const hasVariations = group.prompt_count > 1
-                const hasStats = hasPieces || hasVariations || group.similar_count > 0
+                const hasStats = hasPieces || hasVariations
 
                 return (
                   <li
@@ -477,15 +475,6 @@ export default function WorldPrompts() {
                             <div className="flex items-center gap-1.5">
                               <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
                               <span>{t.versionCount(group.prompt_count)}</span>
-                            </div>
-                          )}
-                          {group.similar_count > 0 && (
-                            <div
-                              className="flex items-center gap-1.5"
-                              title={t.similarCount(group.similar_count)}
-                            >
-                              <Lightbulb aria-hidden="true" className="h-3.5 w-3.5" />
-                              <span>{group.similar_count}</span>
                             </div>
                           )}
                         </div>

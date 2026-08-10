@@ -55,15 +55,13 @@ function versionFields(versions: ReturnType<typeof versionLabelsForWorld>, world
 function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow[]) {
   const clusterIds = clusterRows.map(cluster => cluster.id)
   const versions = versionLabelsForWorld(worldId)
-  if (clusterIds.length === 0) return clusterRows.map(cluster => ({ ...cluster, ...versionFields(versions, cluster.world_version_id), title: 'Untitled cluster', latest_piece_at: null as number | null, similar_count: 0, is_generated: false, used_additions: false }))
+  if (clusterIds.length === 0) return clusterRows.map(cluster => ({ ...cluster, ...versionFields(versions, cluster.world_version_id), title: 'Untitled cluster', latest_piece_at: null as number | null, used_additions: false }))
 
   const promptRows = db
     .select({
       id: prompts.id,
       cluster_id: prompts.cluster_id,
       text: prompts.text,
-      similar_to_prompt_id: prompts.similar_to_prompt_id,
-      is_generated: prompts.is_generated,
       created_at: prompts.created_at,
     })
     .from(prompts)
@@ -105,20 +103,7 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
       .map(row => [row.cluster_id!, row.latest_piece_at]),
   )
 
-  // "Similar prompts" ancestry, per cluster. A cluster is "generated" when any of its prompts was
-  // born from an AI candidate — either seeded from an outside prompt ("More like this") or a
-  // world-native draft AI wrote into an empty editor (is_generated, no parent). Its similar_count is how many
-  // prompts (anywhere in this world) were seeded from any prompt in the cluster.
-  const promptIdToCluster = new Map<number, number>()
-  const generated = new Set<number>()
-  for (const prompt of promptRows) {
-    if (prompt.cluster_id === null) continue
-    promptIdToCluster.set(prompt.id, prompt.cluster_id)
-    if (prompt.similar_to_prompt_id !== null || prompt.is_generated) generated.add(prompt.cluster_id)
-  }
-
-  const similarCountByCluster = new Map<number, number>()
-  const allPromptIds = [...promptIdToCluster.keys()]
+  const allPromptIds = promptRows.filter(prompt => prompt.cluster_id !== null).map(prompt => prompt.id)
 
   // Whether a prompt has ever been written with world additions switched on. The stamp lives on
   // pieces, so a prompt counts if any of its pieces carries a non-empty one. A cluster takes this
@@ -142,28 +127,6 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
     for (const row of additionRows) usedAdditionsByPrompt.set(row.prompt_id, Number(row.used) === 1)
   }
 
-  if (allPromptIds.length > 0) {
-    const childRows = db
-      .select({
-        similar_to_prompt_id: prompts.similar_to_prompt_id,
-        count: sql<number>`count(*)`,
-      })
-      .from(prompts)
-      .where(and(
-        inArray(prompts.similar_to_prompt_id, allPromptIds),
-        eq(prompts.world_id, worldId),
-        eq(prompts.user_id, userId),
-      ))
-      .groupBy(prompts.similar_to_prompt_id)
-      .all()
-    for (const row of childRows) {
-      if (row.similar_to_prompt_id === null) continue
-      const clusterId = promptIdToCluster.get(row.similar_to_prompt_id)
-      if (clusterId === undefined) continue
-      similarCountByCluster.set(clusterId, (similarCountByCluster.get(clusterId) ?? 0) + Number(row.count))
-    }
-  }
-
   return clusterRows.map(cluster => {
     const clusterPrompts = promptsByCluster.get(cluster.id) ?? []
     const latestPrompt = clusterPrompts[0]
@@ -173,8 +136,6 @@ function enrichClusters(userId: number, worldId: number, clusterRows: ClusterRow
       latest_prompt_id: latestPrompt?.id ?? cluster.latest_prompt_id,
       title: latestPrompt?.text ?? 'Untitled cluster',
       latest_piece_at: latestPieceByCluster.get(cluster.id) ?? null,
-      similar_count: similarCountByCluster.get(cluster.id) ?? 0,
-      is_generated: generated.has(cluster.id),
       used_additions: latestPrompt ? usedAdditionsByPrompt.get(latestPrompt.id) ?? false : false,
     }
   })

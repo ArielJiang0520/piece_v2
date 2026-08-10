@@ -62,16 +62,10 @@ export default function GenerateScreen() {
   const readingFontSize = useReadingFontSize()
 
   const lockedMode = !!promptId
-  const routeState = location.state as { prompt?: unknown; versionDraft?: unknown; similarToPromptId?: unknown; generated?: unknown } | null
+  const routeState = location.state as { prompt?: unknown; versionDraft?: unknown } | null
   const versionDraft = parseVersionDraft(routeState?.versionDraft)
   const statePrompt = typeof routeState?.prompt === 'string' ? routeState.prompt : ''
   const versionSourcePromptId = !lockedMode ? versionDraft?.sourcePromptId ?? null : null
-  // Ancestry seed from the "Similar prompts" page — only meaningful for a fresh prompt.
-  const similarToPromptId = !lockedMode && typeof routeState?.similarToPromptId === 'number'
-    ? routeState.similarToPromptId
-    : null
-  // A fresh prompt AI wrote rather than one the writer typed — earns the "Generated" tag on save.
-  const generated = !lockedMode && routeState?.generated === true
 
   const resumeParam = searchParams.get('resume')
   const resumePieceId = resumeParam ? Number(resumeParam) : null
@@ -91,8 +85,6 @@ export default function GenerateScreen() {
     : {
       draftPrompt: statePrompt,
       versionDraft: versionDraft ? { ...versionDraft, promptText: statePrompt } : undefined,
-      similarToPromptId,
-      generated,
     }
 
   const {
@@ -173,8 +165,6 @@ export default function GenerateScreen() {
           prompt: promptText,
           promptId: lockedMode && promptId ? Number(promptId) : undefined,
           versionSourcePromptId,
-          similarToPromptId: similarToPromptId ?? undefined,
-          generated: generated || undefined,
           body: text,
           structure: serializeStructure(structure),
           model,

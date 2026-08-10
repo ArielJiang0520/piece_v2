@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
-import { integer, primaryKey, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
+import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 const dbPath = process.env.DB_PATH || process.env.DEV_DB_PATH || './piece.db';
 const sqlite = new Database(dbPath);
@@ -62,14 +62,12 @@ sqlite.run(`
     -- Every prompt is born into a cluster in the same transaction, so this is never null in
     -- practice. CASCADE: deleting a cluster takes its prompt variations with it.
     cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE CASCADE,
-    similar_to_prompt_id INTEGER REFERENCES prompts(id) ON DELETE SET NULL,
     text TEXT NOT NULL,
     -- Search index only: the prompt's own embedding, fetched in the background after saving.
     -- Null means "not findable by fuzzy search yet", never anything about grouping.
     embedding TEXT,
     piece_count INTEGER NOT NULL DEFAULT 0,
     is_favorite INTEGER NOT NULL DEFAULT 0,
-    is_generated INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -147,13 +145,19 @@ sqlite.run(`
     PRIMARY KEY (world_id, world_version_id)
   );
 
-  -- One row per turn in a world's chat thread. There is exactly one thread per world (no
-  -- session list, no branching): clearing it deletes every row for that world, and editing
-  -- or regenerating a turn deletes that row and every later one.
+  -- One row per turn in a chat thread. A row's thread is derivable from the two nullable
+  -- subject columns, so there is no kind column: both null is the world thread, a version is
+  -- the new-prompt thread for that version, a cluster is that cluster's thread. There is
+  -- exactly one thread per subject (no session list, no branching): clearing it deletes every
+  -- row for that subject, and editing or regenerating a turn deletes that row and every later
+  -- one. Cascade does the lifetime work — deleting a cluster, a version or a world takes the
+  -- threads hanging off it with no cleanup code.
   CREATE TABLE IF NOT EXISTS world_chat_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE CASCADE,
+    world_version_id INTEGER REFERENCES world_versions(id) ON DELETE CASCADE,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     created_at INTEGER NOT NULL
@@ -300,9 +304,12 @@ function rebuildPromptClustersTable() {
   }
 }
 
-// Drop prompts.world_version_id (the cluster holds it now) and make cluster_id cascade, so
-// deleting a cluster takes its variations rather than orphaning them.
-function rebuildPromptsTableWithoutVersion() {
+// Rebuild prompts into the shape above. Three migrations land here, since SQLite can neither
+// ALTER a foreign key nor drop a column one references: world_version_id goes (the cluster holds
+// the version now), cluster_id gains ON DELETE CASCADE so deleting a cluster takes its variations
+// rather than orphaning them, and the lineage pair (similar_to_prompt_id, is_generated) goes with
+// the "More like this" feature that wrote them.
+function rebuildPromptsTable() {
   sqlite.run('PRAGMA foreign_keys = OFF;')
   try {
     sqlite.run('DROP TABLE IF EXISTS prompts_new;')
@@ -312,19 +319,17 @@ function rebuildPromptsTableWithoutVersion() {
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         world_id INTEGER NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
         cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE CASCADE,
-        similar_to_prompt_id INTEGER REFERENCES prompts(id) ON DELETE SET NULL,
         text TEXT NOT NULL,
         embedding TEXT,
         piece_count INTEGER NOT NULL DEFAULT 0,
         is_favorite INTEGER NOT NULL DEFAULT 0,
-        is_generated INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
     `)
     sqlite.run(`
-      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, created_at, updated_at)
-      SELECT id, user_id, world_id, cluster_id, similar_to_prompt_id, text, embedding, piece_count, is_favorite, is_generated, created_at, updated_at FROM prompts;
+      INSERT INTO prompts_new (id, user_id, world_id, cluster_id, text, embedding, piece_count, is_favorite, created_at, updated_at)
+      SELECT id, user_id, world_id, cluster_id, text, embedding, piece_count, is_favorite, created_at, updated_at FROM prompts;
     `)
     sqlite.run('DROP TABLE prompts;')
     sqlite.run('ALTER TABLE prompts_new RENAME TO prompts;')
@@ -414,6 +419,12 @@ function dropColumnIfPresent(table: string, column: string) {
         rebuildTasteLikesTable()
         return
       }
+      // similar_to_prompt_id points at prompts itself, and SQLite won't drop a column a foreign
+      // key is written on.
+      if (table === 'prompts' && ['similar_to_prompt_id', 'is_generated'].includes(column)) {
+        rebuildPromptsTable()
+        return
+      }
       throw error
     }
   }
@@ -439,8 +450,6 @@ addColumnIfMissing('pieces', 'used_taste', 'used_taste INTEGER NOT NULL DEFAULT 
 addColumnIfMissing('pieces', 'addition_ids', 'addition_ids TEXT')
 // Backfill: existing pieces last "updated" when they were created.
 sqlite.run('UPDATE pieces SET updated_at = created_at WHERE updated_at = 0;')
-addColumnIfMissing('prompts', 'similar_to_prompt_id', 'similar_to_prompt_id INTEGER REFERENCES prompts(id)')
-addColumnIfMissing('prompts', 'is_generated', 'is_generated INTEGER NOT NULL DEFAULT 0')
 addColumnIfMissing('taste_likes', 'context', 'context TEXT')
 // Fold the old separate `tags` (JSON array) + free-typed `note` into a single `reasons`
 // text field, then drop them. tags like ["language","dialogue"] degrade to the readable
@@ -647,8 +656,19 @@ if (hasColumn('prompt_clusters', 'average_embedding') || foreignKeyOnDelete('pro
   rebuildPromptClustersTable()
 }
 if (hasColumn('prompts', 'world_version_id') || foreignKeyOnDelete('prompts', 'cluster_id') !== 'CASCADE') {
-  rebuildPromptsTableWithoutVersion()
+  rebuildPromptsTable()
 }
+
+// The "More like this" lineage. Nothing reads these any more: a prompt's only relationships are
+// its cluster (which version, which premise) and the pieces written from it.
+sqlite.run('DROP INDEX IF EXISTS idx_prompts_similar_to;')
+dropColumnIfPresent('prompts', 'similar_to_prompt_id')
+dropColumnIfPresent('prompts', 'is_generated')
+
+// Which thread a chat row belongs to. Both null on every existing row — those are world-thread
+// turns, which is what they were — so there is nothing to backfill.
+addColumnIfMissing('world_chat_messages', 'cluster_id', 'cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE CASCADE')
+addColumnIfMissing('world_chat_messages', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE CASCADE')
 
 sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
@@ -656,7 +676,6 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_prompts_world_updated ON prompts(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster ON prompts(cluster_id);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster_created ON prompts(cluster_id, created_at DESC, id DESC);
-  CREATE INDEX IF NOT EXISTS idx_prompts_similar_to ON prompts(similar_to_prompt_id);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_updated ON prompt_clusters(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_pieces ON prompt_clusters(user_id, world_id, piece_count DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompt_clusters_world_variations ON prompt_clusters(user_id, world_id, prompt_count DESC, updated_at DESC);
@@ -668,6 +687,7 @@ sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_taste_likes_user_created ON taste_likes(user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_world_chat_world_created ON world_chat_messages(world_id, created_at, id);
+  CREATE INDEX IF NOT EXISTS idx_world_chat_subject ON world_chat_messages(world_id, cluster_id, world_version_id, created_at, id);
 `)
 
 // Prompt text is unique per world VERSION now, not per world: the same premise written against
@@ -767,12 +787,10 @@ export const prompts = sqliteTable('prompts', {
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
   cluster_id: integer('cluster_id').references(() => promptClusters.id),
-  similar_to_prompt_id: integer('similar_to_prompt_id').references((): AnySQLiteColumn => prompts.id),
   text: text('text').notNull(),
   embedding: text('embedding'),
   piece_count: integer('piece_count').notNull().default(0),
   is_favorite: integer('is_favorite').notNull().default(0),
-  is_generated: integer('is_generated').notNull().default(0),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
 })
@@ -831,6 +849,10 @@ export const worldChatMessages = sqliteTable('world_chat_messages', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
+  // The thread's subject: both null is the world thread, a version is that version's
+  // new-prompt thread, a cluster is that cluster's thread.
+  cluster_id: integer('cluster_id').references(() => promptClusters.id),
+  world_version_id: integer('world_version_id').references(() => worldVersions.id),
   role: text('role').notNull(),
   content: text('content').notNull(),
   created_at: integer('created_at').notNull(),

@@ -57,8 +57,6 @@ export interface PromptDetail {
   id: number
   text: string
   cluster_id: number | null
-  // The prompt this one was derived from ("More like this"). Null unless it descends from another.
-  similar_to_prompt_id: number | null
   piece_count: number
   created_at: number
   updated_at: number

@@ -51,26 +51,6 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
   let existingPromptClusterId: number | null = null
   let versionSourceClusterId: number | null = null
 
-  // Ancestry for a "Similar prompts" offshoot: recorded only when this save creates a brand-new
-  // prompt row. Soft-validated — a bad/foreign id is dropped, never a 400.
-  let similarToPromptId: number | null = null
-  if (body.similarToPromptId !== undefined && body.similarToPromptId !== null) {
-    const candidate = Number(body.similarToPromptId)
-    if (Number.isInteger(candidate) && candidate >= 1) {
-      const parent = db
-        .select({ id: prompts.id })
-        .from(prompts)
-        .where(and(eq(prompts.id, candidate), eq(prompts.world_id, worldId), eq(prompts.user_id, userId)))
-        .get()
-      if (parent) similarToPromptId = parent.id
-    }
-  }
-
-  // Whether this prompt was born from an AI candidate — a "More like this" offshoot (which also
-  // carries ancestry above) or one AI wrote into an empty editor from the world (no parent). Drives the
-  // "Generated" tag on the prompt card.
-  const isGenerated = similarToPromptId !== null || body.generated === true
-
   if (body.versionSourcePromptId !== undefined && body.versionSourcePromptId !== null) {
     const sourcePromptId = Number(body.versionSourcePromptId)
     if (!Number.isInteger(sourcePromptId) || sourcePromptId < 1) return c.json({ error: 'Invalid version source prompt id' }, 400)
@@ -159,8 +139,6 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
         user_id: userId,
         world_id: worldId,
         cluster_id: versionSourceClusterId,
-        similar_to_prompt_id: similarToPromptId,
-        is_generated: isGenerated ? 1 : 0,
         text: promptText,
         piece_count: 1,
         created_at: now,
