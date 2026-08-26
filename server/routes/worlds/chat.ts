@@ -4,7 +4,7 @@ import { and, asc, eq, gte, isNull } from 'drizzle-orm'
 import { db, promptClusters, prompts, worldChatMessages } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getModelById, getUserId, paramInt } from '../../route-helpers'
-import { CHAT_MODEL_ID } from '../../../src/preferences/generationModel'
+import { DEFAULT_CHAT_MODEL_ID } from '../../../src/preferences/generationModel'
 import { openRouterProvider } from '../../openrouter-provider'
 import { readServerSentEvents } from '../../../src/utils/sse'
 import { clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
@@ -30,18 +30,22 @@ const RETRYABLE_STATUSES = new Set([429, 502, 503])
 const MAX_ATTEMPTS = 3
 const MAX_RETRY_WAIT_MS = 20_000
 
-// One thread per subject, and the subject is what the bot can see. Every bot gets the world —
-// none of them can talk about a prompt without knowing what it is set in — and what separates
-// them is whether a prompt is on the table, and which one.
+// One thread per subject, and the subject is what the bot can see. Both bots get the world —
+// neither can talk about a prompt without knowing what it is set in — and what separates them is
+// whether a prompt is on the table.
 type ChatSubject =
   | { kind: 'world' }
-  | { kind: 'new-prompt'; worldVersionId: number }
   | { kind: 'cluster'; clusterId: number }
 
-// Deliberately minimal: the material, at most one line naming the job, and the language rule.
-// No format instructions anywhere — not a length, not a shape, not a marker to parse. The bot
-// answers however it wants and the writer reads it; if a reply is too long they say so in the
-// next turn, out loud, and can see whether it worked.
+// What the prompt thread is for, and — since a model handed a premise and a world will otherwise
+// just start writing the story — what it is not for. This is about the job, not about how to
+// answer: the writer can still ask for prose outright and get it.
+const PREMISE_NOT_STORY = 'The premise is the work here, not the story. The story is generated from it later, on another screen, by another model — so don\'t write it: no prose, no scenes, no narration, no dialogue, unless the writer asks you for that in so many words.'
+
+// Deliberately minimal: the material, the job, and the language rule. No format instructions —
+// not a length, not a shape, not a marker to parse. The bot answers however it wants and the
+// writer reads it; if a reply is too long they say so in the next turn, out loud, and can see
+// whether it worked.
 function buildSystemPrompt(subject: ChatSubject, worldBody: string, clusterPrompt: string): string {
   const sections: string[] = []
   const worldReference = worldBody.trim()
@@ -51,11 +55,7 @@ function buildSystemPrompt(subject: ChatSubject, worldBody: string, clusterPromp
   if (subject.kind === 'cluster') {
     const promptText = clusterPrompt.trim()
     if (promptText) sections.push(`# The prompt being worked on\n${promptText}`)
-    sections.push(`# Your job\nThe writer is working on the prompt above — the premise for a story set in this world. Help them with it, working to what they ask for.`)
-  } else if (subject.kind === 'new-prompt') {
-    // Working to a brief, never ranging over the world on its own and producing a premise
-    // unasked — that is what the deleted ideas.ts did.
-    sections.push(`# Your job\nThe writer is working out a new prompt — the premise for a story set in this world. Help them build it, working to what they ask for.`)
+    sections.push(`# Your job\nThe writer is working over the prompt above — the short premise a story set in this world will be generated from. Help them with that premise, working to what they ask for. ${PREMISE_NOT_STORY}`)
   }
   // Last, where it is closest to the answer: these instructions are in English and the writer's
   // world usually is not, and a model follows the language it was addressed in unless told otherwise.
@@ -81,22 +81,20 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 // Which rows belong to this thread. The subject columns are the whole answer — a world row has
-// neither set, so it can never be picked up by one of the others.
+// neither set, so it can never be picked up by the other.
+//
+// `world_version_id` is no longer written by anything: it belonged to the removed new-prompt
+// thread. The world filter still requires it null so those leftover rows stay where they were
+// rather than folding into the world thread.
 function subjectFilter(subject: ChatSubject) {
   if (subject.kind === 'cluster') return eq(worldChatMessages.cluster_id, subject.clusterId)
-  if (subject.kind === 'new-prompt') {
-    return and(
-      isNull(worldChatMessages.cluster_id),
-      eq(worldChatMessages.world_version_id, subject.worldVersionId),
-    )
-  }
   return and(isNull(worldChatMessages.cluster_id), isNull(worldChatMessages.world_version_id))
 }
 
 function subjectColumns(subject: ChatSubject) {
   return {
     cluster_id: subject.kind === 'cluster' ? subject.clusterId : null,
-    world_version_id: subject.kind === 'new-prompt' ? subject.worldVersionId : null,
+    world_version_id: null,
   }
 }
 
@@ -126,7 +124,7 @@ interface ResolvedSubject {
   world: NonNullable<ReturnType<typeof findUserWorld>>
   subject: ChatSubject
   // The cluster's current text — its latest prompt, never a raw earlier row. Empty for the
-  // other two threads, which have no prompt on the table.
+  // world thread, which has no prompt on the table.
   clusterPrompt: string
 }
 
@@ -143,13 +141,9 @@ function resolveSubject(c: any, kind: SubjectKind): ResolvedSubject | null {
   }
 
   // Below the world, everything is owned by a version, so a world without a checked-out one has
-  // nowhere to put these threads. Migration gives every world a HEAD, so this is unreachable.
+  // nowhere to put this thread. Migration gives every world a HEAD, so this is unreachable.
   const worldVersionId = world.current_version_id
   if (worldVersionId == null) return null
-
-  if (kind === 'new-prompt') {
-    return { userId, worldId, world, subject: { kind: 'new-prompt', worldVersionId }, clusterPrompt: '' }
-  }
 
   const clusterId = paramInt(c, 'clusterId')
   const cluster = db
@@ -207,7 +201,7 @@ const postTurn = (kind: SubjectKind) => async (c: any) => {
   if (!resolved) return c.json({ error: 'Not found' }, 404)
   const { userId, worldId, world, subject, clusterPrompt } = resolved
 
-  const { message, replace_from_id: replaceFromId, additionIds } = await c.req.json().catch(() => ({}))
+  const { message, replace_from_id: replaceFromId, additionIds, model } = await c.req.json().catch(() => ({}))
   const messageText = typeof message === 'string' ? message.trim() : ''
   if (!messageText) return c.json({ error: 'Message required' }, 400)
 
@@ -237,10 +231,10 @@ const postTurn = (kind: SubjectKind) => async (c: any) => {
     }
   }
 
-  // Pinned, not chosen: which model talks about a world is a fixture of the feature, and the
-  // client never sends one.
-  const modelOption = getModelById(CHAT_MODEL_ID)
-  if (!modelOption) return c.json({ error: 'Chat model is not configured' }, 500)
+  // The reader's choice, one for every thread (a localStorage preference on their side). A
+  // request without one is the default pin, so a client that doesn't send a model still talks.
+  const modelOption = getModelById(typeof model === 'string' && model ? model : DEFAULT_CHAT_MODEL_ID)
+  if (!modelOption) return c.json({ error: 'Invalid model requested' }, 400)
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
@@ -424,13 +418,12 @@ const postTurn = (kind: SubjectKind) => async (c: any) => {
   })
 }
 
-// Three threads, one handler set. What differs between them is the subject: what the bot can
+// Two threads, one handler set. What differs between them is the subject: what the bot can
 // see, and which rows are its history. Everything else — the single-session slot, the abort by
 // `userId:worldId`, retry handling, the `done`-after-persist contract, edit/regenerate via
 // replace_from_id — is shared.
 const SUBJECT_PATHS = [
   ['/', 'world'],
-  ['/new-prompt', 'new-prompt'],
   ['/cluster/:clusterId', 'cluster'],
 ] as const
 

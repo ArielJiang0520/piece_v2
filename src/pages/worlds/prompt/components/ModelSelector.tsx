@@ -6,7 +6,9 @@ import { useUiText } from '@/i18n'
 interface ModelSelectorProps {
   model: string
   onModelChange: (model: string) => void
-  onMenuOpenChange: (open: boolean) => void
+  // Only for a caller that has to get out of the open menu's way (the generate controls raise
+  // their z-index). A selector in a surface that already sits on top doesn't pass one.
+  onMenuOpenChange?: (open: boolean) => void
   // Where the dropdown hangs from its trigger. Centered by default (the trigger sits mid-row);
   // 'end' right-aligns it so a trigger parked at the right edge doesn't push the menu off-screen.
   align?: 'center' | 'end'
@@ -26,7 +28,7 @@ export default function ModelSelector({
   const selectedModel = MODELS.find(option => option.id === model) ?? MODELS[0]
 
   useEffect(() => {
-    onMenuOpenChange(menuOpen)
+    onMenuOpenChange?.(menuOpen)
   }, [menuOpen, onMenuOpenChange])
 
   useEffect(() => {

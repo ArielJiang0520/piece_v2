@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { sliceByUnits } from '@/utils/textUnits'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { advanceByUnits } from '@/utils/textUnits'
 
 // Default reveal speed (non-whitespace text units per second).
 const DEFAULT_REVEAL_UNITS_PER_SECOND = 20
@@ -64,10 +64,8 @@ export function useGatedReveal({
       if (wholeUnits > 0) {
         unitCredit -= wholeUnits
         setRevealedChars(current => {
-          const remaining = bufferRef.current.slice(current)
-          if (!remaining) return current
-          const { visible } = sliceByUnits(remaining, wholeUnits)
-          return current + visible.length
+          if (current >= bufferRef.current.length) return current
+          return advanceByUnits(bufferRef.current, current, wholeUnits)
         })
       }
 
@@ -86,7 +84,10 @@ export function useGatedReveal({
   }, [])
 
   const clampedRevealed = Math.min(revealedChars, buffer.length)
-  const revealedText = buffer.slice(0, clampedRevealed)
+  // Memoized because this hook re-renders on every arriving chunk, not just when the reveal
+  // advances — and the buffer is a rope built by repeated concatenation, so slicing it copies
+  // and flattens the whole thing. Without this it re-cut identical text tens of times a second.
+  const revealedText = useMemo(() => buffer.slice(0, clampedRevealed), [buffer, clampedRevealed])
   const revealComplete = backendComplete && clampedRevealed >= buffer.length && buffer.length > 0
 
   return { revealedText, revealComplete, skipToEnd }

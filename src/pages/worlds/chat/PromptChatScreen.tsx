@@ -15,25 +15,23 @@ import {
   type PromptPiecesResponse,
 } from '../shared/types'
 
-// The two threads that have a prompt in view. Which one this is comes from the route the same
-// way the prompt page decides it: with a prompt id it is that prompt's cluster, without one the
-// writer is working out a new prompt and no prompt is on the table.
+// The thread about a prompt — always the cluster the prompt on the route belongs to, whether it
+// was opened from a saved prompt or from a version of it being edited.
 //
-// Neither one saves anything. An action navigates to the prompt editor with the reply in it,
-// whole — the row is still born in pieces.ts when a piece is saved.
+// It saves nothing. An action navigates to the prompt editor with the reply in it, whole — the
+// row is still born in pieces.ts when a piece is saved.
 export default function PromptChatScreen() {
   const t = useUiText()
   const language = useLanguageId()
-  const { id, promptId } = useParams<{ id: string; promptId?: string }>()
+  const { id, promptId } = useParams<{ id: string; promptId: string }>()
   const location = useLocation()
   const navigate = useNavigate()
 
   // The editor's unsaved text, carried in so leaving for the chat doesn't eat it. Its presence
   // is also what says the chat was opened from the editor rather than from a saved prompt.
-  const routeState = location.state as { draftPrompt?: unknown; versionDraft?: unknown } | null
+  const routeState = location.state as { versionDraft?: unknown } | null
   const versionDraft = parseVersionDraft(routeState?.versionDraft)
-  const draftPrompt = typeof routeState?.draftPrompt === 'string' ? routeState.draftPrompt : null
-  const fromEditor = versionDraft !== null || draftPrompt !== null
+  const fromEditor = versionDraft !== null
 
   // Shares its key with the prompt page, so opening the chat from there costs no fetch.
   const promptQuery = useQuery({
@@ -53,15 +51,15 @@ export default function PromptChatScreen() {
   // A new version is written off the cluster's current text — its latest prompt.
   const latestPrompt = clusterPrompts[clusterPrompts.length - 1] ?? null
 
-  const subject = useMemo<ChatSubject | null>(() => {
-    if (!promptId) return { kind: 'new-prompt' }
-    return clusterId == null ? null : { kind: 'cluster', clusterId }
-  }, [clusterId, promptId])
+  const subject = useMemo<ChatSubject | null>(
+    () => (clusterId == null ? null : { kind: 'cluster', clusterId }),
+    [clusterId],
+  )
 
   function goBack() {
     if (fromEditor) {
       navigate(`/worlds/${id}/prompt/new`, {
-        state: { draftPrompt: draftPrompt ?? undefined, versionDraft: routeState?.versionDraft },
+        state: { versionDraft: routeState?.versionDraft },
       })
       return
     }
@@ -89,14 +87,6 @@ export default function PromptChatScreen() {
   // The whole reply goes to the editor. Nothing is parsed out of it — if it carries more than
   // the writer wants, they trim it in the editor they land in.
   function replyActions(content: string) {
-    if (!promptId) {
-      return (
-        <button type="button" className={chatReplyActionClass} onClick={() => useAsNewPrompt(content)}>
-          <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-          {t.chatUseThis}
-        </button>
-      )
-    }
     return (
       <>
         <button
@@ -120,10 +110,8 @@ export default function PromptChatScreen() {
     <ChatScreen
       worldId={id}
       subject={subject}
-      title={promptId ? t.chatTitle : t.chatWriteOne}
-      emptyHint={promptId
-        ? t.chatPromptEmpty(entityLabel('prompt', {}, language))
-        : t.chatNewPromptEmpty(entityLabel('prompt', {}, language))}
+      title={t.chatTitle}
+      emptyHint={t.chatPromptEmpty(entityLabel('prompt', {}, language))}
       onBack={goBack}
       replyActions={replyActions}
     />

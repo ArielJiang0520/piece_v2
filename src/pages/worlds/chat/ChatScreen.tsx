@@ -3,7 +3,9 @@ import { ArrowLeft, Check, Copy, RefreshCw } from 'lucide-react'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { SkeletonText } from '@/components/Skeleton'
 import { useUiText } from '@/i18n'
+import { setChatModel, useChatModel } from '@/preferences/generationModel'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
+import ModelSelector from '../prompt/components/ModelSelector'
 import { useChatThread, type ChatSubject } from './useChatThread'
 import AdditionsIndicator from '../shared/AdditionsIndicator'
 import { useWorldAdditions } from '../shared/useWorldAdditions'
@@ -42,6 +44,7 @@ export default function ChatScreen({ worldId, subject, title, emptyHint, onBack,
   const followingTailRef = useRef(true)
 
   const viewport = useVisualViewport()
+  const chatModel = useChatModel()
   const { messages, isLoading, streaming, error, send, stop, clear, isClearing } = useChatThread(worldId, subject)
   const { additions, activeIds } = useWorldAdditions(worldId)
   const lastIndex = messages.length - 1
@@ -136,7 +139,12 @@ export default function ChatScreen({ worldId, subject, title, emptyHint, onBack,
           <ArrowLeft aria-hidden="true" className="h-5 w-5" />
         </button>
         <span className="t-eyebrow shrink-0 leading-none">{title}</span>
-        <div className="min-w-0 flex-1" />
+        {/* One choice for every thread, kept in localStorage: switch it here and the world chat
+            and the prompt chats all follow. The next turn uses it; the ones already said don't
+            change hands. */}
+        <div className="min-w-0 flex-1">
+          <ModelSelector model={chatModel} onModelChange={setChatModel} />
+        </div>
         <button
           type="button"
           className="shrink-0 rounded-full px-2.5 py-1.5 font-serif-zh text-[14px] italic leading-none text-ink-3 transition-colors active:bg-paper-2 active:text-ink disabled:opacity-40"

@@ -238,13 +238,9 @@ export const UI_TEXT = {
     chatResend: 'Re-send',
     chatRegenerate: 'Regenerate',
     chatEmpty: 'Ask anything about this world — what it’s missing, how a passage reads, how to word something.',
-    // The two chats with a prompt in view. "Write one" opens the thread for a prompt that doesn't
-    // exist yet; the one for a saved prompt is the same "Ask" as the world's, on a different subject.
-    chatWriteOne: 'Write one',
-    chatNewPromptEmpty: (entity: string) => `Say what kind of story you want — a situation, a person, a feeling — and work the ${entity} out here.`,
+    // The chat with a prompt in view: the same "Ask" as the world's, on a different subject.
     chatPromptEmpty: (entity: string) => `Ask about this ${entity} — what it’s missing, where else it could go, how to word it.`,
     // What a reply can be turned into. Each takes the whole reply to the editor, unsaved.
-    chatUseThis: 'Use this',
     chatNewVersion: 'New version',
     chatNewEntity: (entity: string) => `New ${entity}`,
     chatClear: 'Clear',
@@ -489,10 +485,7 @@ export const UI_TEXT = {
     chatResend: '重新发送',
     chatRegenerate: '重新生成',
     chatEmpty: '关于这个世界，随便问——缺了什么、某一段读起来如何、某句话怎么写。',
-    chatWriteOne: '帮我写',
-    chatNewPromptEmpty: (entity: string) => `想要什么样的故事——一个情境、一个人、一种感觉——说说看，在这里把${entity}琢磨出来。`,
     chatPromptEmpty: (entity: string) => `关于这个${entity}，随便问——缺了什么、还能往哪儿走、某句话怎么写。`,
-    chatUseThis: '就用这条',
     chatNewVersion: '新版本',
     chatNewEntity: (entity: string) => `新${entity}`,
     chatClear: '清空',

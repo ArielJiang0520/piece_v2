@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, and, desc, sql } from 'drizzle-orm'
-import { db, prompts, pieces, promptClusters } from '../../db'
+import { db, prompts, pieces, promptClusters, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, getUserId, isValidModelId, paramInt } from '../../route-helpers'
 import { createClusterForPrompt, embedPromptForSearch, recomputePromptCluster } from '../../prompt-clustering'
@@ -163,6 +163,13 @@ pieceRoutes.post('/', authMiddleware, async (c: any) => {
     created_at: now,
     updated_at: now,
   }).returning({ id: pieces.id }).get()
+
+  // worlds.updated_at is the world's activity clock, not a record of edits to its text: it is what
+  // the world list and the drawer's recent list order by, so writing a piece has to move it.
+  db.update(worlds)
+    .set({ updated_at: now })
+    .where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId)))
+    .run()
 
   const clusterId = promptRow.cluster_id
 

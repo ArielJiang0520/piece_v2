@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, and } from 'drizzle-orm'
-import { db, prompts, pieces } from '../db'
+import { db, prompts, pieces, worlds } from '../db'
 import { type Variables, authMiddleware } from '../middleware'
 import { getUserId, isValidModelId, paramInt } from '../route-helpers'
 import { parseStructure, serializeStructure } from '../../src/pages/worlds/shared/pieceStructure'
@@ -94,6 +94,15 @@ pieceRoutes.patch('/:id', authMiddleware, async (c) => {
     .returning({ id: pieces.id })
     .get()
   if (!updated) return c.json({ error: 'Not found' }, 404)
+
+  // Continuing a piece is activity on its world. worlds.updated_at is the clock the world list and
+  // the drawer's recent list order by, so it moves here too.
+  if (owned) {
+    db.update(worlds)
+      .set({ updated_at: updates.updated_at })
+      .where(and(eq(worlds.id, owned.world_id), eq(worlds.user_id, userId)))
+      .run()
+  }
 
   const piece = db
     .select(PIECE_SELECT)

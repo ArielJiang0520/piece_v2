@@ -145,13 +145,14 @@ sqlite.run(`
     PRIMARY KEY (world_id, world_version_id)
   );
 
-  -- One row per turn in a chat thread. A row's thread is derivable from the two nullable
-  -- subject columns, so there is no kind column: both null is the world thread, a version is
-  -- the new-prompt thread for that version, a cluster is that cluster's thread. There is
-  -- exactly one thread per subject (no session list, no branching): clearing it deletes every
-  -- row for that subject, and editing or regenerating a turn deletes that row and every later
-  -- one. Cascade does the lifetime work — deleting a cluster, a version or a world takes the
-  -- threads hanging off it with no cleanup code.
+  -- One row per turn in a chat thread. A row's thread is derivable from the subject columns, so
+  -- there is no kind column: both null is the world thread, a cluster is that cluster's thread.
+  -- world_version_id is written by nothing now — it belonged to the removed new-prompt thread,
+  -- and rows still carrying one are that thread's leftovers. There is exactly one thread per
+  -- subject (no session list, no branching): clearing it deletes every row for that subject, and
+  -- editing or regenerating a turn deletes that row and every later one. Cascade does the
+  -- lifetime work — deleting a cluster, a version or a world takes the threads hanging off it
+  -- with no cleanup code.
   CREATE TABLE IF NOT EXISTS world_chat_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -670,8 +671,19 @@ dropColumnIfPresent('prompts', 'is_generated')
 addColumnIfMissing('world_chat_messages', 'cluster_id', 'cluster_id INTEGER REFERENCES prompt_clusters(id) ON DELETE CASCADE')
 addColumnIfMissing('world_chat_messages', 'world_version_id', 'world_version_id INTEGER REFERENCES world_versions(id) ON DELETE CASCADE')
 
+// worlds.updated_at is the world's activity clock — what the world list and the drawer's recent
+// list order by. Piece writes now move it, but rows written before that did not, so fold each
+// world's newest piece into it once. Idempotent: a no-op the moment the invariant holds.
+sqlite.run(`
+  UPDATE worlds
+  SET updated_at = MAX(updated_at, (
+    SELECT COALESCE(MAX(pieces.updated_at), 0) FROM pieces WHERE pieces.world_id = worlds.id
+  ));
+`)
+
 sqlite.run(`
   CREATE INDEX IF NOT EXISTS idx_pieces_world_created ON pieces(world_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_pieces_user_world ON pieces(user_id, world_id, updated_at);
   CREATE INDEX IF NOT EXISTS idx_pieces_prompt_created ON pieces(prompt_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_world_updated ON prompts(user_id, world_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_prompts_cluster ON prompts(cluster_id);
@@ -849,8 +861,8 @@ export const worldChatMessages = sqliteTable('world_chat_messages', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   world_id: integer('world_id').notNull().references(() => worlds.id),
-  // The thread's subject: both null is the world thread, a version is that version's
-  // new-prompt thread, a cluster is that cluster's thread.
+  // The thread's subject: both null is the world thread, a cluster is that cluster's thread.
+  // world_version_id is no longer written — leftovers from the removed new-prompt thread.
   cluster_id: integer('cluster_id').references(() => promptClusters.id),
   world_version_id: integer('world_version_id').references(() => worldVersions.id),
   role: text('role').notNull(),

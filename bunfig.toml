@@ -1,0 +1,4 @@
+[test]
+# Sets DB_PATH=:memory: and strips OPENROUTER_API_KEY before any server module
+# (and therefore server/db.ts) is imported.
+preload = ["./server/__tests__/setup.ts"]

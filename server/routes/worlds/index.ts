@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, and, desc, inArray, ne, sql } from 'drizzle-orm'
-import { db, pieces, promptClusters, prompts, worldVersions, worlds } from '../../db'
+import { db, pieces, worldVersions, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
 import { findUserWorld, findUserWorldId, getUserId, paramInt } from '../../route-helpers'
 import additionRoutes from './additions'
@@ -52,52 +52,47 @@ worldRoutes.get('/', authMiddleware, (c) => {
   const worldIds = worldRows.map(world => world.id)
   if (worldIds.length === 0) return c.json([])
 
-  // Both counts are for the world's checked-out version only, so a card never promises prompts or
-  // pieces that opening the world won't show. A piece reaches its version the long way — through
-  // its prompt's cluster — because that is the only place a version is recorded.
-  const currentVersion = eq(promptClusters.world_version_id, worlds.current_version_id)
+  // The count spans every version of the world: a world's piece total is its whole history, so
+  // switching versions never changes what the card advertises. That is also why this needs no
+  // join — without a version filter, `pieces` alone answers it.
   const pieceStats = db
     .select({
       world_id: pieces.world_id,
       piece_count: sql<number>`count(*)`,
-      latest_piece_at: sql<number | null>`max(${pieces.updated_at})`,
     })
     .from(pieces)
-    .innerJoin(prompts, eq(prompts.id, pieces.prompt_id))
-    .innerJoin(promptClusters, eq(promptClusters.id, prompts.cluster_id))
-    .innerJoin(worlds, eq(worlds.id, pieces.world_id))
-    .where(and(eq(pieces.user_id, userId), inArray(pieces.world_id, worldIds), currentVersion))
+    .where(and(eq(pieces.user_id, userId), inArray(pieces.world_id, worldIds)))
     .groupBy(pieces.world_id)
-    .all()
-  const clusterStats = db
-    .select({
-      world_id: promptClusters.world_id,
-      prompt_cluster_count: sql<number>`count(*)`,
-    })
-    .from(promptClusters)
-    .innerJoin(worlds, eq(worlds.id, promptClusters.world_id))
-    .where(and(eq(promptClusters.user_id, userId), inArray(promptClusters.world_id, worldIds), currentVersion))
-    .groupBy(promptClusters.world_id)
     .all()
 
   const piecesByWorld = new Map(pieceStats.map(stat => [stat.world_id, stat]))
-  const clustersByWorld = new Map(clusterStats.map(stat => [stat.world_id, stat]))
+  // Already in activity order: worlds.updated_at is the world's activity clock, moved by piece
+  // writes as well as world edits, and the query above orders by it.
   const rows = worldRows
     .map(world => {
       const { body, ...worldFields } = world
       const pieceStat = piecesByWorld.get(world.id)
-      const clusterStat = clustersByWorld.get(world.id)
       return {
         ...worldFields,
         is_example: Boolean(world.is_example),
         body_summary: bodySummary(body),
-        latest_piece_at: pieceStat?.latest_piece_at ?? null,
-        prompt_cluster_count: Number(clusterStat?.prompt_cluster_count ?? 0),
         piece_count: Number(pieceStat?.piece_count ?? 0),
       }
     })
-    .sort((a, b) => Math.max(b.latest_piece_at ?? 0, b.updated_at) - Math.max(a.latest_piece_at ?? 0, a.updated_at))
 
+  return c.json(rows)
+})
+
+// The drawer's recent list. Constant work: five entries off idx_worlds_user_updated, no
+// aggregate and no join, because worlds.updated_at already carries the world's recency.
+worldRoutes.get('/recent', authMiddleware, (c) => {
+  const rows = db
+    .select({ id: worlds.id, name: worlds.name })
+    .from(worlds)
+    .where(eq(worlds.user_id, getUserId(c)))
+    .orderBy(desc(worlds.updated_at))
+    .limit(5)
+    .all()
   return c.json(rows)
 })
 

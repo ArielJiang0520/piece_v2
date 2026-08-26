@@ -23,18 +23,12 @@ interface World {
   body_summary: string
   is_example: boolean
   updated_at: number
-  latest_piece_at: number | null
-  prompt_cluster_count: number
   piece_count: number
 }
 
-const SORT_VALUES = ['latest', 'oldest', 'most_prompts', 'most_pieces'] as const
+const SORT_VALUES = ['latest', 'oldest', 'most_pieces'] as const
 
 type SortKey = typeof SORT_VALUES[number]
-
-function worldActivityTimestamp(world: World) {
-  return Math.max(world.latest_piece_at ?? 0, world.updated_at)
-}
 
 export default function WorldList() {
   const language = useLanguageId()
@@ -68,11 +62,10 @@ export default function WorldList() {
       : worlds
 
     return [...filtered].sort((a, b) => {
-      const aActivity = worldActivityTimestamp(a)
-      const bActivity = worldActivityTimestamp(b)
+      const aActivity = a.updated_at
+      const bActivity = b.updated_at
 
       if (sort === 'oldest') return aActivity - bActivity || a.id - b.id
-      if (sort === 'most_prompts') return b.prompt_cluster_count - a.prompt_cluster_count || bActivity - aActivity || b.id - a.id
       if (sort === 'most_pieces') return b.piece_count - a.piece_count || bActivity - aActivity || b.id - a.id
       return bActivity - aActivity || b.id - a.id
     })
@@ -80,7 +73,6 @@ export default function WorldList() {
   const sortOptions = useMemo(() => [
     { value: 'latest', label: t.latest },
     { value: 'oldest', label: t.oldest },
-    { value: 'most_prompts', label: t.mostEntities(entityLabel('prompt', { plural: true }, language)) },
     { value: 'most_pieces', label: t.mostEntities(entityLabel('piece', { plural: true }, language)) },
   ] as const, [language, t])
   const worldListNavSlot = useMemo(() => (
@@ -212,7 +204,7 @@ export default function WorldList() {
           <>
             <ul className="hairline-list flex flex-col px-6">
               {visibleWorlds.map((w, index) => {
-                const timestamp = worldActivityTimestamp(w)
+                const timestamp = w.updated_at
                 const bodySummary = (w.body_summary ?? '').trim()
 
                 return (
@@ -246,8 +238,8 @@ export default function WorldList() {
 
                       <div className="mt-5 transition-opacity duration-200 group-hover:opacity-90">
                         <CountIndicator
-                          count={w.prompt_cluster_count}
-                          entity="prompt"
+                          count={w.piece_count}
+                          entity="piece"
                           maxDots={20}
                           unitsPerDot={25}
                         />

@@ -262,10 +262,11 @@ export default function PromptPage() {
     navigate(genBase, { state: { prompt, versionDraft: routeState?.versionDraft } })
   }
 
-  // The chat that has this screen's material in view. From a saved prompt it is that prompt's
-  // cluster; from a blank editor there is no prompt yet, so it is the new-prompt thread; from an
-  // edit in progress it is still the cluster being worked on, not an invented one. The editor's
-  // unsaved text rides along so coming back doesn't lose it.
+  // The chat that has this screen's material in view — always a prompt's cluster. From a saved
+  // prompt it is that prompt's; from an edit in progress it is still the cluster being worked on,
+  // not an invented one. The editor's unsaved text rides along so coming back doesn't lose it.
+  // A blank new prompt has no cluster to talk about, so it has no chat.
+  const canChat = lockedMode || !!versionDraft
   function openChat() {
     if (!id) return
     if (lockedMode) {
@@ -276,9 +277,7 @@ export default function PromptPage() {
       navigate(`/worlds/${id}/prompt/${versionDraft.sourcePromptId}/chat`, {
         state: { versionDraft: { ...versionDraft, promptText: prompt } },
       })
-      return
     }
-    navigate(`/worlds/${id}/prompt/new/chat`, { state: { draftPrompt: prompt } })
   }
 
   // The paragraph the reader is currently on: the topmost one still below the sticky chrome
@@ -467,14 +466,14 @@ export default function PromptPage() {
 
       {/* The chat about what is on this screen. Docked bottom-left, above the safe area: the app
           is held one-handed with the left thumb, and the generate CTA docks to the top. */}
-      {visibleActiveTab === 'prompt' && (
+      {visibleActiveTab === 'prompt' && canChat && (
         <button
           type="button"
           onClick={openChat}
           className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-30 inline-flex items-center gap-1.5 rounded-full bg-rose-pale px-3.5 py-2.5 font-serif-zh text-[13px] italic leading-none text-rose-deep shadow-(--shadow-cta) transition-transform active:translate-y-px"
         >
           <MessageCircle aria-hidden="true" className="h-4 w-4" />
-          {lockedMode || versionDraft ? t.chatTitle : t.chatWriteOne}
+          {t.chatTitle}
         </button>
       )}
 

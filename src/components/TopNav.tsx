@@ -108,12 +108,14 @@ export default function TopNav() {
     switchVersionMutation.mutate(versionId, { onSuccess: () => setVersionSwitcherOpen(false) })
   }
 
+  // Keyed under ['worlds'] so every existing invalidateQueries({ queryKey: ['worlds'] }) reaches
+  // it by prefix. The endpoint already limits to five.
   const worldsQuery = useQuery({
-    queryKey: ['worlds'],
-    queryFn: () => apiFetch('/api/worlds') as Promise<World[]>,
+    queryKey: ['worlds', 'recent'],
+    queryFn: () => apiFetch('/api/worlds/recent') as Promise<World[]>,
     enabled: open,
   })
-  const recentWorlds = (worldsQuery.data ?? []).slice(0, 5)
+  const recentWorlds = worldsQuery.data ?? []
 
   useEffect(() => {
     if (!open) setAccountMenuOpen(false)

@@ -6,23 +6,27 @@ export function isDisplayUnit(char: string) {
 }
 
 /**
- * Slice `text` so that it contains at most `maxUnits` non-whitespace characters,
- * carrying trailing/leading whitespace along for free. Returns the visible slice
- * plus the remainder.
+ * Index at which a reveal starting at `from` should stop, having taken at most `maxUnits`
+ * non-whitespace characters. Whitespace is free and rides along, so the result sits just
+ * past the last free-flowing whitespace and before the next display unit that wouldn't fit.
+ *
+ * Walks `text` in place rather than slicing it: the paced reveal calls this many times a
+ * second against a buffer that runs far ahead of what's on screen, and it only needs a
+ * character or two each time — copying the whole unrevealed remainder to find them made the
+ * cost of a tick scale with the length of the piece.
  */
-export function sliceByUnits(text: string, maxUnits: number) {
+export function advanceByUnits(text: string, from: number, maxUnits: number): number {
   let unitCount = 0
-  let end = 0
+  let end = from
 
-  for (const char of text) {
-    const cost = isDisplayUnit(char) ? 1 : 0
-    if (cost > 0 && unitCount + cost > maxUnits && end > 0) break
+  while (end < text.length) {
+    // Step by code point so a surrogate pair is never split down the middle.
+    const width = (text.codePointAt(end) ?? 0) > 0xffff ? 2 : 1
+    const cost = isDisplayUnit(text.slice(end, end + width)) ? 1 : 0
+    if (cost > 0 && unitCount + cost > maxUnits && end > from) break
     unitCount += cost
-    end += char.length
+    end += width
   }
 
-  return {
-    visible: text.slice(0, end),
-    remaining: text.slice(end),
-  }
+  return end
 }

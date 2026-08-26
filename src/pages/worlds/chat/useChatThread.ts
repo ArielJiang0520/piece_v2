@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
+import { useChatModel } from '@/preferences/generationModel'
 import { readServerSentEvents } from '@/utils/sse'
 import { useWorldAdditions } from '../shared/useWorldAdditions'
 
@@ -16,7 +17,6 @@ export interface ChatMessage {
 // The world version is never sent — the server takes the world's checked-out one.
 export type ChatSubject =
   | { kind: 'world' }
-  | { kind: 'new-prompt' }
   | { kind: 'cluster'; clusterId: number }
 
 // Optimistic turns have no server id yet; they get real ones when the query refetches.
@@ -27,9 +27,7 @@ interface SendOptions {
 }
 
 function subjectPath(subject: ChatSubject) {
-  if (subject.kind === 'cluster') return `/cluster/${subject.clusterId}`
-  if (subject.kind === 'new-prompt') return '/new-prompt'
-  return ''
+  return subject.kind === 'cluster' ? `/cluster/${subject.clusterId}` : ''
 }
 
 function subjectKey(subject: ChatSubject) {
@@ -46,6 +44,10 @@ export function useChatThread(worldId: string | undefined, subject: ChatSubject 
   const { activeIds } = useWorldAdditions(worldId)
   const additionIdsRef = useRef<number[]>(activeIds)
   additionIdsRef.current = activeIds
+  // Same reasoning for the model: switched mid-thread, the next turn uses the new one.
+  const model = useChatModel()
+  const modelRef = useRef(model)
+  modelRef.current = model
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
   // While a turn is in flight this holds the whole thread (server rows + the streaming
@@ -99,7 +101,12 @@ export function useChatThread(worldId: string | undefined, subject: ChatSubject 
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({ message, replace_from_id: options.replaceFromId, additionIds: additionIdsRef.current }),
+        body: JSON.stringify({
+          message,
+          replace_from_id: options.replaceFromId,
+          additionIds: additionIdsRef.current,
+          model: modelRef.current,
+        }),
       })
 
       if (!response.ok || !response.body) {
