@@ -5,9 +5,7 @@ import authRoutes from './routes/auth'
 import worldRoutes from './routes/worlds'
 import pieceRoutes from './routes/pieces'
 
-// Exported so the API tests can drive the real, fully-mounted app through `app.fetch`
-// without opening a port.
-export const app = new Hono<{ Variables: Variables }>()
+const app = new Hono<{ Variables: Variables }>()
 
 app.route('/api', authRoutes)
 app.route('/api/worlds', worldRoutes)
