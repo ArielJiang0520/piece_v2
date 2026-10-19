@@ -30,13 +30,11 @@ type TextareaTextFieldProps = SharedTextFieldProps &
 
 type TextFieldProps = InputTextFieldProps | TextareaTextFieldProps
 
-const labelBaseClass = 't-eyebrow eyebrow-rule'
-const inputBaseClass =
-  'w-full border-b border-rose-line bg-transparent px-0 py-2.5 text-xl leading-snug text-ink placeholder:text-ink-4 focus:border-rose focus:outline-none disabled:opacity-50'
+const labelBaseClass = 't-label'
+const inputBaseClass = 'input'
 const searchInputBaseClass =
-  'w-full rounded-full border border-rose-line bg-paper py-2.5 pl-9 pr-9 italic text-[16px] text-ink placeholder:text-ink-4 placeholder:italic focus:border-rose/40 focus:outline-none focus:ring-2 focus:ring-rose/15 disabled:opacity-50'
-const textareaBaseClass =
-  'w-full resize-y border-y border-rose-line bg-transparent px-0 py-4 text-[16px] leading-8 text-ink placeholder:text-ink-4 focus:border-rose focus:outline-none disabled:opacity-50'
+  'block h-10 w-full rounded-full border-0 bg-paper-2 pl-10 pr-10 text-[16px] text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-rose/30 disabled:opacity-50'
+const textareaBaseClass = 'textarea'
 
 export default function TextField({
   id,
@@ -55,7 +53,7 @@ export default function TextField({
 }: TextFieldProps) {
   const generatedId = useId()
   const fieldId = id ?? generatedId
-  const fontClass = mono ? 'font-mono' : 'font-serif-zh'
+  const fontClass = mono ? 'font-mono' : ''
   const className = [
     multiline ? textareaBaseClass : variant === 'search' ? searchInputBaseClass : inputBaseClass,
     fontClass,
@@ -66,7 +64,7 @@ export default function TextField({
   return (
     <div className={containerClassName}>
       {label && (
-        <div className="mb-3">
+        <div className="mb-1.5">
           <label htmlFor={fieldId} className={labelClassName ?? labelBaseClass}>
             {label}
           </label>
@@ -82,7 +80,7 @@ export default function TextField({
         <div className="relative">
           {leadingAdornment && (
             <span
-              className={leadingAdornmentClassName ?? 'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2'}
+              className={leadingAdornmentClassName ?? 'pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2'}
             >
               {leadingAdornment}
             </span>

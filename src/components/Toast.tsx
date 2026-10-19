@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react'
 
 export type ToastKind = 'success' | 'error' | 'info'
 
@@ -60,7 +60,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ show, dismiss }}>
       {children}
-      <div className="pointer-events-none fixed top-4 right-4 z-50 flex w-[min(92vw,22rem)] flex-col gap-2">
+      <div className="pointer-events-none fixed inset-x-0 top-3 z-[80] mx-auto flex w-[min(92vw,24rem)] flex-col gap-2">
         {toasts.map(toast => (
           <ToastItem key={toast.id} toast={toast} onDismiss={() => dismiss(toast.id)} />
         ))}
@@ -89,28 +89,27 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
     setTimeout(onDismiss, 200)
   }
 
-  const accent =
-    toast.kind === 'success' ? 'border-l-rose'
-      : toast.kind === 'error' ? 'border-l-rose-deep'
-        : 'border-l-ink-3'
+  const Icon = toast.kind === 'success' ? CheckCircle2 : toast.kind === 'error' ? AlertCircle : Info
+  const iconColor = toast.kind === 'success' ? 'text-signal-green' : toast.kind === 'error' ? 'text-signal-red' : 'text-ink-3'
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`pointer-events-auto rounded-sm border border-paper-3 border-l-4 ${accent} bg-paper-2 px-4 py-3 text-ink shadow-[0_14px_30px_rgba(54,44,38,0.16)] transition-all duration-200 ${visible ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
+      className={`pointer-events-auto rounded-xl border border-line bg-surface px-4 py-3 text-ink shadow-(--shadow-menu) transition-all duration-200 ${visible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'}`}
     >
       <div className="flex items-start gap-3">
+        <Icon aria-hidden="true" className={`mt-0.5 h-5 w-5 shrink-0 ${iconColor}`} />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{toast.title}</p>
+          <p className="text-[15px] font-semibold">{toast.title}</p>
           {toast.description && (
-            <p className="mt-1 text-xs text-ink-3">{toast.description}</p>
+            <p className="mt-0.5 text-[13px] text-ink-3">{toast.description}</p>
           )}
           {toast.action && (
             <Link
               to={toast.action.href}
               onClick={handleDismiss}
-              className="mt-2 inline-block text-xs font-medium text-rose-deep underline-offset-2 hover:underline"
+              className="btn btn-tonal btn-sm mt-2"
             >
               {toast.action.label}
             </Link>
@@ -120,7 +119,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
           type="button"
           onClick={handleDismiss}
           aria-label="Dismiss notification"
-          className="-mr-1 -mt-1 flex size-6 shrink-0 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-paper-3 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30"
+          className="-mr-2 -mt-1.5 grid size-8 shrink-0 place-items-center rounded-full text-ink-3 active:bg-paper-2"
         >
           <X className="size-4" aria-hidden="true" />
         </button>

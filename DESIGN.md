@@ -1,145 +1,56 @@
-# Design principles
+# Design
 
-## The brief, in one sentence
+Piece looks like an ordinary commercial social app: clear widgets, obvious tap targets, nothing
+artistic. If a control isn't instantly recognisable as a button, field, tab or chip, it's wrong.
 
-**Editorial spine, sensual surface.** Vogue's discipline (type-led, no chrome, cool ink so pink is the only warm note) wrapped in soft shadows, fade-ins, and warm whites that make the app pleasurable to use rather than austere to admire.
+Everything below lives in `src/tokens.css` as component classes. Use them; don't hand-roll a
+one-off button or card with raw utilities.
 
-This is a writing app with **zero images**. Type, color, and rhythm carry every screen. That constraint is the gift — it means the design rules are few and they must be obeyed.
+## Palette
 
-## The five pillars
+- `paper` page background (light grey), `surface` cards / bars / inputs (white), `paper-2` quiet
+  fills (chips at rest, segmented track, callouts), `paper-3` pressed, `line` borders.
+- `ink` → `ink-4` text, darkest to faintest.
+- `rose` is the brand: primary buttons, the active tab underline, the FAB. `rose-pale` /
+  `rose-deep` for tonal fills and badges.
+- `signal-green` / `signal-red` for status and destructive actions.
+- Every token has a dark-mode value (`:root.dark`); never hard-code a colour.
 
-### 1. Cool ink, warm paper, structural pink
+## Type
 
-The palette has one job: make pink the only warm color on screen. Everything else is cool charcoal or warm white.
+UI is sans (`system-ui`) everywhere. Serif is only the reading prose of a story (`.prose`, the
+reader's reading-font preference). No italics, no tracked uppercase labels.
 
-- Ink ramp is cool (`#0e0d10` → `#c9c4cf`). Never sepia, never brown.
-- Paper is warm white (`#fbf9f7`). This is what stops the design from being austere.
-- Pink has three roles: anchor (`rose`), structure (`rose-line`), tint (`rose-tint`). Use the right one.
-- One screen, one solid-pink anchor moment. Everything else is hairline, dot, or a single numeral.
-
-### 2. Typography is the protagonist, not chrome
-
-Four roles. Use them ruthlessly. Anything that doesn't fit one of these roles probably shouldn't exist.
-
-| Role | Class | Where |
-|---|---|---|
-| Display | `.t-display` | Once per page. World title, prompt opening. |
-| Headline | `.t-headline` | List-item titles. World card name, scene preview. |
-| Eyebrow | `.t-eyebrow` | Section labels. Tracked uppercase, optional pink hairline via `.eyebrow-rule`. |
-| Meta | `.t-meta` | Timestamps, counts, tags. **Italic Domine, not sans.** This is the single biggest editorial gesture. |
-
-Tag pills are dead. Metadata phrases are inline italic serif separated by em-dashes:
-*original — explicit · 382 scenes*
-
-### 3. Lists, not cards. Air, not borders.
-
-Cards with `border + bg + radius` read as "boxed form fields." Editorial layout uses negative space and a single hairline.
-
-The pattern is `.hairline-list`:
-
-```tsx
-<ul className="hairline-list flex flex-col px-6">
-  {items.map(item => (
-    <li className="py-7"> ... </li>
-  ))}
-</ul>
-```
-
-Rules:
-- No background fill at rest. No border at rest.
-- Vertical padding ≥ `py-7` (32px gap between items, total).
-- Hover = `-translate-y-px` lift, optional `shadow-(--shadow-feather)`. Never a background-color change at rest.
-- Last item has no bottom rule (handled by `> * + *`).
-
-### 4. Pink usage rules — strict
-
-Pink **appears in** (and roughly only in):
-- Hairline rules between list items (`border-rose-line`)
-- The unread/recent dot indicator (fresh items only)
-- The eyebrow underline (`.eyebrow-rule`)
-- List-item index numbers (`#23` etc.) — italic serif rose
-- Section-header count numerals (`382` rose, `scenes` ink-3)
-- Drop-cap (Domine italic, oversized first character, rose)
-- The primary CTA — solid rose, soft shadow
-
-Pink **does not appear in**:
-- Body text
-- Section titles or headlines
-- Timestamps and metadata pills
-- Backgrounds at rest
-- Secondary buttons or links
-
-### 5. Motion is pleasure, not utility
-
-The design *needs* the soft animation; without it it becomes correct-but-cold. Three motion primitives:
-
-- `.page-fade-in` — every page container. 220ms opacity fade on mount.
-- `.list-item-reveal` — list items, with a per-item stagger:
-  ```tsx
-  <li
-    className="list-item-reveal"
-    style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
-  />
-  ```
-  Cap the index at 8 so late items don't feel held up.
-- `hover:-translate-y-px` — universal hover for any interactive list row. Not a color change.
-
-Three shadow tokens, used wherever shadows go:
-
-| Token | Use |
+| Class | Use |
 |---|---|
-| `--shadow-feather` | hairline-list hover, scroll-to-top button, soft chrome |
-| `--shadow-cta` | primary CTA at rest |
-| `--shadow-cta-hover` | primary CTA on hover |
+| `.t-title` | Page title (a world's name on About). |
+| `.t-section` | Section heading ("Bookmarked", "Characters", "For readers"). |
+| `.t-headline` | Card title. |
+| `.t-label` | Form field label, above its field. |
+| `.t-body` | Body copy, blurbs, lore. |
+| `.t-meta` / `.t-hint` | Secondary facts, helper text. |
 
-The old `shadow-[0_16px_34px_rgba(...)]` arbitrary shadows are dead — use tokens.
+## Widgets
 
-## Anti-patterns (what to delete on sight)
+- **Buttons** — `.btn` + one of `.btn-primary` (one per screen area), `.btn-secondary`,
+  `.btn-tonal`, `.btn-ghost`, `.btn-danger`; sizes `.btn-sm` / `.btn-lg`; `.btn-block` for full
+  width. Buttons carry an icon + a text label. `.icon-btn` only in the top bar / transport.
+- **FAB** — `.fab`, bottom-left (left thumb), icon + label. One per screen (New world, New scene).
+- **Cards** — `.card` for every list item and content block; add `.card-press` when the whole card
+  is the tap target (no separate "Open" button). Lists are cards with `gap-3`, not hairlines.
+- **Chips** — `.chip` for filters and selectable options; `aria-pressed="true"` (or `.chip-on`)
+  fills it. Tags on cards are `.tag`; status is `.badge` (`.badge-rose`, `.badge-green`).
+- **Fields** — `.input` / `.textarea` with a `.t-label` above. Never underline-only fields.
+- **Segmented control** — `.segmented` with `<button aria-pressed>` children, for 2–3 mutually
+  exclusive options (language, theme, Expand/Continue).
+- **Tabs** — `components/TabBar.tsx`, the only tab strip.
+- **Menus** — `.menu` + `.menu-item`. **Dialogs** — `ConfirmDialog` (Cancel + primary, equal width).
+- **Callouts** — `.callout` with an icon for hints; `.error-box` for errors.
+- **Empty states** — a card with a muted icon, one line, and an action button when there is one.
 
-- `border-paper-3` on list items, cards, or detail sections → use `.hairline-list` or `border-rose-line`.
-- `bg-paper-2` as a card background → use whitespace.
-- `text-ink-3 text-xs` for metadata → use `.t-meta`.
-- Boxed pill tags (`rounded-sm bg-paper-2 px-1.5 py-0.5`) → italic serif phrase with em-dash.
-- Sans-serif numbers in metadata positions → italic serif. Numbers want rose if they are a count of something.
-- `font-medium`/`font-semibold` on titles → Domine at weight 400 already feels confident; don't bold it.
-- `rounded-md` + heavy shadow on the CTA → `rounded-full` + `shadow-(--shadow-cta)`.
-- Hover state that changes background color → use translate + shadow instead.
+## Rules
 
-## Worked example
-
-Before (cheap card):
-
-```tsx
-<button className="rounded-md border border-paper-3 bg-paper px-5 py-4">
-  <div className="text-xs text-ink-4">Updated 2 days ago</div>
-  <div className="text-xl font-semibold text-ink">Sally in LA</div>
-  <div className="flex gap-1.5">
-    <span className="rounded-sm bg-paper-2 px-1.5 py-0.5 text-[11px]">original</span>
-    <span className="rounded-sm bg-paper-2 px-1.5 py-0.5 text-[11px]">steamy</span>
-  </div>
-</button>
-```
-
-After (editorial list item):
-
-```tsx
-<li className="list-item-reveal" style={{ animationDelay: `${i * 40}ms` }}>
-  <button className="block w-full py-7 text-left transition-transform duration-200 hover:-translate-y-px">
-    <RelativeTimeStatus className="mb-4" timestamp={ts} prefix="Updated " />
-    <div className="t-headline">Sally in LA</div>
-    <div className="t-meta mt-2 flex items-center gap-2">
-      <span>original</span>
-      <span aria-hidden className="text-ink-4">—</span>
-      <span>steamy</span>
-    </div>
-  </button>
-</li>
-```
-
-What changed: the box dissolved, the title is serif, metadata is italic serif separated by an em-dash, the timestamp's dot turns pink when fresh, and the row lifts on hover. Same data, completely different mood.
-
-## When in doubt
-
-Ask: *"Does this element exist because the content needs it, or because I'm afraid the page looks too empty?"*
-
-Most of the time, it's the second. Delete it. Air is doing the work.
+- Mobile-only touch app: no hover/focus affordances; press feedback via `:active`.
+- One-handed, left thumb: primary actions sit left (action rows start with the primary button,
+  FABs are bottom-left).
+- Icons are lucide, paired with text wherever space allows.

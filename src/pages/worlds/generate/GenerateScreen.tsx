@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, FastForward, Heart, Pause, Play, Rewind, SkipForward } from 'lucide-react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowRight, Check, FastForward, Pause, Play, Rewind, SkipForward } from 'lucide-react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog'
@@ -10,7 +10,6 @@ import { useToast } from '@/components/Toast'
 import { useGeneration } from '@/hooks/useGeneration'
 import { useUiText } from '@/i18n'
 import { MODELS, useGenerationModel } from '@/preferences/generationModel'
-import { useTasteProfileEnabled } from '@/preferences/tasteProfileEnabled'
 import { useReadingFont } from '@/preferences/readingFont'
 import { useReadingFontSize } from '@/preferences/readingFontSize'
 import {
@@ -20,72 +19,52 @@ import {
   useReadingSpeed,
 } from '@/preferences/readingSpeed'
 import GenerateOutput from './components/GenerateOutput'
-import ParagraphLikePanel from '../taste/ParagraphLikePanel'
 import MarkerRail, { revealMarker } from '../shared/MarkerRail'
-import AdditionsIndicator from '../shared/AdditionsIndicator'
-import { useWorldAdditions, type WorldAddition } from '../shared/useWorldAdditions'
 import { useGatedReveal } from './hooks/useGatedReveal'
 import { useUnsavedExitGuard } from './hooks/useUnsavedExitGuard'
-import { buildExpandPrefix, buildLikeContext, splitParagraphs } from './paragraphs'
+import { buildExpandPrefix, splitParagraphs } from './paragraphs'
 import {
-  PIECE_STRIP_LIMIT,
-  parseVersionDraft,
-  type OverwritePieceResponse,
-  type PieceDetail,
-  type PromptPiecesResponse,
+  STORY_STRIP_LIMIT,
+  type StoryDetail,
+  type SceneStoriesResponse,
   type SaveResponse,
 } from '../shared/types'
+import { fetchScene, sceneQueryKey } from '../scene/hooks/useGenerateData'
 import {
   segmentStartOffsets,
   serializeStructure,
-  type PieceAction,
-  type PieceStructure,
-} from '../shared/pieceStructure'
+  type StoryAction,
+  type StoryStructure,
+} from '../shared/storyStructure'
 
 const GENERATION_TEMPERATURE = 1
 const USE_THINKING = false
 
 // The generate/stream/edit/explore screen. Its own route — entered by navigating from
-// the static prompt page — so generation state lives here, never on the prompt page.
-// Saving creates (or overwrites) a piece and navigates back to the prompt page.
+// the static scene page — so generation state lives here, never on the scene page.
+// Saving creates (or overwrites) a story and navigates back to the scene page.
 export default function GenerateScreen() {
-  const { id, promptId } = useParams<{ id: string; promptId?: string }>()
-  const location = useLocation()
+  const { id, sceneId } = useParams<{ id: string; sceneId: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const t = useUiText()
   const queryClient = useQueryClient()
   const toast = useToast()
   const model = useGenerationModel()
-  const useTaste = useTasteProfileEnabled()
   const readingFont = useReadingFont()
   const readingFontSize = useReadingFontSize()
 
-  const lockedMode = !!promptId
-  const routeState = location.state as { prompt?: unknown; versionDraft?: unknown } | null
-  const versionDraft = parseVersionDraft(routeState?.versionDraft)
-  const statePrompt = typeof routeState?.prompt === 'string' ? routeState.prompt : ''
-  const versionSourcePromptId = !lockedMode ? versionDraft?.sourcePromptId ?? null : null
-
   const resumeParam = searchParams.get('resume')
-  const resumePieceId = resumeParam ? Number(resumeParam) : null
-  const resumeMode = resumePieceId !== null && Number.isFinite(resumePieceId)
-  // The paragraph the reader left off on (from the piece view); the seed opens there.
+  const resumeStoryId = resumeParam ? Number(resumeParam) : null
+  const resumeMode = resumeStoryId !== null && Number.isFinite(resumeStoryId)
+  // The paragraph the reader left off on (from the story view); the seed opens there.
   const resumeAtParam = searchParams.get('at')
   const resumeParagraphIndex =
     resumeMode && resumeAtParam !== null && Number.isFinite(Number(resumeAtParam))
       ? Number(resumeAtParam)
       : null
 
-  const backHref = lockedMode ? `/worlds/${id}/prompt/${promptId}` : `/worlds/${id}/prompt/new`
-  // Returning to a fresh/version draft restores what the user typed (not the original
-  // source text), so the draft page comes back exactly as they left it.
-  const exitState = lockedMode
-    ? undefined
-    : {
-      draftPrompt: statePrompt,
-      versionDraft: versionDraft ? { ...versionDraft, promptText: statePrompt } : undefined,
-    }
+  const backHref = `/worlds/${id}/scenes/${sceneId}`
 
   const {
     phase,
@@ -102,45 +81,38 @@ export default function GenerateScreen() {
     stop,
   } = useGeneration({ worldId: id })
 
-  // Resume seeds the reader with an already-saved piece.
-  const resumePieceQuery = useQuery({
-    queryKey: ['piece', resumePieceId],
-    queryFn: () => apiFetch(`/api/pieces/${resumePieceId}`) as Promise<PieceDetail>,
+  // Resume seeds the reader with an already-saved story.
+  const resumeStoryQuery = useQuery({
+    queryKey: ['story', resumeStoryId],
+    queryFn: () => apiFetch(`/api/stories/${resumeStoryId}`) as Promise<StoryDetail>,
     enabled: resumeMode,
   })
-  const resumePiece = resumePieceQuery.data ?? null
+  const resumeStory = resumeStoryQuery.data ?? null
 
-  // For an existing prompt the text comes off the URL; for a fresh/version draft the
-  // prompt page hands it over in router state. Fall back to fetching when state is lost.
-  const needPromptFetch = !resumeMode && !statePrompt && lockedMode
-  const promptDetailQuery = useQuery({
-    queryKey: ['prompt', id, promptId, 'generate', PIECE_STRIP_LIMIT],
-    queryFn: () =>
-      apiFetch(`/api/worlds/${id}/prompts/${encodeURIComponent(promptId!)}?limit=${PIECE_STRIP_LIMIT}`) as Promise<PromptPiecesResponse>,
-    enabled: needPromptFetch,
+  // A fresh generation reads the scene text off the scene the URL names (usually already
+  // cached by the scene page this was entered from).
+  const needSceneFetch = !resumeMode
+  const sceneDetailQuery = useQuery({
+    queryKey: sceneQueryKey(id, sceneId),
+    queryFn: () => fetchScene(id, sceneId),
+    enabled: needSceneFetch,
   })
-  // Resume carries no router state, so the prompt comes off the resumed piece itself —
-  // without it, every continuation in resume mode would POST an empty prompt and 400.
-  const promptText = statePrompt || resumePiece?.prompt || promptDetailQuery.data?.prompt.text || ''
-
-  // A resumed piece keeps the additions it was written with; a fresh one takes whatever the
-  // reader has switched on. Continuing a story must not change the world underneath it.
-  const { activeIds, additions, ready: additionsReady } = useWorldAdditions(id)
-  const additionIds = resumeMode ? resumePiece?.addition_ids ?? [] : activeIds
+  // The server looks up the scene's instruction from its id: the reader never has it. An outdated
+  // story can't be resumed (the scene page doesn't offer it, and the server refuses the save), so
+  // a resume continues toward the instruction it was written from.
+  const generationSceneId = resumeMode ? resumeStory?.scene_id ?? null : sceneDetailQuery.data?.scene.id ?? null
+  const generationInput = { sceneId: generationSceneId ?? undefined, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING }
 
   const startedRef = useRef(false)
   useEffect(() => {
     if (resumeMode || startedRef.current) return
-    // The active set is derived from the checked-out version, so starting before the world has
-    // resolved would generate against the bare body and then save that as the piece's stamp.
-    if (!additionsReady) return
-    if (!promptText) {
-      // Nothing to generate and nothing to wait for — bounce back to the prompt page.
-      if (!needPromptFetch) navigate(backHref, { replace: true, state: exitState })
+    if (generationSceneId === null) {
+      // Nothing to generate and nothing to wait for — bounce back to the scene page.
+      if (!needSceneFetch) navigate(backHref, { replace: true })
       return
     }
     startedRef.current = true
-    generate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds })
+    generate(generationInput)
     // Reset the guard on cleanup so StrictMode's mount→unmount→mount in dev re-issues
     // the run instead of leaving the aborted first one stranded. runGeneration aborts
     // the prior controller and gates the stale run by generationId, so the replaced
@@ -149,60 +121,54 @@ export default function GenerateScreen() {
       startedRef.current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeMode, promptText, needPromptFetch, additionsReady])
+  }, [resumeMode, generationSceneId, needSceneFetch])
 
   const [saving, setSaving] = useState(false)
   const readerUnsaved = output.length > 0 && !saving
   const { confirmOpen, confirmLeave, confirmStay } = useUnsavedExitGuard(readerUnsaved)
 
-  async function saveNewPiece(text: string, structure: PieceStructure) {
+  async function saveNewStory(text: string, structure: StoryStructure) {
     if (!id || !text || saving) return
     setSaving(true)
     try {
-      const result = await apiFetch(`/api/worlds/${id}/pieces`, {
+      const result = await apiFetch(`/api/worlds/${id}/stories`, {
         method: 'POST',
         body: JSON.stringify({
-          prompt: promptText,
-          promptId: lockedMode && promptId ? Number(promptId) : undefined,
-          versionSourcePromptId,
+          sceneId: Number(sceneId),
           body: text,
           structure: serializeStructure(structure),
           model,
           provider: provider || undefined,
-          useTaste,
-          additionIds,
         }),
       }) as SaveResponse
       stop()
-      queryClient.setQueryData(['piece', result.pieceId], {
-        id: result.pieceId,
+      queryClient.setQueryData<StoryDetail>(['story', result.storyId], {
+        id: result.storyId,
+        scene_id: result.sceneId,
+        outdated: false,
         body: text,
         structure,
         model,
         provider: provider || null,
-        used_taste: result.usedTaste,
-        addition_ids: additionIds,
         created_at: Date.now(),
         updated_at: Date.now(),
       })
-      // Prepend the new piece to the cached list so the prompt page (which remounts on
+      // Prepend the new story to the cached list so the scene page (which remounts on
       // the stale-while-revalidate cache) already shows it as the latest and selects it
-      // by default, instead of sticking on the previously-latest piece until refetch.
-      queryClient.setQueryData<PromptPiecesResponse>(
-        ['prompt', id, String(result.promptId), 'generate', PIECE_STRIP_LIMIT],
+      // by default, instead of sticking on the previously-latest story until refetch.
+      queryClient.setQueryData<SceneStoriesResponse>(
+        sceneQueryKey(id, result.sceneId),
         prev =>
-          !prev || prev.pieces.some(p => p.id === result.pieceId)
+          !prev || prev.stories.some(p => p.id === result.storyId)
             ? prev
             : {
-              prompt: { ...prev.prompt, piece_count: result.pieceCount },
-              pieces: [{ id: result.pieceId, created_at: Date.now(), updated_at: Date.now() }, ...prev.pieces].slice(0, PIECE_STRIP_LIMIT),
+              ...prev,
+              scene: { ...prev.scene, story_count: prev.scene.story_count + 1 },
+              stories: [{ id: result.storyId, created_at: Date.now(), updated_at: Date.now(), outdated: false }, ...prev.stories].slice(0, STORY_STRIP_LIMIT),
             },
       )
-      queryClient.invalidateQueries({ queryKey: ['prompt', id, String(result.promptId)] })
-      queryClient.invalidateQueries({ queryKey: ['world', id] })
-      queryClient.invalidateQueries({ queryKey: ['world-clusters', id] })
-      queryClient.invalidateQueries({ queryKey: ['cluster', id] })
-      navigate(`/worlds/${id}/prompt/${result.promptId}`, { replace: true })
+      queryClient.invalidateQueries({ queryKey: ['scene', id, String(result.sceneId)] })
+      navigate(backHref, { replace: true })
     } catch (err) {
       setSaving(false)
       toast.show({
@@ -213,33 +179,17 @@ export default function GenerateScreen() {
     }
   }
 
-  async function saveResume(text: string, structure: PieceStructure) {
-    if (resumePieceId === null || !id || !text.trim() || saving) return
+  async function saveResume(text: string, structure: StoryStructure) {
+    if (resumeStoryId === null || !id || !text.trim() || saving) return
     setSaving(true)
     stop()
     try {
-      const result = await apiFetch(`/api/pieces/${resumePieceId}`, {
+      const result = await apiFetch(`/api/stories/${resumeStoryId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ body: text, structure: serializeStructure(structure), model, provider: provider || undefined, useTaste }),
-      }) as OverwritePieceResponse
-      queryClient.setQueryData(['piece', resumePieceId], {
-        id: resumePieceId,
-        body: result.body,
-        structure: result.structure,
-        model: result.model,
-        provider: result.provider,
-        used_taste: result.used_taste,
-        // Never rewritten on a resume — the piece keeps the set it was born with, which is what
-        // the PATCH leaves alone server-side.
-        addition_ids: result.addition_ids,
-        created_at: result.created_at,
-        updated_at: result.updated_at,
-      })
-      queryClient.invalidateQueries({ queryKey: ['piece', resumePieceId] })
-      queryClient.invalidateQueries({ queryKey: ['prompt', id] })
-      queryClient.invalidateQueries({ queryKey: ['world', id] })
-      queryClient.invalidateQueries({ queryKey: ['world-clusters', id] })
-      queryClient.invalidateQueries({ queryKey: ['cluster', id] })
+        body: JSON.stringify({ body: text, structure: serializeStructure(structure), model, provider: provider || undefined }),
+      }) as StoryDetail
+      queryClient.setQueryData<StoryDetail>(['story', resumeStoryId], result)
+      queryClient.invalidateQueries({ queryKey: ['scene', id] })
       navigate(backHref, { replace: true })
     } catch (err) {
       setSaving(false)
@@ -253,22 +203,20 @@ export default function GenerateScreen() {
 
   function handleExit() {
     stop()
-    navigate(backHref, { replace: true, state: exitState })
+    navigate(backHref, { replace: true })
   }
 
   return (
     <>
       <GenerateReader
         output={output}
-        worldId={id}
-        pieceId={resumeMode ? resumePieceId : null}
         phase={phase}
         displayComplete={displayComplete}
         provider={provider}
         modelLabel={MODELS.find(m => m.id === model)?.label ?? model}
-        seedProvider={resumePiece?.provider ?? ''}
+        seedProvider={resumeStory?.provider ?? ''}
         seedModelLabel={
-          resumePiece?.model ? MODELS.find(m => m.id === resumePiece.model)?.label ?? resumePiece.model : ''
+          resumeStory?.model ? MODELS.find(m => m.id === resumeStory.model)?.label ?? resumeStory.model : ''
         }
         error={generationError}
         errorDetail={generationErrorDetail}
@@ -276,17 +224,15 @@ export default function GenerateScreen() {
         readingFont={readingFont}
         readingFontSize={readingFontSize}
         mode={resumeMode ? 'resume' : 'generate'}
-        initialText={resumeMode ? resumePiece?.body ?? '' : ''}
-        initialStructure={resumeMode ? resumePiece?.structure ?? null : null}
+        initialText={resumeMode ? resumeStory?.body ?? '' : ''}
+        initialStructure={resumeMode ? resumeStory?.structure ?? null : null}
         initialParagraphIndex={resumeParagraphIndex}
-        additions={additions}
-        additionIds={additionIds}
-        onSave={saveNewPiece}
+        onSave={saveNewStory}
         onSaveOverwrite={saveResume}
         onExit={handleExit}
-        onExpand={(priorText, direction) => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
-        onContinue={(priorText, direction) => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
-        onRegenerate={(priorText, direction) => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
+        onExpand={(priorText, direction) => expand({ ...generationInput, priorText, direction })}
+        onContinue={(priorText, direction) => continueStory({ ...generationInput, priorText, direction })}
+        onRegenerate={(priorText, direction) => regenerate({ ...generationInput, priorText, direction })}
       />
       <ConfirmDialog
         open={confirmOpen}
@@ -307,17 +253,13 @@ export default function GenerateScreen() {
   )
 }
 
-interface GenerateReaderProps {
+export interface GenerateReaderProps {
   output: string
-  // World route id and, when resuming a saved piece, its id — both used to record a
-  // paragraph "like" (a fresh, unsaved generation likes against the world alone).
-  worldId?: string
-  pieceId: number | null
   phase: ReturnType<typeof useGeneration>['phase']
   displayComplete: boolean
   provider: string
   modelLabel: string
-  // Saved provider/model of a resumed piece, shown until a fresh generation takes over.
+  // Saved provider/model of a resumed story, shown until a fresh generation takes over.
   seedProvider: string
   seedModelLabel: string
   error: string
@@ -327,16 +269,13 @@ interface GenerateReaderProps {
   readingFontSize: ReturnType<typeof useReadingFontSize>
   mode: 'generate' | 'resume'
   initialText: string
-  // Recorded action history of a resumed piece (null for fresh generation or legacy pieces).
-  initialStructure: PieceStructure | null
-  // Paragraph to open the resumed seed on, matching where the reader was on the piece view.
+  // Recorded action history of a resumed story (null for fresh generation or legacy stories).
+  initialStructure: StoryStructure | null
+  // Paragraph to open the resumed seed on, matching where the reader was on the story view.
   initialParagraphIndex: number | null
-  // The world's additions, and the ones this run is writing with — the reader's switched-on set
-  // for a fresh generation, the piece's own stamp when resuming.
-  additions: WorldAddition[]
-  additionIds: number[]
-  onSave: (text: string, structure: PieceStructure) => void
-  onSaveOverwrite: (text: string, structure: PieceStructure) => void
+  // Absent on a creator center test run, which is never saved: the reader then offers only Done.
+  onSave?: (text: string, structure: StoryStructure) => void
+  onSaveOverwrite?: (text: string, structure: StoryStructure) => void
   onExit: () => void
   onExpand: (priorText: string, direction: string) => void
   onContinue: (priorText: string, direction: string) => void
@@ -344,11 +283,10 @@ interface GenerateReaderProps {
 }
 
 // The reading surface itself: paced reveal, pause/speed, paragraph-expand, save/exit.
-// Ported from the former GenerateOverlay — same behavior, now a real screen.
-function GenerateReader({
+// Ported from the former GenerateOverlay — same behavior, now a real screen. Also the creator center's
+// test screen (CreatorTestScreen), which passes no save handlers.
+export function GenerateReader({
   output,
-  worldId,
-  pieceId,
   phase,
   displayComplete,
   provider,
@@ -364,8 +302,6 @@ function GenerateReader({
   initialText,
   initialStructure,
   initialParagraphIndex,
-  additions,
-  additionIds,
   onSave,
   onSaveOverwrite,
   onExit,
@@ -382,14 +318,10 @@ function GenerateReader({
   const [paused, setPaused] = useState(false)
   const [frozenText, setFrozenText] = useState<string | null>(null)
   const [selectedParagraphIndex, setSelectedParagraphIndex] = useState<number | null>(null)
-  // Paragraphs liked this session (trimmed text). A like never needs a saved piece — it's
-  // recorded against the world (and the resumed piece id when present) — so the reader can
-  // mark loved paragraphs right here in the generate flow.
-  const [likedSnippets, setLikedSnippets] = useState<Set<string>>(new Set())
   // The whole-story Continue's optional steer, typed in the field above the bottom bar.
   const [continueDirection, setContinueDirection] = useState('')
   const [continueFieldFocused, setContinueFieldFocused] = useState(false)
-  // A field inside the docked paragraph controls (expand/continue steer or the like note) is
+  // A field inside the docked paragraph controls (the expand/continue steer) is
   // focused — folded together with the whole-story field to lift the bar above the keyboard.
   const [dockFieldFocused, setDockFieldFocused] = useState(false)
   const [revealEpoch, setRevealEpoch] = useState(0)
@@ -402,11 +334,11 @@ function GenerateReader({
   const [railTicks, setRailTicks] = useState<{ segmentIndex: number; label: string; fraction: number }[]>([])
   const [railView, setRailView] = useState({ top: 0, height: 1 })
 
-  // The action history for the piece being built. Each entry is where one action's output
+  // The action history for the story being built. Each entry is where one action's output
   // begins (char offset in the final text) plus what it was. The origin ('fresh') segment
-  // before the first offset is implicit. Seeded from a resumed piece's structure; new
-  // actions append, and acting mid-piece drops the entries below the cut (replace-downstream).
-  const [actionLog, setActionLog] = useState<{ offset: number; action: PieceAction; direction: string }[]>([])
+  // before the first offset is implicit. Seeded from a resumed story's structure; new
+  // actions append, and acting mid-story drops the entries below the cut (replace-downstream).
+  const [actionLog, setActionLog] = useState<{ offset: number; action: StoryAction; direction: string }[]>([])
   useEffect(() => {
     if (!initialStructure) {
       setActionLog([])
@@ -420,19 +352,19 @@ function GenerateReader({
     )
   }, [initialStructure])
 
-  const recordAction = (offset: number, action: PieceAction, direction: string) => {
+  const recordAction = (offset: number, action: StoryAction, direction: string) => {
     setActionLog(log => [...log.filter(entry => entry.offset < offset), { offset, action, direction }])
   }
 
   // Slice the final text at the logged offsets into segments; the first slice is the origin.
   // `dropEmpty` (save path) discards empty later segments; the live render keeps them so a
   // just-fired action's marker shows immediately, before its first token streams in.
-  const buildStructure = (finalText: string, dropEmpty = true): PieceStructure => {
+  const buildStructure = (finalText: string, dropEmpty = true): StoryStructure => {
     const boundaries = [0, ...actionLog.map(entry => entry.offset)]
     const segments = boundaries
       .map((start, i) => {
         const end = i + 1 < boundaries.length ? boundaries[i + 1] : finalText.length
-        const meta = i === 0 ? { action: 'fresh' as PieceAction, direction: '' } : actionLog[i - 1]
+        const meta = i === 0 ? { action: 'fresh' as StoryAction, direction: '' } : actionLog[i - 1]
         return { action: meta.action, direction: meta.direction, text: finalText.slice(start, end) }
       })
       // Empty slices don't affect the concat, so dropping them keeps the invariant intact.
@@ -485,8 +417,8 @@ function GenerateReader({
     if (!canSelect) setSelectedParagraphIndex(null)
   }, [canSelect])
 
-  // The paragraph the docked controls act on: its text is the like snippet and the
-  // expand/continue seed. When one is selected, the docked switch (Expand · Continue · Like)
+  // The paragraph the docked controls act on: the expand/continue seed. When one is selected,
+  // the docked switch (Expand · Continue)
   // takes over the bar and the whole-story transport/Continue is hidden so there's never a
   // double set of controls.
   // Split once per laid-out text rather than on every render — while streaming this is the
@@ -503,9 +435,9 @@ function GenerateReader({
   const paragraphSelected = selectedParagraph !== null
 
   // The marker rail only appears once the read is paused/finished (so the markers are
-  // rendered as tappable chips) and the piece actually has boundaries to navigate.
+  // rendered as tappable chips) and the story actually has boundaries to navigate.
   const railVisible = canSelect && liveSegments.length > 1
-  const markerLabel = (action: PieceAction) =>
+  const markerLabel = (action: StoryAction) =>
     action === 'expand' ? t.markerExpanded : action === 'regenerate' ? t.markerContinuedFrom : t.markerContinued
 
   // Measure each marker chip's position within the scroll content into a tick fraction.
@@ -551,7 +483,7 @@ function GenerateReader({
 
   // Shared reveal/seed bookkeeping for every story action: reset the paced reveal to treat
   // `priorText` as already-read, record the action in the history, then fire it.
-  const startAction = (priorText: string, action: PieceAction, direction: string) => {
+  const startAction = (priorText: string, action: StoryAction, direction: string) => {
     setBaselineRevealed(priorText.length)
     setRevealEpoch(epoch => epoch + 1)
     setFrozenText(null)
@@ -570,14 +502,14 @@ function GenerateReader({
 
   // Per-paragraph continue: keep everything through the tapped paragraph, drop all the
   // text below it, and regenerate from there. Identical to Continue on the server — same
-  // system prompt, same original prompt, same continuation instruction — the only
+  // system scene, same original scene, same continuation instruction — the only
   // difference is that the prior text is cut at this paragraph rather than the whole story.
   const handleContinueFrom = (paragraphIndex: number, direction: string) => {
     startAction(buildExpandPrefix(displayText, paragraphIndex), 'regenerate', direction)
   }
 
   // Continue picks up from the full existing text (not a single paragraph) and resumes
-  // the story toward the original prompt; new prose streams in as a fresh paragraph.
+  // the story toward the original scene; new prose streams in as a fresh paragraph.
   const handleContinue = (direction: string) => {
     setContinueDirection('')
     startAction(`${displayText.replace(/\s+$/, '')}\n\n`, 'continue', direction)
@@ -618,7 +550,7 @@ function GenerateReader({
     }
   }, [keyboardFieldOpen])
 
-  // Open the resumed seed at the paragraph the reader left off on (carried from the piece
+  // Open the resumed seed at the paragraph the reader left off on (carried from the story
   // view), placed before paint so there's no visible jump from the top. Runs once, only
   // while the seed is showing; the moment the reader acts (expands/continues) it stops
   // applying. `initialText` is a dep because the resumed body arrives async.
@@ -649,19 +581,19 @@ function GenerateReader({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-60 flex flex-col select-none bg-paper [-webkit-touch-callout:none]"
+      className="fixed inset-0 z-60 flex flex-col select-none bg-surface [-webkit-touch-callout:none]"
       role="dialog"
       aria-modal="true"
     >
       {/* Thin pinned meta bar: the model in play, and the resolved provider once it
-          arrives. While a resumed piece's seed is on screen it shows that piece's saved
+          arrives. While a resumed story's seed is on screen it shows that story's saved
           model/provider; a fresh generation then takes over. */}
-      <div className="flex shrink-0 items-center justify-center gap-2 border-b border-rose-line/70 bg-paper px-4 py-1.5 pt-[calc(0.375rem+env(safe-area-inset-top))] t-meta">
+      <div className="t-meta flex shrink-0 items-center justify-center gap-2 border-b border-line bg-surface px-4 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
         {notice && !error ? (
           <span className="text-rose-deep">{notice}</span>
         ) : (
           <>
-            <span className="text-ink-2">{showingSeed ? seedModelLabel || modelLabel : modelLabel}</span>
+            <span className="font-semibold text-ink-2">{showingSeed ? seedModelLabel || modelLabel : modelLabel}</span>
             {(showingSeed ? seedProvider : provider) ? (
               <>
                 <span aria-hidden="true" className="text-ink-4">·</span>
@@ -680,10 +612,6 @@ function GenerateReader({
         )}
       </div>
 
-      {/* What the world carries for this run. On a resume these are the piece's own additions,
-          not whatever is switched on now, so the line matches the story being continued. */}
-      <AdditionsIndicator additions={additions} activeIds={additionIds} className="shrink-0" />
-
       <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
@@ -699,10 +627,10 @@ function GenerateReader({
         className="h-full overflow-y-auto overscroll-contain px-4 pt-4"
       >
         {error ? (
-          <div className="mx-auto mt-[30vh] max-w-md rounded-md border border-rose/40 bg-rose-pale px-3 py-2 text-center text-sm text-rose-deep">
-            <p>{error}</p>
+          <div className="error-box mx-auto mt-[30vh] max-w-md text-center">
+            <p className="font-semibold">{error}</p>
             {errorDetail && (
-              <dl className="mt-2 space-y-0.5 text-left text-xs text-rose-deep/80">
+              <dl className="mt-2 space-y-0.5 text-left text-xs opacity-85">
                 {errorDetail.status != null && (
                   <div className="flex gap-1.5">
                     <dt className="shrink-0 font-medium">Status</dt>
@@ -742,7 +670,6 @@ function GenerateReader({
             selectable={canSelect}
             selectedParagraphIndex={selectedParagraphIndex}
             onSelectParagraph={setSelectedParagraphIndex}
-            likedSnippets={likedSnippets}
           />
         )}
       </div>
@@ -754,26 +681,16 @@ function GenerateReader({
       {/* One control bar for everything: transport (or Continue) sits on the left for the
           thumb; the exit actions stay anchored on the right. */}
       <div
-        className="shrink-0 border-t border-rose-line/70 bg-paper pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-transform"
+        className="shrink-0 border-t border-line bg-surface pb-[calc(0.5rem+env(safe-area-inset-bottom))] transition-transform"
         style={keyboardInset ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
       >
         {/* A tapped paragraph swaps the whole-story transport for its own docked controls:
-            a switch between Expand / Continue / Like, each revealing just its own inputs. */}
+            a switch between Expand / Continue, each revealing its own steer field. */}
         {paragraphSelected && selectedParagraph && (
           <ParagraphActionDock
             key={selectedParagraph.index}
-            worldId={worldId}
-            pieceId={pieceId}
-            snippet={selectedParagraph.text}
-            context={buildLikeContext(displayText, selectedParagraph.index)}
-            liked={likedSnippets.has(selectedParagraph.text.trim())}
             onExpand={direction => handleExpand(selectedParagraph.index, direction)}
             onContinue={direction => handleContinueFrom(selectedParagraph.index, direction)}
-            onLiked={snippet => {
-              setLikedSnippets(prev => new Set(prev).add(snippet.trim()))
-              setSelectedParagraphIndex(null)
-            }}
-            onClose={() => setSelectedParagraphIndex(null)}
             onFieldFocusChange={setDockFieldFocused}
           />
         )}
@@ -786,7 +703,7 @@ function GenerateReader({
             aria-valuemin={READING_SPEED_MIN}
             aria-valuemax={READING_SPEED_MAX}
             aria-valuenow={readingSpeed}
-            className="h-0.5 w-full bg-rose-line"
+            className="h-1 w-full bg-paper-3"
           >
             <div className="h-full bg-rose transition-[width]" style={{ width: `${speedRatio * 100}%` }} />
           </div>
@@ -809,7 +726,7 @@ function GenerateReader({
               }}
               placeholder={t.directionPlaceholder}
               enterKeyHint="send"
-              className="h-9 w-full rounded-full bg-paper-2 px-4 font-serif-zh text-[13px] italic leading-none text-ink placeholder:text-ink-4 focus:outline-none"
+              className="input h-10 rounded-full bg-paper-2 px-4 text-[15px]"
             />
           </div>
         )}
@@ -828,9 +745,9 @@ function GenerateReader({
                 type="button"
                 aria-label={t.continueWriting}
                 onClick={() => handleContinue(continueDirection.trim())}
-                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full pr-3 pl-2 font-serif-zh text-[14px] italic leading-none text-ink-3 transition-opacity active:text-ink active:opacity-70"
+                className="btn btn-secondary btn-sm"
               >
-                <ArrowRight aria-hidden="true" className="h-5 w-5" />
+                <ArrowRight aria-hidden="true" />
                 {t.continueWriting}
               </button>
             ) : !error && canPause ? (
@@ -840,28 +757,28 @@ function GenerateReader({
                   aria-label={t.slower}
                   disabled={readingSpeed <= READING_SPEED_MIN}
                   onClick={slower}
-                  className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity disabled:opacity-30 active:text-ink active:opacity-70"
+                  className="icon-btn bg-paper-2"
                 >
-                  <Rewind aria-hidden="true" className="h-5 w-5 fill-current" />
+                  <Rewind aria-hidden="true" className="h-4.5! w-4.5! fill-current" />
                 </button>
                 <button
                   type="button"
                   aria-label={paused ? t.resume : t.pause}
                   onClick={togglePause}
-                  className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity active:text-ink active:opacity-70"
+                  className="icon-btn h-12 w-12 bg-rose text-white active:bg-rose active:opacity-85"
                 >
                   {paused
-                    ? <Play aria-hidden="true" className="h-6 w-6 fill-current" />
-                    : <Pause aria-hidden="true" className="h-6 w-6 fill-current" />}
+                    ? <Play aria-hidden="true" className="fill-current" />
+                    : <Pause aria-hidden="true" className="fill-current" />}
                 </button>
                 <button
                   type="button"
                   aria-label={t.faster}
                   disabled={readingSpeed >= READING_SPEED_MAX}
                   onClick={faster}
-                  className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity disabled:opacity-30 active:text-ink active:opacity-70"
+                  className="icon-btn bg-paper-2"
                 >
-                  <FastForward aria-hidden="true" className="h-5 w-5 fill-current" />
+                  <FastForward aria-hidden="true" className="h-4.5! w-4.5! fill-current" />
                 </button>
                 {/* Dump the rest of the buffer on screen at once. The text arrives well ahead
                     of the paced reveal, so this only lights up once the stream itself is
@@ -871,35 +788,48 @@ function GenerateReader({
                   aria-label={t.skipToEnd}
                   disabled={!displayComplete}
                   onClick={skipToEnd}
-                  className="inline-flex h-11 w-11 items-center justify-center text-ink-3 transition-opacity disabled:opacity-30 active:text-ink active:opacity-70"
+                  className="icon-btn bg-paper-2"
                 >
-                  <SkipForward aria-hidden="true" className="h-5 w-5 fill-current" />
+                  <SkipForward aria-hidden="true" className="h-4.5! w-4.5! fill-current" />
                 </button>
               </>
             ) : null}
           </div>
 
           {/* Right: discard and save & exit, always reachable. */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onExit}
-              className="font-serif-zh text-[13px] italic leading-none text-ink-3 underline decoration-ink-4/50 underline-offset-4 transition-colors active:text-ink active:opacity-70"
-            >
-              {t.exitWithoutSaving}
-            </button>
-            <button
-              type="button"
-              disabled={!canSave}
-              onClick={() => {
-                const structure = buildStructure(displayText)
-                if (mode === 'resume') onSaveOverwrite(displayText, structure)
-                else onSave(displayText, structure)
-              }}
-              className="inline-flex h-9 items-center justify-center rounded-full bg-rose px-4 font-serif-zh text-[14px] italic leading-none text-white transition-opacity disabled:opacity-30 active:opacity-80"
-            >
-              {t.saveAndExit}
-            </button>
+          <div className="flex items-center gap-1.5">
+            {onSave ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onExit}
+                  className="btn btn-ghost btn-sm px-2.5 text-ink-3"
+                >
+                  {t.exitWithoutSaving}
+                </button>
+                <button
+                  type="button"
+                  disabled={!canSave}
+                  onClick={() => {
+                    const structure = buildStructure(displayText)
+                    if (mode === 'resume') onSaveOverwrite?.(displayText, structure)
+                    else onSave(displayText, structure)
+                  }}
+                  className="btn btn-primary btn-sm"
+                >
+                  <Check aria-hidden="true" />
+                  {t.saveAndExit}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onExit}
+                className="btn btn-primary btn-sm"
+              >
+                {t.done}
+              </button>
+            )}
           </div>
         </div>
         )}
@@ -910,32 +840,16 @@ function GenerateReader({
 }
 
 // The docked controls for a tapped paragraph, sitting just above the bottom action row.
-// A three-way switch (Expand · Continue · Like) reveals only the chosen intent's controls:
-// Expand/Continue are a steer field + send; Like is the full reason panel. Steer and react
-// stay one tap apart without crowding the surface — the resting state is just three pills.
-type DockTab = 'expand' | 'continue' | 'like'
+// A two-way switch (Expand · Continue) picks the intent; both are a steer field + send.
+type DockTab = 'expand' | 'continue'
 
 function ParagraphActionDock({
-  worldId,
-  pieceId,
-  snippet,
-  context,
-  liked,
   onExpand,
   onContinue,
-  onLiked,
-  onClose,
   onFieldFocusChange,
 }: {
-  worldId?: string
-  pieceId: number | null
-  snippet: string
-  context: string
-  liked: boolean
   onExpand: (direction: string) => void
   onContinue: (direction: string) => void
-  onLiked: (snippet: string) => void
-  onClose: () => void
   onFieldFocusChange: (focused: boolean) => void
 }) {
   const t = useUiText()
@@ -952,13 +866,11 @@ function ParagraphActionDock({
   const pills: { key: DockTab; label: string }[] = [
     { key: 'expand', label: t.expand },
     { key: 'continue', label: t.continueWriting },
-    { key: 'like', label: t.tasteLike },
   ]
 
   return (
-    // Focus of any descendant field (steer input or the like note) lifts the bar above the
-    // keyboard; blur only counts when focus actually leaves the dock, not when it moves
-    // between the dock's own controls.
+    // Focus of the steer field lifts the bar above the keyboard; blur only counts when focus
+    // actually leaves the dock, not when it moves between the dock's own controls.
     <div
       className="px-4 pb-3 pt-3"
       onFocus={() => onFieldFocusChange(true)}
@@ -966,65 +878,42 @@ function ParagraphActionDock({
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onFieldFocusChange(false)
       }}
     >
-      <div className="flex gap-1.5">
-        {pills.map(pill => {
-          const on = tab === pill.key
-          return (
-            <button
-              key={pill.key}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setTab(pill.key)}
-              className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 font-serif-zh text-[13px] italic leading-none transition-colors ${on ? 'bg-rose-pale text-rose-deep' : 'bg-paper-2 text-ink-3 active:bg-paper-3'}`}
-            >
-              {pill.key === 'like' && <Heart aria-hidden="true" className={`h-3 w-3 ${liked ? 'fill-current' : ''}`} />}
-              {pill.label}
-            </button>
-          )
-        })}
+      <div className="segmented">
+        {pills.map(pill => (
+          <button
+            key={pill.key}
+            type="button"
+            aria-pressed={tab === pill.key}
+            onClick={() => setTab(pill.key)}
+          >
+            {pill.label}
+          </button>
+        ))}
       </div>
 
-      {tab === 'like' ? (
-        liked ? (
-          <div className="mt-2 flex items-center gap-1.5 px-1 py-3 text-ink-3">
-            <Heart aria-hidden="true" className="h-3.5 w-3.5 fill-current" />
-            <span className="t-meta">{t.tasteYouLiked}</span>
-          </div>
-        ) : (
-          <ParagraphLikePanel
-            worldId={worldId ?? ''}
-            pieceId={pieceId}
-            snippet={snippet}
-            context={context}
-            onLiked={onLiked}
-            onClose={onClose}
-          />
-        )
-      ) : (
-        <div className="mt-2 flex items-center gap-2">
-          <input
-            value={direction}
-            onChange={e => setDirection(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                steer()
-              }
-            }}
-            placeholder={t.directionPlaceholder}
-            enterKeyHint="send"
-            className="h-9 flex-1 rounded-full bg-paper-2 px-4 font-serif-zh text-[13px] italic leading-none text-ink placeholder:text-ink-4 focus:outline-none"
-          />
-          <button
-            type="button"
-            aria-label={tab === 'continue' ? t.continueWriting : t.expand}
-            onClick={steer}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose text-white transition-opacity active:opacity-80"
-          >
-            <ArrowRight aria-hidden="true" className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      <div className="mt-2.5 flex items-center gap-2">
+        <input
+          value={direction}
+          onChange={e => setDirection(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              steer()
+            }
+          }}
+          placeholder={t.directionPlaceholder}
+          enterKeyHint="send"
+          className="input h-10 flex-1 rounded-full bg-paper-2 px-4 text-[15px]"
+        />
+        <button
+          type="button"
+          aria-label={tab === 'continue' ? t.continueWriting : t.expand}
+          onClick={steer}
+          className="icon-btn bg-rose text-white active:bg-rose active:opacity-85"
+        >
+          <ArrowRight aria-hidden="true" className="h-5! w-5!" />
+        </button>
+      </div>
     </div>
   )
 }

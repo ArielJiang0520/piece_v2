@@ -18,7 +18,7 @@ export function revealMarker(el: HTMLElement) {
   }, 900)
 }
 
-// A thin rail that surfaces a piece's action boundaries all at once: one tick per marker at
+// A thin rail that surfaces a story's action boundaries all at once: one tick per marker at
 // its real vertical position, plus the current viewport as a faint band so the reader sees
 // how many branch points there are and where they sit. Tapping a tick jumps to that marker
 // (navigation only — re-running lives on the chip itself). Left edge for the one-handed
@@ -43,7 +43,7 @@ export default function MarkerRail({
   return (
     <div className={containerClassName} style={containerStyle}>
       <div className="relative h-full">
-        <div className="absolute left-3 top-2 bottom-2 w-px -translate-x-1/2 bg-rose-line" />
+        <div className="absolute left-3 top-2 bottom-2 w-px -translate-x-1/2 bg-line" />
         <div
           className="absolute left-3 w-1 -translate-x-1/2 rounded-full bg-rose/20"
           style={{ top: pos(view.top), height: `calc(${view.height} * (100% - 1rem))` }}
@@ -57,7 +57,7 @@ export default function MarkerRail({
             className="pointer-events-auto absolute left-3 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
             style={{ top: pos(tk.fraction) }}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-rose ring-2 ring-paper transition-transform active:scale-150" />
+            <span className="h-1.5 w-1.5 rounded-full bg-rose ring-2 ring-surface transition-transform active:scale-150" />
           </button>
         ))}
       </div>

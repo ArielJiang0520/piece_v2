@@ -1,125 +1,48 @@
-import type { PieceStructure } from './pieceStructure'
+import type { StoryStructure } from './storyStructure'
+import type { SceneItem } from './worldTypes'
 
-export type { PieceAction, PieceSegment, PieceStructure } from './pieceStructure'
+export type { StoryAction, StorySegment, StoryStructure } from './storyStructure'
 
-export const PIECE_STRIP_LIMIT = 24
+export const STORY_STRIP_LIMIT = 24
 
-export type SaveState = 'idle' | 'saving' | 'saved' | 'error'
-
-// Carried in router state when editing an existing prompt into a new version. Both the
-// static prompt page and the generate screen read it back out of `location.state`.
-export interface VersionDraftState {
-  promptText: string
-  sourcePromptId: number
-  sourceClusterId: number
-  versionNumber: number
-}
-
-export function parseVersionDraft(value: unknown): VersionDraftState | null {
-  if (!value || typeof value !== 'object') return null
-  const parsed = value as Partial<VersionDraftState>
-  if (
-    typeof parsed.promptText !== 'string' ||
-    typeof parsed.sourcePromptId !== 'number' ||
-    typeof parsed.sourceClusterId !== 'number' ||
-    typeof parsed.versionNumber !== 'number'
-  ) {
-    return null
-  }
-
-  return {
-    promptText: parsed.promptText,
-    sourcePromptId: parsed.sourcePromptId,
-    sourceClusterId: parsed.sourceClusterId,
-    versionNumber: parsed.versionNumber,
-  }
-}
-
-export interface PieceStripPiece {
+export interface StoryStripStory {
   id: number
   created_at: number
-  // Equals created_at until the piece is resumed and re-saved; a later updated_at marks
-  // it as the most-recently-continued piece without disturbing the creation-order numbering.
+  // Equals created_at until the story is resumed and re-saved; a later updated_at marks
+  // it as the most-recently-continued story without disturbing the creation-order numbering.
   updated_at: number
+  // The scene's instruction changed after this story was made: it can be read, not resumed.
+  outdated: boolean
 }
 
 export interface SaveResponse {
-  promptId: number
-  pieceId: number
-  pieceCount: number
-  clusterId: number | null
-  // Whether the reader's taste profile actually shaped this generation (toggle on AND they
-  // had a non-empty profile for this world).
-  usedTaste: boolean
+  sceneId: number
+  storyId: number
 }
 
-export interface PromptDetail {
+export interface SceneDetail extends SceneItem {
+  collection: { id: number; name: string } | null
+  // This reader's own saved stories of it — what numbers them.
+  story_count: number
+}
+
+export interface SceneStoriesResponse {
+  scene: SceneDetail
+  stories: StoryStripStory[]
+}
+
+export interface StoryDetail {
   id: number
-  text: string
-  cluster_id: number | null
-  piece_count: number
-  created_at: number
-  updated_at: number
-}
-
-export interface PromptPiecesResponse {
-  prompt: PromptDetail
-  pieces: PieceStripPiece[]
-}
-
-export interface PieceDetail {
-  id: number
-  prompt: string
+  scene_id: number
+  // See StoryStripStory.
+  outdated: boolean
   body: string
-  // Recorded action history. Null for legacy plain-text pieces (never edited since the
+  // Recorded action history. Null for legacy plain-text stories (never edited since the
   // structured format was introduced).
-  structure: PieceStructure | null
+  structure: StoryStructure | null
   model: string | null
   provider: string | null
-  used_taste: boolean
-  // The world additions that were switched on when this piece was written. Continuing it uses
-  // these, not whatever is switched on now, so a resumed story keeps the world it started in.
-  addition_ids: number[]
   created_at: number
-  // Equals created_at until the piece is resumed and re-saved (see PieceStripPiece).
-  updated_at: number
-}
-
-export interface OverwritePieceResponse {
-  id: number
-  prompt_id: number
-  body: string
-  structure: PieceStructure | null
-  model: string | null
-  provider: string | null
-  used_taste: boolean
-  addition_ids: number[]
-  created_at: number
-  updated_at: number
-}
-
-export interface ClusterResponse {
-  cluster: {
-    id: number
-    prompt_count: number
-    piece_count: number
-    latest_prompt_id: number | null
-    // The world version this cluster belongs to (the version its latest prompt was created on).
-    // version_number/name are null when that version was deleted (orphaned) or is unset.
-    world_version_id: number | null
-    version_number: number | null
-    version_name: string | null
-    created_at: number
-    updated_at: number
-    title: string
-  }
-  prompts: ClusterPrompt[]
-}
-
-export interface ClusterPrompt {
-  id: number
-  text: string
-  piece_count: number
-  created_at: number
+  // Equals created_at until the story is resumed and re-saved (see StoryStripStory).
   updated_at: number
 }

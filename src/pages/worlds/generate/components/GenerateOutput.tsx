@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Heart, RotateCw } from 'lucide-react'
+import { RotateCw } from 'lucide-react'
 import Skeleton, { SkeletonText } from '@/components/Skeleton'
 import { useUiText } from '@/i18n'
 import type { GenerationPhase } from '@/hooks/useGeneration'
@@ -7,13 +7,13 @@ import type { ReadingFont } from '@/preferences/readingFont'
 import type { ReadingFontSize } from '@/preferences/readingFontSize'
 import ProseBody, { ProseText, proseTextClass, proseTextStyle } from '../../shared/ProseBody'
 import { annotateParagraphs } from '../paragraphs'
-import type { PieceAction, PieceSegment } from '../../shared/pieceStructure'
+import type { StoryAction, StorySegment } from '../../shared/storyStructure'
 
 interface GenerateOutputProps {
   output: string
   // Live decomposition of `output` into action segments. The first is the origin; each
   // later one begins where an action was performed and drives a boundary marker.
-  segments: PieceSegment[]
+  segments: StorySegment[]
   phase: GenerationPhase
   streaming: boolean
   readingFont: ReadingFont
@@ -23,9 +23,6 @@ interface GenerateOutputProps {
   selectable: boolean
   selectedParagraphIndex: number | null
   onSelectParagraph: (index: number | null) => void
-  // Snippets liked this session (trimmed paragraph text) — a liked paragraph shows a badge.
-  // The action controls themselves live in the docked bar below, keyed to the selection.
-  likedSnippets: Set<string>
   // Re-run the action recorded at a boundary marker (segment index), replacing downstream.
   onRerunSegment: (segmentIndex: number) => void
 }
@@ -44,7 +41,6 @@ export default function GenerateOutput({
   selectable,
   selectedParagraphIndex,
   onSelectParagraph,
-  likedSnippets,
   onRerunSegment,
 }: GenerateOutputProps) {
   const t = useUiText()
@@ -80,7 +76,6 @@ export default function GenerateOutput({
           <div>
             {annotated.map(paragraph => {
               const selected = selectedParagraphIndex === paragraph.index
-              const liked = likedSnippets.has(paragraph.text.trim())
               return (
                 <div key={paragraph.index} data-paragraph-index={paragraph.index} className="mb-4 last:mb-0">
                   {paragraph.action && paragraph.segmentIndex != null && (
@@ -92,18 +87,12 @@ export default function GenerateOutput({
                     />
                   )}
                   <p
-                    className={`${proseTextClass(readingFont)} -mx-2 cursor-pointer rounded-md px-2 py-1 transition-colors ${selected ? 'bg-paper-2' : 'active:bg-paper-2'}`}
+                    className={`${proseTextClass(readingFont)} -mx-2 cursor-pointer rounded-md px-2 py-1 transition-colors ${selected ? 'bg-rose-pale ring-2 ring-rose/40' : 'active:bg-paper-2'}`}
                     style={proseTextStyle(readingFontSize)}
                     onClick={() => onSelectParagraph(selected ? null : paragraph.index)}
                   >
                     <ProseText text={paragraph.text} />
                   </p>
-                  {liked && (
-                    <div className="mt-1 flex items-center gap-1 text-ink-4">
-                      <Heart aria-hidden="true" className="h-3 w-3 fill-current" />
-                      <span className="t-meta">{t.tasteYouLiked}</span>
-                    </div>
-                  )}
                 </div>
               )
             })}
@@ -132,7 +121,7 @@ export default function GenerateOutput({
 // its saved direction. The rotate icon signals it's re-runnable (no hover on touch).
 // `data-marker-index` (the segment index) lets the marker rail resolve this chip to scroll
 // to and briefly flash it when its tick is tapped.
-function ActionMarker({ segmentIndex, action, direction, onRerun }: { segmentIndex: number; action: PieceAction; direction: string; onRerun: () => void }) {
+function ActionMarker({ segmentIndex, action, direction, onRerun }: { segmentIndex: number; action: StoryAction; direction: string; onRerun: () => void }) {
   const t = useUiText()
   const label = action === 'expand' ? t.markerExpanded : action === 'regenerate' ? t.markerContinuedFrom : t.markerContinued
   return (
@@ -142,11 +131,11 @@ function ActionMarker({ segmentIndex, action, direction, onRerun }: { segmentInd
         data-marker-index={segmentIndex}
         aria-label={`${t.rerun} · ${label}`}
         onClick={onRerun}
-        className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-paper-2 px-3 py-1 font-serif-zh text-[12px] italic leading-none text-ink-3 transition-[box-shadow,background-color] active:bg-paper-3"
+        className="chip h-7 max-w-full gap-1.5 px-2.5 text-[12px] text-ink-3 transition-[box-shadow,background-color]"
       >
-        <span className="shrink-0 text-ink-4">{label}</span>
+        <RotateCw aria-hidden="true" className="h-3 w-3 shrink-0" />
+        <span className="shrink-0 font-semibold text-ink-2">{label}</span>
         {direction && <span className="truncate">“{direction}”</span>}
-        <RotateCw aria-hidden="true" className="h-3 w-3 shrink-0 text-ink-4" />
       </button>
     </div>
   )

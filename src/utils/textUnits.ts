@@ -13,7 +13,7 @@ export function isDisplayUnit(char: string) {
  * Walks `text` in place rather than slicing it: the paced reveal calls this many times a
  * second against a buffer that runs far ahead of what's on screen, and it only needs a
  * character or two each time — copying the whole unrevealed remainder to find them made the
- * cost of a tick scale with the length of the piece.
+ * cost of a tick scale with the length of the story.
  */
 export function advanceByUnits(text: string, from: number, maxUnits: number): number {
   let unitCount = 0

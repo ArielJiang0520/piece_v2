@@ -9,7 +9,7 @@ export type LanguageId = (typeof LANGUAGE_OPTIONS)[number]['id']
 
 export const DEFAULT_LANGUAGE_ID: LanguageId = 'en'
 
-function isLanguageId(value: unknown): value is LanguageId {
+export function isLanguageId(value: unknown): value is LanguageId {
   return LANGUAGE_OPTIONS.some(option => option.id === value)
 }
 

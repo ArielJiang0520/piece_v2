@@ -47,7 +47,7 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className={`fixed inset-0 ${zClass} flex items-center justify-center bg-ink/35 px-4 py-8`}
+      className={`fixed inset-0 ${zClass} flex items-center justify-center bg-black/45 px-5 py-8`}
       role="presentation"
       onClick={() => {
         if (!isPending) onClose()
@@ -57,29 +57,25 @@ export default function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-sm rounded-lg border border-paper-3 bg-paper px-5 py-5 shadow-[0_24px_70px_rgba(26,18,16,0.22)]"
+        className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-(--shadow-menu)"
         onClick={event => event.stopPropagation()}
       >
-        <h2 id={titleId} className="font-serif-zh text-xl leading-tight text-ink">
+        <h2 id={titleId} className="text-[18px] font-bold leading-snug text-ink">
           {title}
         </h2>
 
         {description && (
-          <p className="mt-3 text-sm leading-6 text-ink-3">
+          <p className="mt-2 text-[15px] leading-relaxed text-ink-3">
             {description}
           </p>
         )}
 
-        {error && (
-          <p className="mt-4 rounded-md border border-rose/40 bg-rose-pale px-3 py-2 text-sm text-rose-deep">
-            {error}
-          </p>
-        )}
+        {error && <p className="error-box mt-4">{error}</p>}
 
-        <div className="mt-6 flex items-center justify-end gap-3">
+        <div className="mt-6 grid grid-cols-2 gap-2.5">
           <button
             type="button"
-            className="rounded-sm px-3 py-2 text-sm text-ink-3 transition-colors hover:bg-paper-2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-rose/30 disabled:opacity-50"
+            className="btn btn-secondary"
             onClick={onClose}
             disabled={isPending}
           >
@@ -87,7 +83,7 @@ export default function ConfirmDialog({
           </button>
           <button
             type="button"
-            className="rounded-sm bg-rose-deep px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose focus:outline-none focus:ring-2 focus:ring-rose/35 disabled:opacity-50"
+            className="btn btn-primary"
             onClick={onConfirm}
             disabled={isPending}
           >

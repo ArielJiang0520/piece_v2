@@ -8,7 +8,7 @@ export default function Skeleton({ className, ...props }: SkeletonProps) {
   return (
     <div
       aria-hidden="true"
-      className={['animate-pulse rounded-sm bg-paper-3/70', className].filter(Boolean).join(' ')}
+      className={['animate-pulse rounded-md bg-paper-3', className].filter(Boolean).join(' ')}
       {...props}
     />
   )

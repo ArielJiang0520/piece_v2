@@ -60,16 +60,6 @@ export const MODELS: ModelOption[] = [
 
 export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-pro'
 
-// Talking — about a world, or about a prompt being worked out — is its own job with its own
-// model, chosen for how it converses rather than for what it writes. Where it starts, not where
-// it stays: the reader picks from the same MODELS list, and one choice covers all three threads.
-export const DEFAULT_CHAT_MODEL_ID = 'z-ai/glm-5.2'
-
-// Distilling a taste profile is its own job with its own demands, so it holds its own pin rather
-// than riding along with the chat's — the two happen to name the same model today, and either
-// can be re-pointed without touching the other. Also never shown or chosen.
-export const TASTE_MODEL_ID = 'z-ai/glm-5.2'
-
 export const BLACKLISTED_PROVIDERS: string[] = ['alibaba', 'together']
 
 function isModelId(value: unknown): value is string {
@@ -84,14 +74,3 @@ const generationModelPreference = createPreference<string>({
 
 export const setGenerationModel = generationModelPreference.set
 export const useGenerationModel = generationModelPreference.use
-
-// One key for every chat thread: which model you talk to is a habit, not a per-conversation
-// decision, and switching it on the world chat switches it on the prompt chats too.
-const chatModelPreference = createPreference<string>({
-  key: 'piece:chat-model',
-  defaultValue: DEFAULT_CHAT_MODEL_ID,
-  parse: raw => (isModelId(raw) ? raw : DEFAULT_CHAT_MODEL_ID),
-})
-
-export const setChatModel = chatModelPreference.set
-export const useChatModel = chatModelPreference.use

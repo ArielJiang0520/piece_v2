@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, or } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { MODELS, type ModelOption } from '../src/preferences/generationModel'
-import { db, worlds } from './db'
+import { db, scenes, worlds } from './db'
 
 export function getUserId(c: Context): number {
   return c.get('userId') as number
@@ -25,22 +25,26 @@ export function findUserWorld(userId: number, worldId: number) {
     .get()
 }
 
-export function findUserWorldId(userId: number, worldId: number) {
+// A world this user may read and play: anyone's published world, or their own in any state.
+export function findVisibleWorld(userId: number, worldId: number) {
   return db
-    .select({ id: worlds.id })
+    .select()
     .from(worlds)
-    .where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId)))
+    .where(and(eq(worlds.id, worldId), or(eq(worlds.published, 1), eq(worlds.user_id, userId))))
     .get()
 }
 
-// The world's checked-out version (HEAD). Null only for a missing world or a bug-state world
-// with no versions — never a state the version-scoped features design around.
-export function currentWorldVersionId(userId: number, worldId: number): number | null {
-  return db
-    .select({ id: worlds.current_version_id })
-    .from(worlds)
-    .where(and(eq(worlds.id, worldId), eq(worlds.user_id, userId)))
-    .get()?.id ?? null
+// One of the author's scenes on a world this user can see — every scene row is the author's.
+export function findWorldScene(userId: number, worldId: number, sceneId: number) {
+  const world = findVisibleWorld(userId, worldId)
+  if (!world) return null
+  const scene = db
+    .select()
+    .from(scenes)
+    .where(and(eq(scenes.id, sceneId), eq(scenes.world_id, worldId)))
+    .get()
+  if (!scene) return null
+  return { world, scene }
 }
 
 const MODELS_BY_ID = new Map<string, ModelOption>(MODELS.map(model => [model.id, model]))

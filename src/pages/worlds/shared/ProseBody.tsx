@@ -54,7 +54,7 @@ const SETTLE_HOLD_LINES = 1
  * never crosses a line (see EMPHASIS_RE), so nothing arriving later can alter how it parses.
  * That makes it safe to render as plain text rather than per-word spans.
  *
- * Searched backwards from the end, so the cost tracks the tail rather than the whole piece.
+ * Searched backwards from the end, so the cost tracks the tail rather than the whole story.
  */
 function settledEnd(text: string, hold: number): number {
   let i = text.length
@@ -74,10 +74,10 @@ function settledEnd(text: string, hold: number): number {
 }
 
 // The same emphasis, without the per-word fade: for prose that is already on screen — a saved
-// take's paragraphs, or a finished run's — rather than text arriving token by token. Both of
+// story's paragraphs, or a finished run's — rather than text arriving token by token. Both of
 // those render their own <p> (they carry tap targets and markers), so this fills one in.
 // Memoized for the same reason ProseBody is: it carries the settled body of a streaming
-// piece, which changes only when a line settles, not on every render of the screen around it.
+// story, which changes only when a line settles, not on every render of the screen around it.
 export const ProseText = memo(function ProseText({ text }: { text: string }) {
   const segments = useMemo(() => splitEmphasis(text), [text])
   return (
@@ -105,7 +105,7 @@ interface ProseBodyProps {
 
 // Prose rendered as word tokens that fade in: while streaming, only the
 // newly-arrived tokens animate; a freshly-loaded body fades in once. Shared by the
-// live generate output and the static piece reader so both read identically.
+// live generate output and the static story reader so both read identically.
 //
 // Memoized because the generate screen re-renders on every arriving SSE chunk, while the
 // text here only changes at the (much slower) paced reveal. Without this, each chunk
@@ -120,14 +120,14 @@ const ProseBody = memo(function ProseBody({ text, readingFont, readingFontSize }
   const previousText = previousTextRef.current
   const previousLength = previousLengthRef.current
 
-  // A body that arrived whole rather than streaming in — a saved piece, a resumed take, a
-  // different piece replacing this one — has no arrival to animate, so all of it is settled.
+  // A body that arrived whole rather than streaming in — a saved or resumed story, a
+  // different story replacing this one — has no arrival to animate, so all of it is settled.
   const arrivedWhole = previousLength === 0 || !text.startsWith(previousText)
   const boundary = arrivedWhole ? text.length : settledEnd(text, SETTLE_HOLD_LINES)
   const settled = text.slice(0, boundary)
 
   // Only the couple of lines still settling are tokenized, and only they become spans. This
-  // is the work that used to run across the whole piece on every tick of the paced reveal:
+  // is the work that used to run across the whole story on every tick of the paced reveal:
   // the settled body is a handful of text nodes, so neither React nor the layout engine walks
   // it again to put one more character on screen.
   const tail = useMemo(() => {
@@ -140,7 +140,7 @@ const ProseBody = memo(function ProseBody({ text, readingFont, readingFontSize }
   }, [text, boundary])
 
   useEffect(() => {
-    // A buffer that isn't a continuation of the last one (e.g. a different piece)
+    // A buffer that isn't a continuation of the last one (e.g. a different story)
     // re-keys the spans so nothing inherits a previous body's element.
     if (text && previousTextRef.current && !text.startsWith(previousTextRef.current)) {
       setOutputRun(run => run + 1)

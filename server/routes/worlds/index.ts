@@ -1,365 +1,180 @@
 import { Hono } from 'hono'
-import { eq, and, desc, inArray, ne, sql } from 'drizzle-orm'
-import { db, pieces, worldVersions, worlds } from '../../db'
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
+import { normalizePairings } from '../../../src/pairings'
+import { isLanguageId } from '../../../src/preferences/language'
+import { normalizeTags } from '../../../src/tags'
+import { EMPTY_WORLD_DRAFT, parseWorldDraft, serializeWorldDraft } from '../../../src/worldDraft'
+import { parseWorldBody, serializeWorldBody, EMPTY_WORLD_BODY } from '../../../src/worldBody'
+import { bookmarks, db, worldChanges, worldPhotos, worlds } from '../../db'
 import { type Variables, authMiddleware } from '../../middleware'
-import { findUserWorld, findUserWorldId, getUserId, paramInt } from '../../route-helpers'
-import additionRoutes from './additions'
-import promptRoutes from './prompts'
+import { findUserWorld, findVisibleWorld, getUserId, pagination, paramInt } from '../../route-helpers'
+import { editDraft, publishBlocker, publishDraft, readDraft } from '../../world-draft'
+import { worldCards } from '../../world-cards'
+import sceneRoutes from './scenes'
 import generateRoutes from './generate'
-import clusterRoutes from './clusters'
-import pieceRoutes from './pieces'
-import tasteRoutes from './taste'
-import chatRoutes from './chat'
+import storyRoutes from './stories'
+import creatorCenterRoutes from './creator-center'
 
 const worldRoutes = new Hono<{ Variables: Variables }>()
 
-// Version numbers are stable: each new version takes the highest number this
-// world has ever used +1, so deleting a version never renumbers the others.
-function nextVersionNumber(worldId: number) {
-  const row = db
-    .select({ max: sql<number | null>`MAX(${worldVersions.version_number})` })
-    .from(worldVersions)
-    .where(eq(worldVersions.world_id, worldId))
-    .get()
-  return (row?.max ?? 0) + 1
+// A world's album in the author's order. Live, not drafted: the author sees what readers see.
+function worldAlbum(worldId: number) {
+  return db
+    .select({ id: worldPhotos.id, url: worldPhotos.url })
+    .from(worldPhotos)
+    .where(eq(worldPhotos.world_id, worldId))
+    .orderBy(worldPhotos.position, worldPhotos.id)
+    .all()
 }
 
-function bodySummary(value: string) {
-  return value
-    .trim()
-    .replace(/\r\n?/g, '\n')
-    .replace(/\n[ \t]*\n+/g, '\n')
-    .split('\n')
-    .slice(0, 3)
-    .join('\n')
-}
-
-worldRoutes.get('/', authMiddleware, (c) => {
+// The public feed: published worlds only. ?q= matches name and blurb; ?pairings=mm,ff keeps worlds
+// with any of them; ?tags=a,b requires every tag; ?sort=popular (words generated) or new (last reader-visible change). ?language= (the
+// reader's UI language) keeps only worlds detected as written in it.
+worldRoutes.get('/feed', authMiddleware, (c) => {
   const userId = getUserId(c)
-  const worldRows = db
-    .select({
-      id: worlds.id,
-      name: worlds.name,
-      is_example: worlds.is_example,
-      body: worlds.body,
-      updated_at: worlds.updated_at,
-    })
-    .from(worlds)
-    .where(eq(worlds.user_id, userId))
-    .orderBy(desc(worlds.updated_at))
-    .all()
+  const { page, limit, offset } = pagination(c)
+  const q = (c.req.query('q') ?? '').trim()
+  const tagNames = normalizeTags((c.req.query('tags') ?? '').split(','))
+  const pairings = normalizePairings((c.req.query('pairings') ?? '').split(','))
+  const language = c.req.query('language')
+  if (!isLanguageId(language)) return c.json({ error: 'Invalid language' }, 400)
+  const conditions: SQL[] = [sql`w.published = 1`, sql`w.language = ${language}`]
+  if (q) {
+    const pattern = `%${q.replace(/[\\%_]/g, char => `\\${char}`)}%`
+    conditions.push(sql`(w.name LIKE ${pattern} ESCAPE '\\' OR w.blurb LIKE ${pattern} ESCAPE '\\')`)
+  }
+  if (pairings.length > 0) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM world_pairings wp
+      WHERE wp.world_id = w.id AND wp.pairing IN (${sql.join(pairings.map(pairing => sql`${pairing}`), sql`, `)})
+    )`)
+  }
+  for (const name of tagNames) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM world_tags wt JOIN tags t ON t.id = wt.tag_id
+      WHERE wt.world_id = w.id AND t.name = ${name}
+    )`)
+  }
+  const orderBy = c.req.query('sort') === 'new'
+    ? sql`w.updated_at DESC, w.id DESC`
+    : sql`words DESC, w.updated_at DESC, w.id DESC`
 
-  const worldIds = worldRows.map(world => world.id)
-  if (worldIds.length === 0) return c.json([])
-
-  // The count spans every version of the world: a world's piece total is its whole history, so
-  // switching versions never changes what the card advertises. That is also why this needs no
-  // join — without a version filter, `pieces` alone answers it.
-  const pieceStats = db
-    .select({
-      world_id: pieces.world_id,
-      piece_count: sql<number>`count(*)`,
-    })
-    .from(pieces)
-    .where(and(eq(pieces.user_id, userId), inArray(pieces.world_id, worldIds)))
-    .groupBy(pieces.world_id)
-    .all()
-
-  const piecesByWorld = new Map(pieceStats.map(stat => [stat.world_id, stat]))
-  // Already in activity order: worlds.updated_at is the world's activity clock, moved by piece
-  // writes as well as world edits, and the query above orders by it.
-  const rows = worldRows
-    .map(world => {
-      const { body, ...worldFields } = world
-      const pieceStat = piecesByWorld.get(world.id)
-      return {
-        ...worldFields,
-        is_example: Boolean(world.is_example),
-        body_summary: bodySummary(body),
-        piece_count: Number(pieceStat?.piece_count ?? 0),
-      }
-    })
-
-  return c.json(rows)
+  const rows = worldCards(userId, sql.join(conditions, sql` AND `), orderBy, limit + 1, offset)
+  return c.json({ worlds: rows.slice(0, limit), page, limit, hasMore: rows.length > limit })
 })
 
-// The drawer's recent list. Constant work: five entries off idx_worlds_user_updated, no
-// aggregate and no join, because worlds.updated_at already carries the world's recency.
-worldRoutes.get('/recent', authMiddleware, (c) => {
-  const rows = db
-    .select({ id: worlds.id, name: worlds.name })
-    .from(worlds)
-    .where(eq(worlds.user_id, getUserId(c)))
-    .orderBy(desc(worlds.updated_at))
-    .limit(5)
-    .all()
-  return c.json(rows)
+// The creator center's home: every world the user wrote, in any state, most recently published first,
+// each as the author's draft has it (its name, blurb, tags and pairings).
+worldRoutes.get('/mine', authMiddleware, (c) => {
+  const userId = getUserId(c)
+  const drafts = new Map(
+    db.select({ id: worlds.id, draft: worlds.draft }).from(worlds).where(eq(worlds.user_id, userId)).all()
+      .map(row => [row.id, readDraft(row)]),
+  )
+  const cards = worldCards(userId, sql`w.user_id = ${userId}`, sql`w.updated_at DESC, w.id DESC`).map(card => {
+    const draft = drafts.get(card.id)
+    return draft ? { ...card, name: draft.name, blurb: draft.blurb, tags: draft.tags, pairings: draft.pairings } : card
+  })
+  return c.json({ worlds: cards })
 })
 
+// New world opens the creator center on a fresh world straight away, so it may start nameless; a name is
+// required to publish. Its language is the author's UI language when they create it (?language is
+// sent by the client), and never changes after.
 worldRoutes.post('/', authMiddleware, async (c) => {
   const userId = getUserId(c)
-  const body = await c.req.json()
-  const name = typeof body.name === 'string' ? body.name.trim() : ''
-  if (!name) return c.json({ error: 'Name required' }, 400)
+  const payload = await c.req.json()
+  if (!isLanguageId(payload.language)) return c.json({ error: 'Invalid language' }, 400)
   const now = Date.now()
-  const worldBody = typeof body.body === 'string' ? body.body : ''
-  const result = db.transaction(tx => {
-    const world = tx.insert(worlds).values({
-      user_id: userId,
-      name,
-      is_example: 0,
-      body: worldBody,
-      created_at: now,
-      updated_at: now,
-    }).returning().get()
 
-    const version = tx.insert(worldVersions).values({
-      world_id: world.id,
-      body: world.body,
-      version_number: 1,
-      created_at: now,
-    }).returning({ id: worldVersions.id }).get()
+  // Everything starts in the draft; nothing is public until the first publish.
+  const world = db.insert(worlds).values({
+    user_id: userId,
+    name: '',
+    blurb: '',
+    language: payload.language,
+    body: serializeWorldBody(EMPTY_WORLD_BODY),
+    draft: serializeWorldDraft(parseWorldDraft({
+      ...EMPTY_WORLD_DRAFT,
+      name: payload.name,
+      blurb: payload.blurb,
+      tags: payload.tags,
+      pairings: payload.pairings,
+      body: payload.body,
+    })),
+    published: 0,
+    created_at: now,
+    updated_at: now,
+  }).returning({ id: worlds.id }).get()
 
-    tx.update(worlds)
-      .set({ current_version_id: version.id })
-      .where(eq(worlds.id, world.id))
-      .run()
+  return c.json({ id: world.id })
+})
 
-    return world
-  })
+// Anyone can read a published world; the author reads their own in any state. Everyone, the
+// author included, sees what was last published, without the instructions (those are for the
+// model only). The author's working copy is only ever loaded by the editor, from /:id/draft.
+worldRoutes.get('/:id', authMiddleware, (c) => {
+  const userId = getUserId(c)
+  const world = findVisibleWorld(userId, paramInt(c, 'id'))
+  if (!world) return c.json({ error: 'Not found' }, 404)
+  const [card] = worldCards(userId, sql`w.id = ${world.id}`, sql`w.id`)
+  // How many worlds the author has published, for the author row on About.
+  const [authorWorlds] = db.all<{ count: number }>(sql`
+    SELECT count(*) AS count FROM worlds WHERE user_id = ${world.user_id} AND published = 1
+  `)
+
+  return c.json({ ...card, author_world_count: Number(authorWorlds?.count ?? 0), album: worldAlbum(world.id), body: { ...parseWorldBody(world.body), instructions: '' } })
+})
+
+// Author only, for the creator center: the world's card with the draft's name, blurb, tags, pairings and
+// body (instructions included), and what, if anything, stands in the way of publishing it.
+worldRoutes.get('/:id/draft', authMiddleware, (c) => {
+  const userId = getUserId(c)
+  const world = findUserWorld(userId, paramInt(c, 'id'))
+  if (!world) return c.json({ error: 'Not found' }, 404)
+  const [card] = worldCards(userId, sql`w.id = ${world.id}`, sql`w.id`)
+  const draft = readDraft(world)
 
   return c.json({
-    id: result.id,
-    name: result.name,
-    is_example: Boolean(result.is_example),
-    body: result.body,
-    updated_at: result.updated_at,
+    ...card,
+    name: draft.name,
+    blurb: draft.blurb,
+    tags: draft.tags,
+    pairings: draft.pairings,
+    album: worldAlbum(world.id),
+    body: draft.body,
+    publish_blocker: publishBlocker(draft),
   })
 })
 
-worldRoutes.get('/:id/versions', authMiddleware, (c) => {
-  const id = paramInt(c, 'id')
-  const world = findUserWorldId(getUserId(c), id)
+// Author only, autosaved from the creator center's World tab into the draft: readers see none of it until
+// Publish.
+worldRoutes.patch('/:id', authMiddleware, async (c) => {
+  const world = findUserWorld(getUserId(c), paramInt(c, 'id'))
   if (!world) return c.json({ error: 'Not found' }, 404)
-
-  const rows = db
-    .select({
-      id: worldVersions.id,
-      name: worldVersions.name,
-      number: worldVersions.version_number,
-      created_at: worldVersions.created_at,
-    })
-    .from(worldVersions)
-    .where(eq(worldVersions.world_id, id))
-    .orderBy(desc(worldVersions.created_at), desc(worldVersions.id))
-    .all()
-
-  return c.json(rows)
-})
-
-// Switch which version is checked out (like `git switch`): move the HEAD pointer and
-// mirror that version's body onto the world. No copy, nothing is lost.
-worldRoutes.post('/:id/versions/:versionId/switch', authMiddleware, (c) => {
-  const id = paramInt(c, 'id')
-  const world = findUserWorld(getUserId(c), id)
-  if (!world) return c.json({ error: 'Not found' }, 404)
-
-  const targetVersionId = paramInt(c, 'versionId')
-  const targetVersion = db
-    .select({
-      id: worldVersions.id,
-      body: worldVersions.body,
-    })
-    .from(worldVersions)
-    .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, targetVersionId)))
-    .get()
-
-  if (!targetVersion) return c.json({ error: 'Not found' }, 404)
-  if (world.current_version_id === targetVersion.id) {
-    return c.json({ ok: true, changed: false })
-  }
-
-  const now = Date.now()
-  db.transaction(tx => {
-    tx.update(worlds)
-      .set({ body: targetVersion.body, current_version_id: targetVersion.id, updated_at: now })
-      .where(eq(worlds.id, id))
-      .run()
-  })
-
-  return c.json({ ok: true, changed: true })
-})
-
-worldRoutes.post('/:id/versions', authMiddleware, async (c) => {
-  const id = paramInt(c, 'id')
-  const world = findUserWorld(getUserId(c), id)
-  if (!world) return c.json({ error: 'Not found' }, 404)
-
   const payload = await c.req.json()
-  const name = typeof payload.name === 'string' ? payload.name.trim() : world.name
-  if (!name) return c.json({ error: 'Name required' }, 400)
-  const nextBody = typeof payload.body === 'string' ? payload.body : world.body
-  const rawVersionName = typeof payload.version_name === 'string' ? payload.version_name.trim() : ''
-  const versionName = rawVersionName.length > 0 ? rawVersionName : null
-
-  const now = Date.now()
-  const created = db.transaction(tx => {
-    const version = tx.insert(worldVersions).values({
-      world_id: id,
-      body: nextBody,
-      name: versionName,
-      version_number: nextVersionNumber(id),
-      created_at: now,
-    }).returning({ id: worldVersions.id }).get()
-    // The new version becomes the checked-out one; the previous version stays frozen.
-    tx.update(worlds)
-      .set({ name, body: nextBody, current_version_id: version.id, updated_at: now })
-      .where(eq(worlds.id, id))
-      .run()
-    return version
+  editDraft(world.id, draft => {
+    if (payload.name !== undefined) draft.name = typeof payload.name === 'string' ? payload.name : ''
+    if (payload.blurb !== undefined) draft.blurb = typeof payload.blurb === 'string' ? payload.blurb : ''
+    if (payload.tags !== undefined) draft.tags = normalizeTags(payload.tags)
+    if (payload.pairings !== undefined) draft.pairings = normalizePairings(payload.pairings)
+    if (payload.body !== undefined) draft.body = parseWorldBody(payload.body)
+    return true
   })
-
-  return c.json({ ok: true, version_id: created.id })
-})
-
-// Delete a version. Deleting the checked-out version first moves HEAD to the most
-// recent remaining one and mirrors its body onto the world. Only the last remaining
-// version can't be deleted — a world always has one.
-worldRoutes.delete('/:id/versions/:versionId', authMiddleware, (c) => {
-  const id = paramInt(c, 'id')
-  const world = findUserWorld(getUserId(c), id)
-  if (!world) return c.json({ error: 'Not found' }, 404)
-
-  const targetVersionId = paramInt(c, 'versionId')
-  const targetVersion = db
-    .select({ id: worldVersions.id })
-    .from(worldVersions)
-    .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, targetVersionId)))
-    .get()
-  if (!targetVersion) return c.json({ error: 'Not found' }, 404)
-
-  const remaining = db
-    .select({ count: sql<number>`count(*)` })
-    .from(worldVersions)
-    .where(eq(worldVersions.world_id, id))
-    .get()
-  if ((remaining?.count ?? 0) <= 1) {
-    return c.json({ error: 'Cannot delete the last version' }, 400)
-  }
-
-  const fallbackVersion = world.current_version_id === targetVersion.id
-    ? db
-        .select({ id: worldVersions.id, body: worldVersions.body })
-        .from(worldVersions)
-        .where(and(eq(worldVersions.world_id, id), ne(worldVersions.id, targetVersion.id)))
-        .orderBy(desc(worldVersions.created_at), desc(worldVersions.id))
-        .limit(1)
-        .get()
-    : null
-
-  db.transaction(tx => {
-    if (fallbackVersion) {
-      tx.update(worlds)
-        .set({ body: fallbackVersion.body, current_version_id: fallbackVersion.id, updated_at: Date.now() })
-        .where(eq(worlds.id, id))
-        .run()
-    }
-    tx.delete(worldVersions)
-      .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, targetVersionId)))
-      .run()
-  })
-
   return c.json({ ok: true })
 })
 
-worldRoutes.get('/:id', authMiddleware, (c) => {
+// Author only. Makes the whole draft — the world, its collections and its scenes — what readers
+// see (server/world-draft.ts). It needs a name, every collection named, and every scene finished.
+worldRoutes.post('/:id/publish', authMiddleware, (c) => {
   const world = findUserWorld(getUserId(c), paramInt(c, 'id'))
   if (!world) return c.json({ error: 'Not found' }, 404)
-  const currentVersion = world.current_version_id != null
-    ? db
-        .select({ name: worldVersions.name })
-        .from(worldVersions)
-        .where(and(eq(worldVersions.world_id, world.id), eq(worldVersions.id, world.current_version_id)))
-        .get()
-    : null
-  return c.json({
-    id: world.id,
-    name: world.name,
-    is_example: Boolean(world.is_example),
-    body: world.body,
-    current_version_id: world.current_version_id,
-    current_version_name: currentVersion?.name ?? null,
-    updated_at: world.updated_at,
-  })
-})
-
-worldRoutes.patch('/:id', authMiddleware, async (c) => {
-  const id = paramInt(c, 'id')
-  const world = findUserWorld(getUserId(c), id)
-  if (!world) return c.json({ error: 'Not found' }, 404)
-
-  const body = await c.req.json()
-  let nextName = world.name
-  let nextBody = world.body
-
-  if (body.name !== undefined) {
-    const name = typeof body.name === 'string' ? body.name.trim() : ''
-    if (!name) return c.json({ error: 'Name required' }, 400)
-    nextName = name
-  }
-  if (body.body !== undefined) nextBody = typeof body.body === 'string' ? body.body : ''
-
-  // The version name applies to the checked-out version. An empty string clears it.
-  const currentVersion = world.current_version_id != null
-    ? db
-        .select({ id: worldVersions.id, name: worldVersions.name })
-        .from(worldVersions)
-        .where(and(eq(worldVersions.world_id, id), eq(worldVersions.id, world.current_version_id)))
-        .get()
-    : null
-  const versionNameProvided = body.version_name !== undefined
-  const nextVersionName = versionNameProvided
-    ? (typeof body.version_name === 'string' && body.version_name.trim().length > 0 ? body.version_name.trim() : null)
-    : (currentVersion?.name ?? null)
-
-  const nameChanged = nextName !== world.name
-  const bodyChanged = nextBody !== world.body
-  const versionNameChanged = versionNameProvided && !!currentVersion && nextVersionName !== currentVersion.name
-
-  if (!nameChanged && !bodyChanged && !versionNameChanged) {
-    return c.json({ ok: true, changed: false })
-  }
-
-  const now = Date.now()
-  db.transaction(tx => {
-    tx.update(worlds)
-      .set({ name: nextName, body: nextBody, updated_at: now })
-      .where(eq(worlds.id, id))
-      .run()
-    if (bodyChanged || versionNameChanged) {
-      // Edit the checked-out version in place; new versions come only from
-      // POST /:id/versions, and switching moves worlds.current_version_id.
-      if (currentVersion) {
-        tx.update(worldVersions)
-          .set({ body: nextBody, name: nextVersionName })
-          .where(eq(worldVersions.id, currentVersion.id))
-          .run()
-      } else {
-        const inserted = tx.insert(worldVersions).values({
-          world_id: id,
-          body: nextBody,
-          name: nextVersionName,
-          version_number: nextVersionNumber(id),
-          created_at: now,
-        }).returning({ id: worldVersions.id }).get()
-        tx.update(worlds)
-          .set({ current_version_id: inserted.id })
-          .where(eq(worlds.id, id))
-          .run()
-      }
-    }
-  })
-
+  const blocker = publishBlocker(readDraft(world))
+  if (blocker === 'name') return c.json({ error: 'Name required' }, 400)
+  if (blocker === 'collection_name') return c.json({ error: 'Every collection needs a name' }, 400)
+  if (blocker === 'unfinished') return c.json({ error: 'Every scene needs a description and an instruction' }, 400)
+  if (world.published && world.draft === world.published_draft) return c.json({ ok: true, changed: false })
+  publishDraft(world, Date.now())
   return c.json({ ok: true, changed: true })
 })
 
@@ -371,12 +186,45 @@ worldRoutes.delete('/:id', authMiddleware, (c) => {
   return c.json({ ok: true })
 })
 
-worldRoutes.route('/:id/additions', additionRoutes)
-worldRoutes.route('/:id/prompts', promptRoutes)
-worldRoutes.route('/:id/clusters', clusterRoutes)
+// Readers bookmark other people's worlds; an author can't bookmark their own.
+worldRoutes.put('/:id/bookmark', authMiddleware, (c) => {
+  const userId = getUserId(c)
+  const world = findVisibleWorld(userId, paramInt(c, 'id'))
+  if (!world) return c.json({ error: 'Not found' }, 404)
+  if (world.user_id === userId) return c.json({ error: 'You cannot bookmark your own world' }, 400)
+  db.insert(bookmarks)
+    .values({ user_id: userId, world_id: world.id, created_at: Date.now() })
+    .onConflictDoNothing()
+    .run()
+  return c.json({ ok: true })
+})
+
+worldRoutes.delete('/:id/bookmark', authMiddleware, (c) => {
+  const userId = getUserId(c)
+  db.delete(bookmarks)
+    .where(and(eq(bookmarks.user_id, userId), eq(bookmarks.world_id, paramInt(c, 'id'))))
+    .run()
+  return c.json({ ok: true })
+})
+
+worldRoutes.get('/:id/changes', authMiddleware, (c) => {
+  const world = findVisibleWorld(getUserId(c), paramInt(c, 'id'))
+  if (!world) return c.json({ error: 'Not found' }, 404)
+  const { page, limit, offset } = pagination(c, 50)
+  const rows = db
+    .select({ id: worldChanges.id, kind: worldChanges.kind, label: worldChanges.label, created_at: worldChanges.created_at })
+    .from(worldChanges)
+    .where(eq(worldChanges.world_id, world.id))
+    .orderBy(desc(worldChanges.created_at), desc(worldChanges.id))
+    .limit(limit + 1)
+    .offset(offset)
+    .all()
+  return c.json({ changes: rows.slice(0, limit), page, limit, hasMore: rows.length > limit })
+})
+
+worldRoutes.route('/:id/scenes', sceneRoutes)
 worldRoutes.route('/:id/generate', generateRoutes)
-worldRoutes.route('/:id/pieces', pieceRoutes)
-worldRoutes.route('/:id/taste', tasteRoutes)
-worldRoutes.route('/:id/chat', chatRoutes)
+worldRoutes.route('/:id/stories', storyRoutes)
+worldRoutes.route('/:id/creator-center', creatorCenterRoutes)
 
 export default worldRoutes

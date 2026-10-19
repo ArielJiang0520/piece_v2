@@ -1,15 +1,17 @@
 import { Hono } from 'hono'
+import { and, eq } from 'drizzle-orm'
+import { collections, db } from '../../db'
 import { streamSSE } from 'hono/streaming'
 import { type Variables, authMiddleware } from '../../middleware'
-import { findUserWorld, findUserWorldId, getModelById, getUserId, paramInt } from '../../route-helpers'
+import { findVisibleWorld, findWorldScene, getModelById, getUserId, paramInt } from '../../route-helpers'
 import { normalizePromptInput } from '../../prompt-text'
+import { findDraftScene, readDraft } from '../../world-draft'
 import { openRouterProvider } from '../../openrouter-provider'
 import { readServerSentEvents } from '../../../src/utils/sse'
 import { abortGeneration, clearGeneration, registerGeneration, withGenerationSlot } from '../../generation-lock'
 import { budgeted } from '../../llm-budget'
 import { describeStreamError, parseOpenRouterError } from '../../openrouter-errors'
-import { loadTasteForGeneration } from '../../taste-profile'
-import { worldBodyWithAdditions } from '../../world-additions'
+import { parseWorldBody, renderWorldBody } from '../../../src/worldBody'
 
 const generateRoutes = new Hono<{ Variables: Variables }>()
 
@@ -18,10 +20,29 @@ function ownerKey(userId: number, worldId: number) {
   return `${userId}:${worldId}`
 }
 
-function buildSystemPrompt(worldBody: string, continuing: boolean, tasteSection: string, promptText: string): string {
+// The premise of the collection a published scene is in: the context its scenes share. '' when
+// it has none.
+function collectionPremise(worldId: number, collectionId: number | null): string {
+  if (collectionId === null) return ''
+  return db
+    .select({ premise: collections.premise })
+    .from(collections)
+    .where(and(eq(collections.id, collectionId), eq(collections.world_id, worldId)))
+    .get()?.premise ?? ''
+}
+
+function buildSystemPrompt(worldBody: string, premise: string, instructions: string, continuing: boolean, promptText: string): string {
   const sections: string[] = []
   if (worldBody.trim()) {
     sections.push(`# World setting\n${worldBody.trim()}`)
+  }
+  // Shared by every scene in the collection this one is in.
+  if (premise.trim()) {
+    sections.push(`# Premise\nThe user's prompt is one of a set that all share this premise. Treat it as already true when the story begins.\n\n${premise.trim()}`)
+  }
+  // The author's private notes on how this world's stories are written. Readers never see them.
+  if (instructions.trim()) {
+    sections.push(`# Author's instructions\nThe world's author wrote these for you. Follow them in every story set in this world.\n\n${instructions.trim()}`)
   }
 
   sections.push(
@@ -53,34 +74,11 @@ function buildSystemPrompt(worldBody: string, continuing: boolean, tasteSection:
     sections.push(continuation.join('\n'))
   }
 
-  // The reader's distilled taste, injected as a SECONDARY nudge: the world and prompt above
-  // decide WHAT happens; this only tints HOW it reads. Deliberately last and softly worded so
-  // it never overrides the brief or steers the plot toward past likes (which would just
-  // reproduce the same scenes).
-  if (tasteSection) {
-    sections.push(tasteSection)
-  }
-
   sections.push(
     `# Language\nRegardless of the language of these instructions, always reply in the same language as the user's prompt.`,
   )
 
   return sections.join('\n\n')
-}
-
-// Wrap this world's taste profile in a soft, secondary system-prompt section. Phrased as an
-// optional lean-in, never a mandate — so the profile shapes voice and choices without forcing
-// the story back onto previously-liked subject matter.
-function buildTasteSection(userId: number, worldId: number): string {
-  const profile = loadTasteForGeneration(userId, worldId)
-  if (!profile) return ''
-
-  return [
-    '# Reader sensibilities (secondary — the world setting and the prompt above take precedence)',
-    'This is a profile of what this reader responds to, built from the passages they have loved in this world. Treat it as a light seasoning on your voice and choices, NOT as instructions about what to write. Do not force any of it in; never steer the plot just to satisfy it.',
-    '',
-    profile,
-  ].join('\n')
 }
 
 const EXPANSION_INSTRUCTION = [
@@ -136,7 +134,7 @@ const MAX_GENERATION_ATTEMPTS = 3
 const MAX_RETRY_WAIT_MS = 20_000
 
 // A "continue"/"expand" turn re-sends the entire story so far as the assistant message, whole.
-// It used to be windowed — head plus tail, middle dropped — which meant a long piece silently
+// It used to be windowed — head plus tail, middle dropped — which meant a long story silently
 // continued from a story with a hole in it. The one size limit is at the call (llm-budget.ts).
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -184,13 +182,26 @@ function buildMessages(args: {
 generateRoutes.post('/', authMiddleware, async (c: any) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
-  const world = findUserWorld(userId, worldId)
+  const world = findVisibleWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, useTaste, mode, priorText, direction, additionIds } = await c.req.json()
+  const { sceneId, model: requestedModel, temperature: requestedTemperature, useThinking, mode, priorText, direction, draft } = await c.req.json()
 
-  const promptText = normalizePromptInput(prompt)
-  if (!promptText) return c.json({ error: 'Prompt required' }, 400)
+  // Everyone generates from what was last published, the author included — except a creator center test
+  // run (draft: true, honored for the author only), which plays the author's draft so they can
+  // try it before publishing: sceneId is then the scene's draft key, and its instruction, its
+  // collection's premise and the world's body all come from the draft.
+  // The model is given the scene's instruction, never its description. A reader's client only
+  // names the scene: the instruction is looked up here and never reaches them.
+  const isCreatorTest = draft === true && world.user_id === userId
+  const worldDraft = isCreatorTest ? readDraft(world) : null
+  const draftScene = worldDraft ? findDraftScene(worldDraft, String(sceneId)) : null
+  const readerScene = isCreatorTest ? null : findWorldScene(userId, world.id, Number(sceneId))?.scene
+  const promptText = normalizePromptInput(draftScene ? draftScene.scene.instruction : readerScene?.instruction)
+  if (!promptText) return c.json({ error: 'Scene required' }, 400)
+  const premise = draftScene
+    ? draftScene.collection?.premise ?? ''
+    : collectionPremise(world.id, readerScene?.collection_id ?? null)
   const rawPrior = typeof priorText === 'string' ? priorText : ''
   // Continuation (whole-story "continue" and per-paragraph "regenerate") feeds the kept
   // text back as an assistant prefill, so it keeps the trailing blank line and the model
@@ -203,14 +214,8 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   // Only a continuation/expansion can be steered; a fresh generation ignores any direction.
   const directionValue = (isExpansion || isContinuation) ? normalizeDirection(direction) : ''
 
-  // The reader can switch the taste profile off; when on, inject this world's taste profile
-  // as a soft secondary section.
-  const tasteSection = useTaste === true ? buildTasteSection(userId, worldId) : ''
-  // The switched-on additions read as part of the world description. On a resume the client
-  // sends the set the piece was written with, not whatever is on now, so a continuation can't
-  // lose a character halfway through the story.
-  const worldBody = worldBodyWithAdditions(userId, worldId, world.current_version_id, world.body, additionIds)
-  const systemPrompt = buildSystemPrompt(worldBody, isContinuation, tasteSection, promptText)
+  const worldBody = worldDraft ? worldDraft.body : parseWorldBody(world.body)
+  const systemPrompt = buildSystemPrompt(renderWorldBody(worldBody), premise, worldBody.instructions, isContinuation, promptText)
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: 'OPENROUTER_API_KEY is not set on the server' }, 500)
@@ -385,7 +390,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
 generateRoutes.post('/stop', authMiddleware, async (c: any) => {
   const userId = getUserId(c)
   const worldId = paramInt(c, 'id')
-  if (!findUserWorldId(userId, worldId)) return c.json({ error: 'Not found' }, 404)
+  if (!findVisibleWorld(userId, worldId)) return c.json({ error: 'Not found' }, 404)
 
   const stopped = abortGeneration(ownerKey(userId, worldId))
   return c.json({ stopped })

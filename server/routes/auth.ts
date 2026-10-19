@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { getCookie, deleteCookie } from 'hono/cookie'
 import * as argon2 from '@node-rs/argon2'
 import { eq } from 'drizzle-orm'
-import { db, pieces, promptClusters, prompts, sessions, users, worlds } from '../db'
+import { db, sessions, users } from '../db'
 import {
   type Variables,
   SESSION_TTL_MS,
@@ -11,15 +11,8 @@ import {
   setSessionCookie,
 } from '../middleware'
 import { getUserId } from '../route-helpers'
-import { createExampleWorldsForUser } from '../example-worlds'
 
 const auth = new Hono<{ Variables: Variables }>()
-
-function signupExampleLanguage(value: unknown) {
-  if (typeof value !== 'string') return 'en'
-  const normalized = value.toLowerCase()
-  return normalized === 'zh' ? 'zh' : 'en'
-}
 
 function startSession(c: any, userId: number, now = Date.now()) {
   const sid = generateSessionId()
@@ -28,7 +21,7 @@ function startSession(c: any, userId: number, now = Date.now()) {
 }
 
 auth.post('/auth/signup', async (c) => {
-  const { username, password, language } = await c.req.json()
+  const { username, password } = await c.req.json()
   if (!username || !password) return c.json({ error: 'Missing fields' }, 400)
   if (password.length < 8) return c.json({ error: 'Password must be at least 8 characters' }, 400)
 
@@ -37,11 +30,7 @@ auth.post('/auth/signup', async (c) => {
 
   const hash = await argon2.hash(password)
   const now = Date.now()
-  const result = db.transaction((tx) => {
-    const user = tx.insert(users).values({ username, password_hash: hash, created_at: now }).returning().get()
-    createExampleWorldsForUser(tx, user.id, now, signupExampleLanguage(language))
-    return user
-  })
+  const result = db.insert(users).values({ username, password_hash: hash, created_at: now }).returning().get()
 
   startSession(c, result.id, now)
   return c.json({ id: result.id, username: result.username })
@@ -71,14 +60,8 @@ auth.post('/auth/logout', async (c) => {
 auth.delete('/auth/account', authMiddleware, (c) => {
   const userId = getUserId(c)
 
-  db.transaction((tx) => {
-    tx.delete(pieces).where(eq(pieces.user_id, userId)).run()
-    tx.delete(prompts).where(eq(prompts.user_id, userId)).run()
-    tx.delete(promptClusters).where(eq(promptClusters.user_id, userId)).run()
-    tx.delete(worlds).where(eq(worlds.user_id, userId)).run()
-    tx.delete(sessions).where(eq(sessions.user_id, userId)).run()
-    tx.delete(users).where(eq(users.id, userId)).run()
-  })
+  // Everything the user owns hangs off users by ON DELETE CASCADE.
+  db.delete(users).where(eq(users.id, userId)).run()
 
   deleteCookie(c, 'sid', { path: '/' })
   return new Response(null, { status: 204 })

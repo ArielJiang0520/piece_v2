@@ -15,17 +15,15 @@ export interface GenerationErrorDetail {
 }
 
 export interface GenerateInput {
-  prompt: string
+  // The scene to play; the server gives the model its instruction. In a creator center test, the scene's
+  // draft key.
+  sceneId?: number | string
   model: string
   temperature: number
   useThinking: boolean
-  // Whether to feed the reader's distilled taste profile into this generation. Flows
-  // straight through into the request body (see the `...input` spread below).
-  useTaste: boolean
-  // The world additions to append to the world description. The reader's currently switched-on
-  // set for a fresh generation; on a resume, the set the piece was written with, so continuing
-  // it can't drop a character halfway through.
-  additionIds: number[]
+  // A creator center test: the author plays the scene and their world as the draft has them, instead of
+  // what readers have.
+  draft?: boolean
 }
 
 interface State {

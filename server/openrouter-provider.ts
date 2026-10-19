@@ -1,5 +1,5 @@
 // The provider-routing rules EVERY OpenRouter chat call must send, in one place so no call site can
-// quietly ship without them. Missing these is exactly what left the ideas and taste-distill calls
+// quietly ship without them. Missing these is what left non-streamed calls
 // hanging: routed to a provider that answers fast but generates slowly, a non-streamed reply gets
 // buffered whole behind it and reads as a freeze. Build the block here and spread it into the body.
 //
