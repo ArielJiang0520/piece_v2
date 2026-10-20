@@ -8,3 +8,4 @@ dist
 old_csv
 .claude
 .vscode
+.playwright-mcp

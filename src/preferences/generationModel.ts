@@ -33,6 +33,14 @@ export const MODELS: ModelOption[] = [
     preferredProviders: [],
   },
   {
+    id: 'deepseek/deepseek-v4.1-flash-1017',
+    label: 'DeepSeek V4.1 Flash',
+    recommended: false,
+    attributes: { speed: 3, quality: 1, cost: 1 },
+    reasoning: { effort: 'none' },
+    preferredProviders: [],
+  },
+  {
     id: 'z-ai/glm-5.2',
     label: 'GLM 5.2',
     recommended: false,
