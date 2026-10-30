@@ -18,7 +18,6 @@ export interface GenerateInput {
   prompt: string
   model: string
   temperature: number
-  useThinking: boolean
   // Whether to feed the reader's distilled taste profile into this generation. Flows
   // straight through into the request body (see the `...input` spread below).
   useTaste: boolean

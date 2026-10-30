@@ -306,7 +306,7 @@ const postTurn = (kind: SubjectKind) => async (c: any) => {
             body: JSON.stringify(budgeted({
               model: modelOption.id,
               temperature: CHAT_TEMPERATURE,
-              reasoning: { effort: 'none' },
+              reasoning: modelOption.reasoning,
               stream: true,
               provider,
               messages,

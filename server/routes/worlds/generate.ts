@@ -187,7 +187,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
   const world = findUserWorld(userId, worldId)
   if (!world) return c.json({ error: 'Not found' }, 404)
 
-  const { prompt, model: requestedModel, temperature: requestedTemperature, useThinking, useTaste, mode, priorText, direction, additionIds } = await c.req.json()
+  const { prompt, model: requestedModel, temperature: requestedTemperature, useTaste, mode, priorText, direction, additionIds } = await c.req.json()
 
   const promptText = normalizePromptInput(prompt)
   if (!promptText) return c.json({ error: 'Prompt required' }, 400)
@@ -276,7 +276,7 @@ generateRoutes.post('/', authMiddleware, async (c: any) => {
             body: JSON.stringify(budgeted({
               model: modelOption.id,
               temperature,
-              reasoning: useThinking === true ? modelOption.reasoning : { effort: 'none' },
+              reasoning: modelOption.reasoning,
               stream: true,
               provider,
               messages,

@@ -43,7 +43,6 @@ import {
 } from '../shared/pieceStructure'
 
 const GENERATION_TEMPERATURE = 1
-const USE_THINKING = false
 
 // The generate/stream/edit/explore screen. Its own route — entered by navigating from
 // the static prompt page — so generation state lives here, never on the prompt page.
@@ -140,7 +139,7 @@ export default function GenerateScreen() {
       return
     }
     startedRef.current = true
-    generate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds })
+    generate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useTaste, additionIds })
     // Reset the guard on cleanup so StrictMode's mount→unmount→mount in dev re-issues
     // the run instead of leaving the aborted first one stranded. runGeneration aborts
     // the prior controller and gates the stale run by generationId, so the replaced
@@ -284,9 +283,9 @@ export default function GenerateScreen() {
         onSave={saveNewPiece}
         onSaveOverwrite={saveResume}
         onExit={handleExit}
-        onExpand={(priorText, direction) => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
-        onContinue={(priorText, direction) => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
-        onRegenerate={(priorText, direction) => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useThinking: USE_THINKING, useTaste, additionIds, priorText, direction })}
+        onExpand={(priorText, direction) => expand({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useTaste, additionIds, priorText, direction })}
+        onContinue={(priorText, direction) => continueStory({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useTaste, additionIds, priorText, direction })}
+        onRegenerate={(priorText, direction) => regenerate({ prompt: promptText, model, temperature: GENERATION_TEMPERATURE, useTaste, additionIds, priorText, direction })}
       />
       <ConfirmDialog
         open={confirmOpen}
